@@ -50,6 +50,8 @@ export function scriptFor(npc: NpcId, p: Progress): string {
       return stones >= 1 ? 'guide_after_stone' : 'guide_idle';
     case 'merchant':
       return 'merchant_idle';
+    case 'trainer':
+      return 'trainer_idle';
   }
 }
 

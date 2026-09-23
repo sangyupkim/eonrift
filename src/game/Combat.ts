@@ -16,6 +16,8 @@ export interface CombatHost {
   shake: (a: number) => void;
   hitStop: (t: number) => void;
   sfx: (name: string) => void;
+  /** 스킬 레벨 (0 = 배우지 않음) */
+  skillLevel: (index: number) => number;
 }
 
 type Target = { kind: 'monster'; m: Monster; x: number; z: number };
@@ -162,12 +164,17 @@ export class Combat {
     const player = this.host.player;
     const skill = player.cls.skills[index];
     const d = this.host.dungeon();
+    const lv = this.host.skillLevel(index);
+    if (lv <= 0) return `${skill.name}: 아직 배우지 않았습니다 (마을의 교관 카엘)`;
     if (!d) return '스킬은 던전에서만 쓸 수 있습니다';
+    // 스킬 레벨마다 위력 +15%, 재사용 대기 -6%
+    const k = 1 + (lv - 1) * 0.15;
+    const dmg = (m: Monster, mult: number, knock: number, fx: number, fz: number) => this.host.damageMonster(m, mult * k, knock, fx, fz);
     if (this.cooldowns[index] > 0) return null;
     if (!player.canAct && player.state !== 'dash') return null;
     if (player.mp < skill.mp) return 'MP가 부족합니다';
     player.mp -= skill.mp;
-    this.cooldowns[index] = skill.cooldown;
+    this.cooldowns[index] = skill.cooldown * (1 - (lv - 1) * 0.06);
     const p = player.position;
     const target = this.findTarget(12);
     const aim = this.angleTo(target) ?? player.facing;
@@ -191,7 +198,7 @@ export class Combat {
             for (const m of d.monsters) {
               if (m.alive && !hit.has(m) && Math.hypot(m.x - p.x, m.z - p.z) < m.radius + 1.3) {
                 hit.add(m);
-                this.host.damageMonster(m, 2.2, 1.2, p.x, p.z);
+                dmg(m, 2.2, 1.2, p.x, p.z);
                 d.effects.slash(m.x, m.z, player.facing + Math.PI / 2, 1.6, color, 1.6);
               }
             }
@@ -214,7 +221,7 @@ export class Combat {
               d.effects.ring(p.x, p.z, 3.4, color, 0.3, 0.8);
               d.effects.slash(p.x, p.z, player.facing, 3.2, color, Math.PI * 2);
               this.host.sfx('swing');
-              this.arcHit(3.2, Math.PI * 2, 2.4, 1.4);
+              this.arcHit(3.2, Math.PI * 2, 2.4 * k, 1.4);
             },
           },
           null,
@@ -230,7 +237,7 @@ export class Combat {
             onHit: () => {
               this.host.shake(0.25);
               this.host.sfx('slam');
-              d.spawnPlayerProjectile({ x: p.x, z: p.z, angle: player.facing, speed: 16, damage: 3, color, kind: 'wave', radius: 0.9, pierce: 99, life: 0.6, knock: 1.5, y: 0.2 });
+              d.spawnPlayerProjectile({ x: p.x, z: p.z, angle: player.facing, speed: 16, damage: 3 * k, color, kind: 'wave', radius: 0.9, pierce: 99, life: 0.6, knock: 1.5, y: 0.2 });
             },
           },
           aim,
@@ -251,7 +258,7 @@ export class Combat {
                 z: p.z,
                 angle: player.facing,
                 speed: 13,
-                damage: 1.2,
+                damage: 1.2 * k,
                 color: 0xff7a30,
                 kind: 'orb',
                 radius: 0.45,
@@ -261,7 +268,7 @@ export class Combat {
                   d.particles.burst(x, 0.6, z, 0xff8a40, 14, 1.3);
                   this.host.sfx('boom');
                   this.host.shake(0.2);
-                  for (const m of d.monsters) if (m.alive && Math.hypot(m.x - x, m.z - z) < 2.8 + m.radius) this.host.damageMonster(m, 2.4, 1.3, x, z);
+                  for (const m of d.monsters) if (m.alive && Math.hypot(m.x - x, m.z - z) < 2.8 + m.radius) dmg(m, 2.4, 1.3, x, z);
                 },
               });
             },
@@ -287,7 +294,7 @@ export class Combat {
                 for (const m of d.monsters) {
                   if (m.alive && Math.hypot(m.x - tx, m.z - tz) < 3 + m.radius) {
                     m.slow = 0.8;
-                    this.host.damageMonster(m, 0.55, 0, tx, tz);
+                    dmg(m, 0.55, 0, tx, tz);
                   }
                 }
                 window.setTimeout(tick, duration * 125);
@@ -324,7 +331,7 @@ export class Combat {
                 if (!best) break;
                 hit.add(best);
                 d.effects.bolt(fromX, fromZ, best.x, best.z, 0xd8f0ff);
-                this.host.damageMonster(best, 2.1 - i * 0.2, 0.4, fromX, fromZ);
+                dmg(best, 2.1 - i * 0.2, 0.4, fromX, fromZ);
                 fromX = best.x;
                 fromZ = best.z;
               }
@@ -343,7 +350,7 @@ export class Combat {
             hitAt: 0.6,
             onHit: () => {
               this.host.sfx('bow');
-              d.spawnPlayerProjectile({ x: p.x, z: p.z, angle: player.facing, speed: 32, damage: 2.6, color: 0xffe08a, kind: 'arrow', radius: 0.45, pierce: 99, life: 1, knock: 1, y: 1.1 });
+              d.spawnPlayerProjectile({ x: p.x, z: p.z, angle: player.facing, speed: 32, damage: 2.6 * k, color: 0xffe08a, kind: 'arrow', radius: 0.45, pierce: 99, life: 1, knock: 1, y: 1.1 });
               d.effects.ring(p.x + fx() * 0.8, p.z + fz() * 0.8, 1.2, 0xffe08a, 0.2, 1.1);
             },
           },
@@ -359,7 +366,7 @@ export class Combat {
             onHit: () => {
               this.host.sfx('bow');
               for (let i = -2; i <= 2; i++) {
-                d.spawnPlayerProjectile({ x: p.x, z: p.z, angle: player.facing + i * 0.2, speed: 24, damage: 1.1, color, kind: 'arrow', radius: 0.3, y: 1.1 });
+                d.spawnPlayerProjectile({ x: p.x, z: p.z, angle: player.facing + i * 0.2, speed: 24, damage: 1.1 * k, color, kind: 'arrow', radius: 0.3, y: 1.1 });
               }
             },
           },
@@ -380,7 +387,7 @@ export class Combat {
           d.particles.burst(tx, 0.4, tz, 0xffb040, 16, 1.3);
           this.host.sfx('boom');
           this.host.shake(0.2);
-          for (const m of d.monsters) if (m.alive && Math.hypot(m.x - tx, m.z - tz) < 3 + m.radius) this.host.damageMonster(m, 3, 1.5, tx, tz);
+          for (const m of d.monsters) if (m.alive && Math.hypot(m.x - tx, m.z - tz) < 3 + m.radius) dmg(m, 3, 1.5, tx, tz);
         }, 1200);
         break;
       }

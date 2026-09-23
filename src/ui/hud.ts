@@ -313,10 +313,11 @@ export class Hud {
     this.dodgeShade.style.transform = `scaleY(${ratio})`;
   }
 
-  setSkills(cooldowns: number[], ready: boolean[]): void {
+  setSkills(cooldowns: number[], ready: boolean[], learned: boolean[]): void {
     cooldowns.forEach((r, i) => {
-      this.skillShades[i].style.transform = `scaleY(${r})`;
+      this.skillShades[i].style.transform = `scaleY(${Math.min(1, r)})`;
       this.skillBtns[i].classList.toggle('no-mp', !ready[i]);
+      this.skillBtns[i].classList.toggle('locked', !learned[i]);
     });
   }
 

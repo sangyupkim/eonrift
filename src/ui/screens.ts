@@ -1,4 +1,4 @@
-import { CLASSES, CLASS_ORDER, expToNext, MAX_LEVEL, STAT_INFO, STAT_KEYS, type ClassId, type StatKey } from '../data/classes';
+import { CLASSES, CLASS_ORDER, expToNext, MAX_LEVEL, MAX_SKILL_LEVEL, SKILL_LEARN, skillUpgradeCost, STAT_INFO, STAT_KEYS, type ClassId, type StatKey } from '../data/classes';
 import { EQUIP_SLOTS, enhanceCost, equipName, equipStats, equipValue, GRADES, slotName, type Equip } from '../data/equipment';
 import { BUILDINGS, BUILD_ORDER, FACTORY_SIZES, RECIPES, type BuildingType } from '../data/factory';
 import { ITEMS, ITEM_LIST } from '../data/items';
@@ -239,76 +239,53 @@ export class Screens {
     s.querySelector<HTMLInputElement>('[data-t="sound"]')!.addEventListener('change', (e) => opts.onToggleSound((e.target as HTMLInputElement).checked));
   }
 
-  // ---------------- 던전 가방: 누르면 정보, 끌어서 옮기기 ----------------
+  // ---------------- 던전 가방: 누르면 정보, 반대쪽 가방을 누르면 옮기기 ----------------
   bag(bag: Bag, dimBag: Bag, onMove: (from: 'bag' | 'dim', index: number) => boolean, onClose: () => void): void {
-    let info = '아이템을 누르면 정보가 나오고, 끌어서 다른 가방에 놓으면 옮겨집니다.';
+    let info = '아이템을 누르면 정보가 나옵니다. 그다음 반대쪽 가방을 누르면 그쪽으로 옮겨집니다.';
+    let sel: { from: 'bag' | 'dim'; i: number } | null = null;
     const render = () => {
       const cell = (s: Slot | null, from: string, i: number) => {
-        if (!s) return '<div class="slot"></div>';
+        const on = sel && sel.from === from && sel.i === i ? 'sel' : '';
+        if (!s) return `<div class="slot" data-empty="${from}"></div>`;
         const color = s.equip ? GRADES[s.equip.grade].color : ITEMS[s.itemId].color;
-        return `<div class="slot filled" data-from="${from}" data-i="${i}" style="--c:${hex(color)}"><span class="gem ${s.equip ? 'eq' : ''}"></span><span class="cnt">${s.equip ? `+${s.equip.plus}` : s.count}</span></div>`;
+        return `<div class="slot filled ${on}" data-from="${from}" data-i="${i}" style="--c:${hex(color)}"><span class="gem ${s.equip ? 'eq' : ''}"></span><span class="cnt">${s.equip ? `+${s.equip.plus}` : s.count}</span></div>`;
       };
+      const target = sel ? (sel.from === 'bag' ? 'dim' : 'bag') : '';
       const s = this.open(
         'bag',
         `<div class="panel wide">
            <button class="close">${ICONS.close}</button>
            <h2>가방 <small>${bag.used}/${bag.slots.length}</small></h2>
-           <div class="bag-grid" data-bag="bag">${bag.slots.map((x, i) => cell(x, 'bag', i)).join('')}</div>
+           <div class="bag-grid ${target === 'bag' ? 'drop' : ''}" data-bag="bag">${bag.slots.map((x, i) => cell(x, 'bag', i)).join('')}</div>
            <div class="item-info">${info}</div>
            <h3>차원가방 <small>쓰러져도 지켜지는 가방 · ${dimBag.used}/${dimBag.slots.length}</small></h3>
-           <div class="bag-grid dim-row" data-bag="dim">${dimBag.slots.map((x, i) => cell(x, 'dim', i)).join('')}</div>
+           <div class="bag-grid dim-row ${target === 'dim' ? 'drop' : ''}" data-bag="dim">${dimBag.slots.map((x, i) => cell(x, 'dim', i)).join('')}</div>
          </div>`,
         onClose,
       );
-      s.querySelectorAll<HTMLElement>('.slot.filled').forEach((el) => {
-        el.addEventListener('pointerdown', (e) => {
-          e.preventDefault();
-          el.setPointerCapture(e.pointerId);
-          const from = el.dataset.from as 'bag' | 'dim';
-          const i = Number(el.dataset.i);
-          const slot = (from === 'bag' ? bag : dimBag).slots[i]!;
-          const sx = e.clientX;
-          const sy = e.clientY;
-          let ghost: HTMLElement | null = null;
-          const move = (ev: PointerEvent) => {
-            if (!ghost && Math.hypot(ev.clientX - sx, ev.clientY - sy) > 8) {
-              ghost = el.cloneNode(true) as HTMLElement;
-              ghost.classList.add('drag-ghost');
-              ghost.style.width = `${el.offsetWidth}px`;
-              ghost.style.height = `${el.offsetHeight}px`;
-              document.body.appendChild(ghost);
-              el.classList.add('dragging');
-            }
-            if (ghost) {
-              ghost.style.transform = `translate(${ev.clientX - el.offsetWidth / 2}px, ${ev.clientY - el.offsetHeight / 2}px)`;
-              const over = (document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null)?.closest<HTMLElement>('.bag-grid');
-              s.querySelectorAll('.bag-grid').forEach((g) => g.classList.toggle('drop', g === over && over.dataset.bag !== from));
-            }
-          };
-          const up = (ev: PointerEvent) => {
-            el.removeEventListener('pointermove', move);
-            el.removeEventListener('pointerup', up);
-            el.removeEventListener('pointercancel', up);
-            if (ghost) {
-              ghost.remove();
-              const over = (document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null)?.closest<HTMLElement>('.bag-grid');
-              if (over && over.dataset.bag !== from) {
-                const name = slot.equip ? equipName(slot.equip) : ITEMS[slot.itemId].name;
-                info = onMove(from, i) ? `${name} → ${from === 'bag' ? '차원가방' : '일반 가방'}` : '<span class="bad">옮길 칸이 없습니다</span>';
-              }
-              render();
-            } else {
-              // 누르기만 했으면 정보를 보여 준다
-              info = slotInfo(slot);
-              s.querySelector('.item-info')!.innerHTML = info;
-              s.querySelectorAll('.slot').forEach((x) => x.classList.toggle('sel', x === el));
-            }
-          };
-          el.addEventListener('pointermove', move);
-          el.addEventListener('pointerup', up);
-          el.addEventListener('pointercancel', up);
-        });
-      });
+      s.querySelectorAll<HTMLElement>('.bag-grid').forEach((grid) =>
+        grid.addEventListener('click', (e) => {
+          const el = (e.target as HTMLElement).closest<HTMLElement>('.slot');
+          const gridName = grid.dataset.bag as 'bag' | 'dim';
+          // 선택한 아이템이 있고 반대쪽 가방을 눌렀으면 옮긴다
+          if (sel && gridName !== sel.from) {
+            const src = (sel.from === 'bag' ? bag : dimBag).slots[sel.i];
+            const name = src ? (src.equip ? equipName(src.equip) : ITEMS[src.itemId].name) : '';
+            info = onMove(sel.from, sel.i) ? `${name} → ${sel.from === 'bag' ? '차원가방' : '일반 가방'}으로 옮겼습니다` : '<span class="bad">옮길 칸이 없습니다</span>';
+            sel = null;
+            this.click();
+            return render();
+          }
+          if (el?.classList.contains('filled')) {
+            const from = el.dataset.from as 'bag' | 'dim';
+            const i = Number(el.dataset.i);
+            sel = sel && sel.from === from && sel.i === i ? null : { from, i };
+            info = sel ? `${slotInfo((from === 'bag' ? bag : dimBag).slots[i]!)}<br><small class="ok">▶ ${from === 'bag' ? '차원가방' : '일반 가방'}을 누르면 옮겨집니다</small>` : info;
+            this.click();
+            render();
+          }
+        }),
+      );
     };
     render();
   }
@@ -381,7 +358,7 @@ export class Screens {
         </div>
         <h3>스탯 <small>남은 포인트 <b class="${c.points ? 'ok' : ''}">${c.points}</b> · 레벨업마다 5포인트</small></h3>
         <div class="stat-rows">${statRows}</div>
-        <h3>스킬</h3><ul class="list">${cls.skills.map((sk, i) => `<li><span class="key">${i + 1}</span><div><b>${sk.name}</b><small>${sk.description} · MP ${sk.mp} · ${sk.cooldown}초</small></div></li>`).join('')}</ul>
+        <h3>스킬 <small>교관 카엘에게서 배우고 강화합니다</small></h3><ul class="list">${cls.skills.map((sk, i) => `<li><span class="key">${i + 1}</span><div><b>${sk.name} ${c.skills[i] ? `Lv.${c.skills[i]}` : '<span class="dim">(미습득)</span>'}</b><small>${sk.description} · MP ${sk.mp} · ${sk.cooldown}초</small></div></li>`).join('')}</ul>
       </div>`;
     } else {
       const ql = quests.activeList();
@@ -630,6 +607,37 @@ export class Screens {
     });
   }
 
+  // ---------------- 교관: 스킬 배우기·강화 ----------------
+  skillShop(p: Progress, onBuy: (i: number) => void, onClose: () => void, message?: string): void {
+    const c = p.cls;
+    const cls = CLASSES[p.data.currentClass];
+    const rows = cls.skills
+      .map((sk, i) => {
+        const lv = c.skills[i] ?? 0;
+        const cost = lv === 0 ? SKILL_LEARN[i] : lv < MAX_SKILL_LEVEL ? skillUpgradeCost(i, lv) : null;
+        const ok = cost && c.level >= cost.level && p.data.gold >= cost.gold;
+        const label = !cost ? '최대' : lv === 0 ? `배우기 ${cost.gold} G` : `강화 ${cost.gold} G`;
+        const req = cost ? `필요 레벨 ${cost.level}${c.level < cost.level ? ' <span class="bad">(부족)</span>' : ''}` : '';
+        return `<li><span class="key">${i + 1}</span><div><b>${sk.name} ${lv ? `<span class="ok">Lv.${lv}</span>` : '<span class="dim">(미습득)</span>'}</b>
+          <small>${sk.description} · MP ${sk.mp} · ${sk.cooldown}초</small>
+          <small class="dim">${lv ? `위력 +${(lv - 1) * 15}% · 재사용 -${(lv - 1) * 6}%` : ''} ${req}</small></div>
+          <button data-skill="${i}" ${ok ? '' : 'disabled'}>${label}</button></li>`;
+      })
+      .join('');
+    const s = this.open(
+      'skills',
+      `<div class="panel wide">
+         <button class="close">${ICONS.close}</button>
+         <h2>교관 카엘의 훈련장 <small>${cls.name} · <span class="gold">${p.data.gold} G</span></small></h2>
+         ${message ? `<div class="notice">${message}</div>` : ''}
+         <p class="hint">스킬은 직업마다 따로 배웁니다. 강화할 때마다 위력 +15%, 재사용 대기 -6% (최대 Lv.${MAX_SKILL_LEVEL})</p>
+         <ul class="list">${rows}</ul>
+       </div>`,
+      onClose,
+    );
+    this.on(s, '[data-skill]', (b) => onBuy(Number(b.dataset.skill)));
+  }
+
   // ---------------- 직업의 전당 ----------------
   classHall(p: Progress, onPick: (id: ClassId) => void, onClose: () => void): void {
     const cards = CLASS_ORDER.map((id) => {
@@ -830,5 +838,5 @@ export class Screens {
   }
 }
 
-const NPC_NAMES: Record<string, string> = { chief: '촌장 에단', guide: '안내인 리아', smith: '대장장이 고른', engineer: '마공학자 세라', merchant: '상인 무트', stranger: '???' };
+const NPC_NAMES: Record<string, string> = { trainer: '교관 카엘', chief: '촌장 에단', guide: '안내인 리아', smith: '대장장이 고른', engineer: '마공학자 세라', merchant: '상인 무트', stranger: '???' };
 export const npcName = (id: string) => NPC_NAMES[id] ?? id;

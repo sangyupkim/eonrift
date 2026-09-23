@@ -13,6 +13,8 @@ export interface ClassState {
   alloc: BaseStats;
   /** 남은 스탯 포인트 */
   points: number;
+  /** 스킬 레벨 (0 = 배우지 않음) */
+  skills: number[];
 }
 
 export interface SaveData {
@@ -43,7 +45,7 @@ export const DIM_BAG_START = 4;
 export const DIM_BAG_MAX = 12;
 
 export function newSave(): SaveData {
-  const cls = (id: ClassId): ClassState => ({ level: 1, exp: 0, equipment: { weapon: starterWeapon(id) }, alloc: zeroStats(), points: 0 });
+  const cls = (id: ClassId): ClassState => ({ level: 1, exp: 0, equipment: { weapon: starterWeapon(id) }, alloc: zeroStats(), points: 0, skills: [1, 0, 0] });
   return {
     version: 1,
     gold: 100,
@@ -100,6 +102,8 @@ function migrate(d: SaveData & { maxTier?: number }): SaveData {
   };
   for (const c of Object.values(d.classes)) {
     c.alloc ??= zeroStats();
+    // 스킬 상점 전의 저장은 이미 세 스킬을 다 쓰고 있었으므로 그대로 둔다
+    c.skills ??= [1, 1, 1];
     c.points ??= (c.level - 1) * POINTS_PER_LEVEL;
     const eq = c.equipment as Record<string, Equip | undefined>;
     if (eq.accessory) {

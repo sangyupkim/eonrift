@@ -1,6 +1,6 @@
 import { SCRIPTS, type Step } from './story';
 
-export type NpcRef = 'chief' | 'guide' | 'smith' | 'engineer' | 'merchant' | 'stranger';
+export type NpcRef = 'chief' | 'guide' | 'smith' | 'engineer' | 'merchant' | 'stranger' | 'trainer';
 
 export type Objective =
   | { type: 'kill'; count: number; minTier?: number; label?: string }

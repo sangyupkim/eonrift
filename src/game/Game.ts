@@ -3,7 +3,7 @@ import { BAG_SLOTS, CAMERA_OFFSET, PLAYER, TILE, VIEW_HEIGHT } from '../config';
 import { Audio } from '../core/audio';
 import { Input } from '../core/input';
 import { Rng, randomSeed } from '../core/rng';
-import { CLASSES, expToNext, type ClassId } from '../data/classes';
+import { CLASSES, expToNext, MAX_SKILL_LEVEL, SKILL_LEARN, skillUpgradeCost, type ClassId } from '../data/classes';
 import { equipName, GRADES, rollEquip } from '../data/equipment';
 import { BUILDINGS, FACTORY_SIZES, OFFLINE_CAP_HOURS, type BuildingType } from '../data/factory';
 import { ITEMS } from '../data/items';
@@ -275,6 +275,7 @@ export class Game {
       shake: (a) => (this.shakeT = Math.max(this.shakeT, a)),
       hitStop: (t) => (this.hitStopT = Math.max(this.hitStopT, t)),
       sfx: (n) => this.audio.play(n),
+      skillLevel: (i) => this.progress.cls.skills[i] ?? 0,
     });
     this.hud.setClass(cls.short, hex(cls.look.tunic), cls.skills.map((s) => s.name));
   }
@@ -559,6 +560,7 @@ export class Game {
     this.playScript(script, () => {
       if (npc === 'merchant') this.interactVillage('shop');
       else if (npc === 'smith') this.interactVillage('forge');
+      else if (npc === 'trainer') this.openSkillShop();
       else if (npc === 'engineer' && q.isDone('m4_factory')) this.openBlueprints();
       else if (npc === 'chief' && p.flag('legend')) this.openDaily();
     });
@@ -603,6 +605,28 @@ export class Game {
       });
     }
     this.refreshHud();
+  }
+
+  private openSkillShop(message?: string): void {
+    this.openMenu(() =>
+      this.screens.skillShop(
+        this.progress,
+        (i) => {
+          const p = this.progress;
+          const c = p.cls;
+          const lv = c.skills[i] ?? 0;
+          const cost = lv === 0 ? SKILL_LEARN[i] : lv < MAX_SKILL_LEVEL ? skillUpgradeCost(i, lv) : null;
+          if (!cost || c.level < cost.level || p.data.gold < cost.gold) return;
+          p.data.gold -= cost.gold;
+          c.skills[i] = lv + 1;
+          this.audio.play('level');
+          const name = CLASSES[p.data.currentClass].skills[i].name;
+          this.openSkillShop(lv === 0 ? `${name}을(를) 배웠습니다!` : `${name} Lv.${lv + 1}`);
+        },
+        () => this.resume(),
+        message,
+      ),
+    );
   }
 
   private openDaily(): void {
@@ -1367,9 +1391,11 @@ export class Game {
     this.hud.setPotions(p.count('potion'));
     this.hud.setDodgeCooldown(pl.rollCooldown / (PLAYER.rollCooldown + PLAYER.rollTime));
     const skills = pl.cls.skills;
+    const learned = p.cls.skills;
     this.hud.setSkills(
       this.combat.cooldowns.map((cd, i) => cd / skills[i].cooldown),
       skills.map((s) => pl.mp >= s.mp),
+      skills.map((_, i) => (learned[i] ?? 0) > 0),
     );
     if (this.run) this.hud.setBagCount(this.run.bag.used, BAG_SLOTS);
   }

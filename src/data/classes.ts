@@ -97,6 +97,19 @@ export const CLASSES: Record<ClassId, ClassDef> = {
 export const CLASS_ORDER: ClassId[] = ['sword', 'mage', 'archer'];
 
 export const MAX_LEVEL = 99;
+export const MAX_SKILL_LEVEL = 5;
+
+/** 스킬 배우기: 필요 레벨과 골드 (첫 스킬은 처음부터 안다) */
+export const SKILL_LEARN = [
+  { level: 1, gold: 0 },
+  { level: 5, gold: 400 },
+  { level: 10, gold: 1200 },
+];
+
+/** 스킬 강화 비용 (현재 레벨 → 다음 레벨) */
+export function skillUpgradeCost(index: number, lv: number): { gold: number; level: number } {
+  return { gold: Math.round(250 * lv * lv * (index + 1)), level: SKILL_LEARN[index].level + lv * 4 };
+}
 export const POINTS_PER_LEVEL = 5;
 
 export function expToNext(level: number): number {
