@@ -148,7 +148,8 @@ export class DungeonScene extends Level {
         range: n.def.radius + 1.7,
         label: n.def.style === 'chest' ? '열기' : '채집',
         action: () => hooks.gather(n),
-        enabled: () => n.alive && n.dying === 0,
+        // 근처에 몬스터가 있으면 채집할 수 없다 (전투 중에는 공격 버튼이 그대로 보인다)
+        enabled: () => n.alive && n.dying === 0 && !this.monsterNear(n.x, n.z),
       });
     }
   }
@@ -232,6 +233,11 @@ export class DungeonScene extends Level {
   /** 모든 몬스터를 쓰러뜨리면 워프 게이트가 열린다 */
   get exitOpen(): boolean {
     return this.monsters.every((m) => !m.alive);
+  }
+
+  /** 위치 주변에 살아 있는 몬스터가 있는지 */
+  monsterNear(x: number, z: number, range = 9): boolean {
+    return this.monsters.some((m) => m.alive && Math.hypot(m.x - x, m.z - z) < range);
   }
 
   get aliveCount(): number {

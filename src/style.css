@@ -1382,11 +1382,14 @@ button {
 }
 
 /* 상호작용 버튼 (공격 버튼과 분리) */
+.act.attack.hidden {
+  display: none;
+}
 .act.interact-btn {
-  right: 168px;
-  bottom: 84px;
-  width: 68px;
-  height: 68px;
+  right: 0;
+  bottom: 0;
+  width: 92px;
+  height: 92px;
   grid-template-rows: 1fr auto;
   padding: 10px 0 8px;
   background: rgba(60, 170, 220, 0.65);
@@ -1394,8 +1397,8 @@ button {
   animation: pulse 1s ease-in-out infinite;
 }
 .act.interact-btn svg {
-  width: 28px;
-  height: 28px;
+  width: 38px;
+  height: 38px;
 }
 .act.interact-btn .lbl {
   font-size: 11px;
@@ -1404,10 +1407,7 @@ button {
 .act.interact-btn.hidden {
   display: none;
 }
-.hud:not([data-mode='dungeon']) .act.interact-btn {
-  right: 108px;
-  bottom: 6px;
-}
+
 
 /* 미니맵 (모든 장소) · 큰 지도 */
 .hud .minimap-slot {

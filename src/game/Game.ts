@@ -884,6 +884,11 @@ export class Game {
     const n = this.gathering;
     const pl = this.player;
     if (!n) return;
+    if (this.level instanceof DungeonScene && this.level.monsterNear(n.x, n.z)) {
+      this.gathering = null;
+      this.hud.toast('몬스터가 가까이 있어 채집을 멈췄습니다');
+      return;
+    }
     if (!n.alive || n.dying > 0 || Math.hypot(move.x, move.y) > 0.25 || Math.hypot(n.x - pl.position.x, n.z - pl.position.z) > n.def.radius + 2.2) {
       this.gathering = null;
       return;

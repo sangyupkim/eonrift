@@ -265,8 +265,14 @@ export class Hud {
   setInteract(label: string | null): void {
     if (label === this.lastInteract) return;
     this.lastInteract = label;
+    // 상호작용할 때는 공격 버튼 자리에 상호작용 버튼이 나온다
     this.interactBtn.classList.toggle('hidden', label === null);
-    if (label) this.interactLabel.textContent = label;
+    this.attackBtn.classList.toggle('hidden', label !== null);
+    if (label) {
+      this.interactLabel.textContent = label;
+      this.input.attackButtonHeld = false;
+      this.attackBtn.classList.remove('down');
+    }
     void this.attackIcon;
     void this.attackLabel;
   }
