@@ -10,13 +10,13 @@ import {
   Quaternion,
   Scene,
 } from 'three';
-import { ARCHETYPES, BOSS_NAMES, MONSTER_NAMES, tierScale, type Archetype, type ArchetypeDef } from '../data/monsters';
+import { ARCHETYPES, BOSS_NAMES, MIDBOSS_NAMES, MONSTER_NAMES, tierScale, type Archetype, type ArchetypeDef } from '../data/monsters';
 import { moveWithCollision, type CircleObstacle } from '../dungeon/collision';
 import type { DungeonData } from '../dungeon/generator';
 import { buildMonster, MONSTER_COLORS, type MonsterRig } from '../models/monsters';
 import { Telegraph, type Effects, type TelegraphShape } from './Effects';
 
-export type MonsterKind = 'normal' | 'elite' | 'boss';
+export type MonsterKind = 'normal' | 'elite' | 'midboss' | 'boss';
 
 type State = 'idle' | 'chase' | 'windup' | 'dash' | 'recover' | 'dead';
 
@@ -99,17 +99,18 @@ export class Monster {
     readonly arch: Archetype,
     readonly kind: MonsterKind,
     readonly tier: number,
+    stage: number,
     ngPlus: number,
     x: number,
     z: number,
     readonly homeRoom: number,
   ) {
-    const boss = kind === 'boss';
-    const archetype = boss ? BOSS_ARCH[tier - 1] : arch;
+    const boss = kind === 'boss' || kind === 'midboss';
+    const archetype = kind === 'boss' ? BOSS_ARCH[tier - 1] : kind === 'midboss' ? BOSS_ARCH[(tier + 2) % 7] : arch;
     this.arch = archetype;
     this.def = ARCHETYPES[archetype];
-    const scale = tierScale(tier, ngPlus);
-    const mult = boss ? { hp: 14, atk: 1.5, size: 2.1 } : kind === 'elite' ? { hp: 3, atk: 1.4, size: 1.35 } : { hp: 1, atk: 1, size: 1 };
+    const scale = tierScale(tier, stage, ngPlus);
+    const mult = kind === 'boss' ? { hp: 14, atk: 1.5, size: 2.1 } : kind === 'midboss' ? { hp: 7, atk: 1.3, size: 1.65 } : kind === 'elite' ? { hp: 3, atk: 1.4, size: 1.35 } : { hp: 1, atk: 1, size: 1 };
     this.maxHp = this.hp = Math.round(this.def.hp * scale.hp * mult.hp);
     this.atk = this.def.atk * scale.atk * mult.atk;
     this.defense = this.def.def * (1 + (tier - 1) * 0.6);
@@ -117,8 +118,8 @@ export class Monster {
     this.radius = this.def.radius * mult.size;
     this.x = x;
     this.z = z;
-    this.name = boss ? BOSS_NAMES[tier - 1] : (kind === 'elite' ? '정예 ' : '') + MONSTER_NAMES[tier][archetype];
-    this.exp = Math.round(this.def.exp * tier * (boss ? 30 : kind === 'elite' ? 3 : 1));
+    this.name = kind === 'boss' ? BOSS_NAMES[tier - 1] : kind === 'midboss' ? MIDBOSS_NAMES[tier - 1] : (kind === 'elite' ? '정예 ' : '') + MONSTER_NAMES[tier][archetype];
+    this.exp = Math.round(this.def.exp * Math.pow(tier, 1.6) * (1 + (stage - 1) * 0.15) * (kind === 'boss' ? 30 : kind === 'midboss' ? 15 : kind === 'elite' ? 3 : 1));
 
     this.material = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
     const colors = MONSTER_COLORS[tier - 1];
@@ -148,7 +149,13 @@ export class Monster {
     return this.state !== 'dead';
   }
 
+  /** 수호자와 중간보스 (보스 패턴을 쓴다) */
   get isBoss(): boolean {
+    return this.kind === 'boss' || this.kind === 'midboss';
+  }
+
+  /** 차원석을 지닌 10번째 방의 수호자 */
+  get isFinal(): boolean {
     return this.kind === 'boss';
   }
 
@@ -371,7 +378,8 @@ export class Monster {
 
   private beginBossPattern(world: MonsterWorld, dist: number, toPlayer: number): void {
     if (this.bossQueue.length === 0) {
-      this.bossQueue = [...BOSS_PATTERNS[this.tier - 1]].sort(() => Math.random() - 0.5);
+      const pats = BOSS_PATTERNS[this.tier - 1];
+      this.bossQueue = [...(this.isFinal ? pats : pats.slice(0, 2))].sort(() => Math.random() - 0.5);
     }
     let pattern = this.bossQueue.shift()!;
     if (pattern === 'charge' && dist < 3) pattern = 'slam';

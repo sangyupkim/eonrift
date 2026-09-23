@@ -1,5 +1,18 @@
 export type ClassId = 'sword' | 'mage' | 'archer';
 
+export type StatKey = 'str' | 'int' | 'dex' | 'vit' | 'mag';
+
+export const STAT_INFO: Record<StatKey, { name: string; desc: string }> = {
+  str: { name: '힘', desc: '물리 공격력 +2 (검사·궁수)' },
+  int: { name: '지능', desc: '마법 공격력 +2 (마법사)' },
+  dex: { name: '민첩', desc: '치명타 확률 +0.3%, 공격 속도 +0.5%' },
+  vit: { name: '체력', desc: '최대 HP +10' },
+  mag: { name: '마력', desc: '최대 MP +6' },
+};
+export const STAT_KEYS: StatKey[] = ['str', 'int', 'dex', 'vit', 'mag'];
+
+export type BaseStats = Record<StatKey, number>;
+
 export interface SkillDef {
   name: string;
   mp: number;
@@ -11,9 +24,11 @@ export interface ClassDef {
   id: ClassId;
   name: string;
   short: string;
+  /** 물리(힘) / 마법(지능) 중 어느 공격력을 쓰는지 */
+  damage: 'physical' | 'magic';
+  baseStats: BaseStats;
   baseHp: number;
   baseMp: number;
-  baseAtk: number;
   /** 기본 공격 간격 (초) */
   attackTime: number;
   look: { tunic: number; tunicDark: number; hair: number; weapon: 'sword' | 'staff' | 'bow' };
@@ -27,9 +42,10 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     id: 'sword',
     name: '검사',
     short: '검',
-    baseHp: 130,
-    baseMp: 50,
-    baseAtk: 12,
+    damage: 'physical',
+    baseStats: { str: 10, int: 3, dex: 5, vit: 9, mag: 4 },
+    baseHp: 60,
+    baseMp: 26,
     attackTime: 0.36,
     look: { tunic: 0x2f6fd6, tunicDark: 0x2456a8, hair: 0x4a3024, weapon: 'sword' },
     basic: '3타 베기 콤보',
@@ -44,9 +60,10 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     id: 'mage',
     name: '마법사',
     short: '마',
-    baseHp: 90,
-    baseMp: 110,
-    baseAtk: 14,
+    damage: 'magic',
+    baseStats: { str: 3, int: 11, dex: 5, vit: 5, mag: 10 },
+    baseHp: 50,
+    baseMp: 50,
     attackTime: 0.45,
     look: { tunic: 0x7a3fc4, tunicDark: 0x5a2c96, hair: 0xd8d0e8, weapon: 'staff' },
     basic: '마력탄',
@@ -61,9 +78,10 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     id: 'archer',
     name: '궁수',
     short: '궁',
-    baseHp: 105,
-    baseMp: 70,
-    baseAtk: 11,
+    damage: 'physical',
+    baseStats: { str: 8, int: 3, dex: 11, vit: 6, mag: 5 },
+    baseHp: 55,
+    baseMp: 35,
     attackTime: 0.3,
     look: { tunic: 0x3f9a4a, tunicDark: 0x2c7236, hair: 0xc9782e, weapon: 'bow' },
     basic: '화살 연사',
@@ -78,6 +96,9 @@ export const CLASSES: Record<ClassId, ClassDef> = {
 
 export const CLASS_ORDER: ClassId[] = ['sword', 'mage', 'archer'];
 
+export const MAX_LEVEL = 99;
+export const POINTS_PER_LEVEL = 5;
+
 export function expToNext(level: number): number {
-  return Math.round(24 * Math.pow(level, 1.55));
+  return Math.round(30 * Math.pow(level, 1.8) + 20);
 }

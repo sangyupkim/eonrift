@@ -30,6 +30,11 @@ export class Hud {
   private bossName: HTMLDivElement;
   private minimapSlot: HTMLDivElement;
   private attackBtn: HTMLButtonElement;
+  private interactBtn: HTMLButtonElement;
+  private interactLabel: HTMLSpanElement;
+  private bigMapEl: HTMLDivElement;
+  private bubbleLayer: HTMLDivElement;
+  private bubblePool: HTMLButtonElement[] = [];
   private attackIcon: HTMLSpanElement;
   private attackLabel: HTMLSpanElement;
   private dodgeShade: HTMLDivElement;
@@ -64,7 +69,8 @@ export class Hud {
 
     this.labelLayer = el('div', 'label-layer');
     this.floatLayer = el('div', 'float-layer');
-    this.root.append(this.labelLayer, this.floatLayer);
+    this.bubbleLayer = el('div', 'bubble-layer');
+    this.root.append(this.labelLayer, this.bubbleLayer, this.floatLayer);
 
     // 좌상단 상태
     const status = el('div', 'status');
@@ -107,6 +113,11 @@ export class Hud {
     // 우상단
     const topRight = el('div', 'top-right');
     this.minimapSlot = el('div', 'minimap-slot');
+    // 미니맵을 누르면 큰 지도
+    this.minimapSlot.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      input.press('map');
+    });
     const menuCol = el('div', 'menu-col');
     this.bagBtn = this.button('icon-btn', ICONS.bag, 'bag');
     this.bagCount = el('span', 'badge');
@@ -138,6 +149,11 @@ export class Hud {
     this.attackBtn.addEventListener('pointerup', release);
     this.attackBtn.addEventListener('pointercancel', release);
 
+    // 상호작용 버튼: 대화·채집·입장 등 (공격 버튼과 따로 둔다)
+    this.interactBtn = this.button('act interact-btn hidden', ICONS.hand, 'interact');
+    this.interactLabel = el('span', 'lbl');
+    this.interactBtn.appendChild(this.interactLabel);
+
     const dodge = this.button('act dodge', ICONS.dodge, 'dodge');
     this.dodgeShade = el('div', 'cooldown');
     dodge.appendChild(this.dodgeShade);
@@ -154,8 +170,15 @@ export class Hud {
     this.potionBtn = this.button('act potion', ICONS.potion, 'potion');
     this.potionCount = el('span', 'badge');
     this.potionBtn.appendChild(this.potionCount);
-    actions.append(this.attackBtn, dodge, ...this.skillBtns, this.potionBtn);
+    actions.append(this.attackBtn, this.interactBtn, dodge, ...this.skillBtns, this.potionBtn);
     this.root.appendChild(actions);
+
+    this.bigMapEl = el('div', 'bigmap-wrap hidden');
+    this.bigMapEl.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      input.press('map');
+    });
+    this.root.appendChild(this.bigMapEl);
 
     this.toastEl = el('div', 'toast');
     this.root.appendChild(this.toastEl);
@@ -238,13 +261,46 @@ export class Hud {
     this.minimapSlot.replaceChildren(...(canvas ? [canvas] : []));
   }
 
+  /** 가까이에 상호작용할 대상이 있으면 상호작용 버튼이 나타난다 (공격 버튼은 그대로) */
   setInteract(label: string | null): void {
     if (label === this.lastInteract) return;
     this.lastInteract = label;
-    const on = label !== null;
-    this.attackBtn.classList.toggle('interact', on);
-    this.attackIcon.innerHTML = on ? ICONS.portal : ICONS.sword;
-    this.attackLabel.textContent = on ? label : '공격';
+    this.interactBtn.classList.toggle('hidden', label === null);
+    if (label) this.interactLabel.textContent = label;
+    void this.attackIcon;
+    void this.attackLabel;
+  }
+
+  showBigMap(canvas: HTMLCanvasElement | null): void {
+    this.bigMapEl.classList.toggle('hidden', !canvas);
+    this.bigMapEl.replaceChildren(...(canvas ? [canvas, Object.assign(el('div', 'bigmap-hint'), { textContent: 'M 또는 화면을 눌러 닫기' })] : []));
+  }
+
+  /** 생산 중인 기계 위의 아이콘. 누르면 정보 창 */
+  setBubbles(list: { x: number; y: number; color: string; progress: number; onClick: () => void }[]): void {
+    while (this.bubblePool.length < list.length) {
+      const b = el('button', 'prod-bubble') as HTMLButtonElement;
+      b.innerHTML = '<i></i><span class="bar"><span></span></span>';
+      b.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        (b as unknown as { cb?: () => void }).cb?.();
+      });
+      this.bubbleLayer.appendChild(b);
+      this.bubblePool.push(b);
+    }
+    this.bubblePool.forEach((b, i) => {
+      const d = list[i];
+      if (!d) {
+        b.style.display = 'none';
+        return;
+      }
+      b.style.display = '';
+      (b as unknown as { cb?: () => void }).cb = d.onClick;
+      b.style.transform = `translate(${d.x}px, ${d.y}px) translate(-50%, -100%)`;
+      (b.firstElementChild as HTMLElement).style.background = d.color;
+      (b.querySelector('.bar span') as HTMLElement).style.width = `${Math.round(d.progress * 100)}%`;
+    });
   }
 
   setDodgeCooldown(ratio: number): void {

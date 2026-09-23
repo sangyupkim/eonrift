@@ -21,7 +21,7 @@ describe('generateDungeon', () => {
   for (let tier = 1; tier <= 7; tier++) {
     it(`${tier}단계: 모든 바닥이 시작 지점과 이어져 있고 필수 방이 있다`, () => {
       for (const seed of SEEDS) {
-        const d = generateDungeon(seed + tier, tier);
+        const d = generateDungeon(seed + tier, tier, (seed % 10) + 1);
         const dist = bfs(d.cells, d.width, d.height, d.start.x, d.start.y);
         for (let i = 0; i < d.cells.length; i++) {
           if (d.cells[i] === CELL_FLOOR) expect(dist[i]).toBeGreaterThanOrEqual(0);

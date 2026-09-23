@@ -27,9 +27,9 @@ const defs: ItemDef[] = [
   { id: 'dimension_crystal', name: '차원 결정', color: 0x5ef0ff, kind: 'material', value: 34, description: '분쇄기에서 차원 가루가 된다.' },
   { id: 'void_stone', name: '공허석', color: 0x6b4dff, kind: 'material', value: 34, description: '분쇄기에서 차원 가루가 된다.' },
   // 마력 정수 (공장 에너지원)
-  { id: 'essence_low', name: '하급 마력 정수', color: 0x7fd6ff, kind: 'essence', value: 5, description: '몬스터에게서 나온다. 발전기에서 20초 동안 타오른다.' },
-  { id: 'essence_mid', name: '중급 마력 정수', color: 0x6f8cff, kind: 'essence', value: 14, description: '4~5단계 몬스터에게서 나온다. 발전기에서 45초.' },
-  { id: 'essence_high', name: '상급 마력 정수', color: 0xd76fff, kind: 'essence', value: 30, description: '6~7단계 몬스터에게서 나온다. 발전기에서 90초.' },
+  { id: 'essence_low', name: '하급 마력 정수', color: 0x7fd6ff, kind: 'essence', value: 5, description: '1~3단계 몬스터에게서 나온다. 발전기에 넣으면 2분 동안 탄다.' },
+  { id: 'essence_mid', name: '중급 마력 정수', color: 0x6f8cff, kind: 'essence', value: 14, description: '4~5단계 몬스터에게서 나온다. 발전기에서 5분 동안 탄다.' },
+  { id: 'essence_high', name: '상급 마력 정수', color: 0xd76fff, kind: 'essence', value: 30, description: '6~7단계 몬스터에게서 나온다. 발전기에서 10분 동안 탄다.' },
   // 가공품
   { id: 'iron_ingot', name: '철 주괴', color: 0xb5bcc8, kind: 'processed', value: 10, description: '마력 주입기에서 마력 철이 된다.' },
   { id: 'copper_ingot', name: '구리 주괴', color: 0xe89a60, kind: 'processed', value: 16, description: '귀환석의 재료.' },

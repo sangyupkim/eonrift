@@ -16,11 +16,11 @@ export interface ArchetypeDef {
 }
 
 export const ARCHETYPES: Record<Archetype, ArchetypeDef> = {
-  melee: { hp: 40, atk: 9, def: 2, speed: 3.6, radius: 0.5, range: 1.9, windup: 0.6, recover: 0.7, exp: 6 },
-  ranged: { hp: 28, atk: 8, def: 1, speed: 2.8, radius: 0.45, range: 9, windup: 0.8, recover: 1.2, exp: 7 },
-  charger: { hp: 46, atk: 12, def: 2, speed: 3.2, radius: 0.55, range: 7, windup: 0.9, recover: 1.1, exp: 8 },
-  bomber: { hp: 18, atk: 22, def: 0, speed: 4.4, radius: 0.45, range: 1.8, windup: 0.9, recover: 0, exp: 5 },
-  tank: { hp: 110, atk: 16, def: 6, speed: 2.1, radius: 0.8, range: 2.6, windup: 1.1, recover: 1.2, exp: 12 },
+  melee: { hp: 80, atk: 9, def: 2, speed: 3.6, radius: 0.5, range: 1.9, windup: 0.6, recover: 0.7, exp: 6 },
+  ranged: { hp: 56, atk: 8, def: 1, speed: 2.8, radius: 0.45, range: 9, windup: 0.8, recover: 1.2, exp: 7 },
+  charger: { hp: 92, atk: 12, def: 2, speed: 3.2, radius: 0.55, range: 7, windup: 0.9, recover: 1.1, exp: 8 },
+  bomber: { hp: 36, atk: 22, def: 0, speed: 4.4, radius: 0.45, range: 1.8, windup: 0.9, recover: 0, exp: 5 },
+  tank: { hp: 220, atk: 16, def: 6, speed: 2.1, radius: 0.8, range: 2.6, windup: 1.1, recover: 1.2, exp: 12 },
 };
 
 export const MONSTER_NAMES: Record<number, Record<Archetype, string>> = {
@@ -43,8 +43,19 @@ export const BOSS_NAMES = [
   '틈새의 파수꾼',
 ];
 
-/** 단계와 회차에 따른 몬스터 능력치 배율 */
-export function tierScale(tier: number, ngPlus: number): { hp: number; atk: number } {
+export const MIDBOSS_NAMES = [
+  '이끼 파수꾼',
+  '협곡 우두머리',
+  '서리 파수꾼',
+  '수정 파수꾼',
+  '경비 거신',
+  '용암 파수꾼',
+  '틈새의 문지기',
+];
+
+/** 단계·방·회차에 따른 몬스터 능력치 배율. 같은 단계 안에서도 방이 깊을수록 강해진다 */
+export function tierScale(tier: number, stage: number, ngPlus: number): { hp: number; atk: number } {
   const ng = 1 + ngPlus * 0.6;
-  return { hp: (1 + (tier - 1) * 1.05) * ng, atk: (1 + (tier - 1) * 0.85) * ng };
+  const deep = 1 + (stage - 1) * 0.07;
+  return { hp: (1 + (tier - 1) * 1.05) * deep * ng, atk: (1 + (tier - 1) * 0.85) * deep * ng };
 }

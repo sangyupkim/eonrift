@@ -34,7 +34,7 @@ export interface NodeSpawn {
 export interface MonsterSpawn {
   x: number;
   y: number;
-  kind: 'normal' | 'elite' | 'boss';
+  kind: 'normal' | 'elite' | 'midboss' | 'boss';
 }
 
 export interface DecorSpawn {
@@ -49,6 +49,8 @@ export interface DecorSpawn {
 export interface DungeonData {
   seed: number;
   tier: number;
+  /** 단계 안의 방 번호 (1~10). 5는 중간보스, 10은 수호자 */
+  stage: number;
   width: number;
   height: number;
   cells: Uint8Array;
@@ -73,17 +75,17 @@ export function isFloor(d: Pick<DungeonData, 'width' | 'height' | 'cells'>, x: n
 
 const roomCenter = (r: Room) => ({ x: Math.floor(r.x + r.w / 2), y: Math.floor(r.y + r.h / 2) });
 
-export function generateDungeon(seed: number, tier: number): DungeonData {
+export function generateDungeon(seed: number, tier: number, stage = 1): DungeonData {
   const rng = new Rng(seed);
   // 방 배치가 너무 적게 나오면 같은 난수 흐름으로 다시 시도한다 (시드가 같으면 결과도 같다)
   for (let attempt = 0; attempt < 20; attempt++) {
-    const result = tryGenerate(rng, seed, tier);
+    const result = tryGenerate(rng, seed, tier, stage);
     if (result) return result;
   }
   throw new Error(`던전 생성 실패 (seed=${seed})`);
 }
 
-function tryGenerate(rng: Rng, seed: number, tier: number): DungeonData | null {
+function tryGenerate(rng: Rng, seed: number, tier: number, stage: number): DungeonData | null {
   const width = MAP_WIDTH;
   const height = MAP_HEIGHT;
   const cells = new Uint8Array(width * height);
@@ -262,7 +264,9 @@ function tryGenerate(rng: Rng, seed: number, tier: number): DungeonData | null {
 
     // 몬스터는 M3(전투)에서 쓰일 배치 정보만 미리 만든다
     if (r.type === 'combat' || r.type === 'resource') {
-      const count = r.type === 'combat' ? rng.int(3, 5) : rng.int(1, 2);
+      // 깊은 방일수록 몬스터가 많다
+      const extra = Math.floor(stage / 4);
+      const count = r.type === 'combat' ? rng.int(2, 3) + extra : rng.int(0, 1) + (stage > 5 ? 1 : 0);
       for (let i = 0; i < count; i++) {
         const cell = pickInteriorCell(r, 0);
         if (cell) monsters.push({ ...cell, kind: 'normal' });
@@ -271,7 +275,12 @@ function tryGenerate(rng: Rng, seed: number, tier: number): DungeonData | null {
       const cell = pickInteriorCell(r, 0);
       if (cell) monsters.push({ ...cell, kind: 'elite' });
     } else if (r.type === 'exit') {
-      monsters.push({ x: exit.x, y: exit.y - 2, kind: 'boss' });
+      if (stage === 10) monsters.push({ x: exit.x, y: exit.y - 2, kind: 'boss' });
+      else if (stage === 5) monsters.push({ x: exit.x, y: exit.y - 2, kind: 'midboss' });
+      else {
+        const cell = pickInteriorCell(r, 0);
+        if (cell) monsters.push({ ...cell, kind: 'normal' });
+      }
     }
   }
 
@@ -292,7 +301,7 @@ function tryGenerate(rng: Rng, seed: number, tier: number): DungeonData | null {
     }
   }
 
-  return { seed, tier, width, height, cells, rooms, roomIndex, start, exit, nodes, monsters, decor };
+  return { seed, tier, stage, width, height, cells, rooms, roomIndex, start, exit, nodes, monsters, decor };
 }
 
 /** 격자 위의 최단 거리 (4방향). 도달할 수 없는 칸은 -1 */

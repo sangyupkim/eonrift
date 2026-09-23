@@ -7,20 +7,23 @@ import { CLASSES, expToNext, type ClassId } from '../data/classes';
 import { equipName, GRADES, rollEquip } from '../data/equipment';
 import { BUILDINGS, FACTORY_SIZES, OFFLINE_CAP_HOURS, type BuildingType } from '../data/factory';
 import { ITEMS } from '../data/items';
+import { QUEST_BY_ID, type NpcRef, type QuestDef } from '../data/quests';
+import type { Step } from '../data/story';
 import { moveWithCollision } from '../dungeon/collision';
 import { generateDungeon, isFloor } from '../dungeon/generator';
-import { Factory, type Dir } from '../factory/sim';
+import { Factory, MACHINE_TYPES, RECIPE_BY_ID, type BuildingState, type Dir } from '../factory/sim';
 import { BuildBar } from '../ui/buildbar';
 import { Dialogue } from '../ui/dialogue';
 import { Hud } from '../ui/hud';
-import { Minimap } from '../ui/minimap';
+import { Minimap, type MapMarker } from '../ui/minimap';
 import { hex, Screens } from '../ui/screens';
 import { Bag } from './Bag';
 import { Combat } from './Combat';
 import type { Monster } from './Monster';
 import { Player } from './Player';
-import { DIM_BAG_MAX, deleteSave, hasSave, loadSave, newSave, Progress, type SaveData } from './Progress';
-import { hasNews, objective, resetForNewCycle, scriptFor } from './Story';
+import { DIM_BAG_MAX, deleteSave, hasSave, loadSave, newSave, Progress, stageIndex, stageOf, type SaveData } from './Progress';
+import { Quests } from './Quests';
+import { hasStory, objective, resetForNewCycle, scriptFor } from './Story';
 import { DungeonScene, type NodeInstance } from './scenes/DungeonScene';
 import { HomeScene } from './scenes/HomeScene';
 import type { Interactable, Level } from './scenes/Level';
@@ -30,15 +33,20 @@ type Mode = 'title' | 'play' | 'menu' | 'dialogue' | 'dead';
 
 interface Run {
   tier: number;
+  stage: number;
   bag: Bag;
   dimBag: Bag;
   gold: number;
   exp: number;
   time: number;
+  stagesCleared: number;
+  /** 이번 방을 클리어 처리했는지 */
+  roomCleared: boolean;
 }
 
 const ESSENCE = (tier: number) => (tier <= 3 ? 'essence_low' : tier <= 5 ? 'essence_mid' : 'essence_high');
 const NPC_IDS = new Set<string>(NPCS.map((n) => n.id));
+const MAX_STAGE = 70;
 
 export class Game {
   private renderer: WebGLRenderer;
@@ -53,12 +61,14 @@ export class Game {
   private fadeEl: HTMLDivElement;
 
   private progress!: Progress;
+  private quests!: Quests;
   private factory!: Factory;
   private level!: Level;
   private player!: Player;
   private playerMaterial = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
   private combat!: Combat;
   private minimap: Minimap | null = null;
+  private bigMap = false;
   private run: Run | null = null;
   private mode: Mode = 'title';
   private building = false;
@@ -70,10 +80,15 @@ export class Game {
   private factoryAcc = 0;
   private potionCd = 0;
   private deadTimer = 0;
+  /** 공격 버튼을 연타해도 입력이 사라지지 않게 잠시 기억한다 */
+  private attackBuffer = 0;
+  private gathering: NodeInstance | null = null;
   private pendingNgPlus = false;
+  private afterMenu: (() => void) | null = null;
   private raycaster = new Raycaster();
   private ground = new Plane(new Vector3(0, 1, 0), 0);
   private dragCell: { x: number; y: number } | null = null;
+  private ghostCell: { x: number; y: number } | null = null;
 
   constructor(private container: HTMLElement) {
     this.renderer = new WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -116,14 +131,29 @@ export class Game {
     this.setupBuildPointer();
 
     // 타이틀 뒤 배경으로 쓸 던전
-    this.progress = new Progress(newSave());
-    this.factory = new Factory(this.progress.data.factory, 8);
-    this.enterDungeon(1, true);
+    this.setProgress(new Progress(newSave()));
+    this.enterDungeon(1, 1, true);
     this.resize();
     this.showTitle();
 
     this.lastTime = performance.now();
     this.renderer.setAnimationLoop((t) => this.frame(t));
+  }
+
+  private setProgress(p: Progress): void {
+    this.progress = p;
+    this.quests = new Quests(p.data.quests, {
+      count: (id) => p.count(id),
+      get stones() {
+        return p.stoneCount;
+      },
+      get cleared() {
+        return p.data.cleared;
+      },
+      flag: (f) => p.flag(f),
+    });
+    this.factory = new Factory(p.data.factory, p.factorySize);
+    this.factory.onCraft = (item, n) => this.quests.event({ type: 'craft', item, count: n });
   }
 
   // =============== 시작 / 저장 ===============
@@ -144,25 +174,40 @@ export class Game {
     requestFullscreenLandscape();
     this.audio.unlock();
     if (isNew) deleteSave();
-    this.progress = new Progress(data);
+    this.setProgress(new Progress(data));
     this.audio.setEnabled(data.settings.sound);
-    this.factory = new Factory(data.factory, this.progress.factorySize);
-    this.factory.onOutput = (item) => this.progress.add(item, 1);
     this.screens.close();
     const offline = isNew ? 0 : Math.min(OFFLINE_CAP_HOURS * 3600, (Date.now() - data.lastSaved) / 1000);
     this.mode = 'play';
     this.enterVillage('start');
     if (isNew) {
       this.saveNow();
-      this.playScript('prologue');
+      this.playScript('prologue', () => {
+        // 프롤로그가 끝나면 리아의 첫 의뢰를 바로 받는다
+        const q = QUEST_BY_ID.m1_hunt;
+        this.quests.accept(q);
+        this.hud.toast(`퀘스트 수락: ${q.title}`, 3000);
+        this.refreshHud();
+      });
     } else if (offline > 60 && this.progress.flag('home') && data.factory.buildings.length) {
-      const before = { ...data.storage };
-      this.factory.simulate(offline, this.progress);
+      const before = this.boxSnapshot();
+      this.factory.simulate(offline);
+      const after = this.boxSnapshot();
       const produced = new Map<string, number>();
-      for (const [id, n] of Object.entries(data.storage)) if (n > (before[id] ?? 0)) produced.set(id, n - (before[id] ?? 0));
+      for (const [id, n] of after) if (n > (before.get(id) ?? 0)) produced.set(id, n - (before.get(id) ?? 0));
       this.openMenu(() => this.screens.offlineReward(offline, produced, () => this.resume()));
       this.saveNow();
     }
+  }
+
+  /** 출하 보관상자의 내용물 합계 (오프라인 보상 계산용) */
+  private boxSnapshot(): Map<string, number> {
+    const m = new Map<string, number>();
+    for (const b of this.factory.state.buildings) {
+      if (b.type !== 'box' || b.mode !== 'out') continue;
+      for (const [id, n] of Object.entries(b.buffer ?? {})) m.set(id, (m.get(id) ?? 0) + n);
+    }
+    return m;
   }
 
   private saveNow(): void {
@@ -192,29 +237,34 @@ export class Game {
     this.fadeEl.classList.add('go');
   }
 
-  private loadLevel(level: Level): void {
+  private loadLevel(level: Level, fogMap: boolean): void {
     if (this.level) this.level.dispose();
     this.level = level;
     this.buildMode(false);
+    this.gathering = null;
     this.makePlayer(level.playerStart.x, level.playerStart.z, level.playerStart.facing);
     this.camTarget.set(level.playerStart.x, 0, level.playerStart.z);
     level.sun.castShadow = this.progress.data.settings.shadows;
     this.hud.setMode(level.kind);
     this.hud.setBoss(null);
-    this.minimap = null;
-    this.hud.setMinimap(null);
+    this.minimap = new Minimap(level.grid, fogMap);
+    this.hud.setMinimap(this.minimap.canvas);
+    this.setBigMap(false);
     this.fade();
   }
 
-  private makePlayer(x: number, z: number, facing: number): void {
-    if (this.player) this.player.rig.root.parent?.remove(this.player.rig.root);
+  private makePlayer(x: number, z: number, facing: number, keepHp = false): void {
+    const prev = this.player;
+    if (prev) prev.rig.root.parent?.remove(prev.rig.root);
     const cls = CLASSES[this.progress.data.currentClass];
     this.player = new Player(this.playerMaterial, cls);
     this.player.facing = facing;
     this.player.setPosition(x, z);
     const st = this.progress.stats();
-    this.player.maxHp = this.player.hp = st.maxHp;
-    this.player.maxMp = this.player.mp = st.maxMp;
+    this.player.maxHp = st.maxHp;
+    this.player.maxMp = st.maxMp;
+    this.player.hp = keepHp && prev ? Math.min(st.maxHp, Math.max(1, prev.hp)) : st.maxHp;
+    this.player.mp = keepHp && prev ? Math.min(st.maxMp, prev.mp) : st.maxMp;
     this.level.scene.add(this.player.rig.root);
     this.combat = new Combat({
       player: this.player,
@@ -222,7 +272,6 @@ export class Game {
       level: () => this.level,
       dungeon: () => (this.level instanceof DungeonScene && this.run ? this.level : null),
       damageMonster: (m, mult, knock, fx, fz) => this.damageMonster(m, mult, knock, fx, fz),
-      gather: (n) => this.gather(n),
       shake: (a) => (this.shakeT = Math.max(this.shakeT, a)),
       hitStop: (t) => (this.hitStopT = Math.max(this.hitStopT, t)),
       sfx: (n) => this.audio.play(n),
@@ -230,7 +279,7 @@ export class Game {
     this.hud.setClass(cls.short, hex(cls.look.tunic), cls.skills.map((s) => s.name));
   }
 
-  private enterVillage(arrival: 'portal' | 'home' | 'start'): void {
+  private enterVillage(arrival: 'portal' | 'home' | 'start' | { x: number; z: number; facing: number }): void {
     const p = this.progress;
     const village = new VillageScene(
       (spot) => this.interactVillage(spot),
@@ -238,11 +287,10 @@ export class Game {
       p.flag('home') > 0,
       arrival,
     );
-    this.loadLevel(village);
+    this.loadLevel(village, false);
     this.run = null;
     this.hud.setLocation(p.data.ngPlus ? `차원마을 · ${p.data.ngPlus + 1}회차` : '차원마을', 0xffd88a);
     this.audio.playMusic('village');
-    // 차원가방 확장 키트는 창고에 들어오면 바로 쓴다
     let grown = 0;
     while (p.count('bag_kit') > 0 && p.data.dimBag.length < DIM_BAG_MAX) {
       p.take('bag_kit', 1);
@@ -250,44 +298,61 @@ export class Game {
       grown++;
     }
     if (grown) this.hud.toast(`차원가방이 ${p.data.dimBag.length}칸으로 늘어났습니다`, 3000);
+    if (this.quests.refreshDaily(p.maxTier, p.flag('home') > 0) && p.flag('legend')) this.hud.toast('촌장 에단의 일일 의뢰가 새로 올라왔습니다', 3000);
     if (this.mode !== 'dialogue') this.mode = 'play';
     this.hud.setVisible(this.mode === 'play');
     this.refreshHud();
   }
 
-  private enterDungeon(tier: number, background = false): void {
-    const data = generateDungeon(randomSeed(), tier);
+  /** 던전 입장. run이 있으면 가방을 들고 다음 방으로 이어 간다 */
+  private enterDungeon(tier: number, stage: number, background = false): void {
+    const data = generateDungeon(randomSeed(), tier, stage);
     const dungeon = new DungeonScene(data, this.progress.data.ngPlus, {
       player: () => this.player.position,
       cameraQuat: () => this.camera.quaternion,
       hurtPlayer: (d, x, z) => this.hurtPlayer(d, x, z),
       monsterKilled: (m) => this.monsterKilled(m),
       monsterHitByProjectile: (m, proj) => this.combat.projectileHit(m, proj),
-      exit: () => this.finishRun('clear'),
+      exit: () => this.openWarp(),
+      gather: (n) => this.startGather(n),
       shake: (a) => (this.shakeT = Math.max(this.shakeT, a)),
     });
-    this.loadLevel(dungeon);
+    const continuing = !background && this.run !== null;
+    const prevPlayer = this.player;
+    this.loadLevel(dungeon, true);
     if (background) return;
-    const dim = new Bag(this.progress.data.dimBag.length, this.progress.data.dimBag);
-    this.run = { tier, bag: new Bag(BAG_SLOTS), dimBag: dim, gold: 0, exp: 0, time: 0 };
-    this.minimap = new Minimap(data);
-    this.hud.setMinimap(this.minimap.canvas);
-    this.hud.setLocation(`${tier}단계 · ${dungeon.theme.name}`, dungeon.theme.portalColor);
+    if (continuing && prevPlayer) {
+      // 다음 방으로: 체력은 이어지되 조금 회복한다
+      this.player.hp = Math.min(this.player.maxHp, prevPlayer.hp + this.player.maxHp * 0.25);
+      this.player.mp = Math.min(this.player.maxMp, prevPlayer.mp + this.player.maxMp * 0.25);
+      this.run!.tier = tier;
+      this.run!.stage = stage;
+      this.run!.roomCleared = false;
+    } else {
+      const dim = new Bag(this.progress.data.dimBag.length, this.progress.data.dimBag);
+      this.run = { tier, stage, bag: new Bag(BAG_SLOTS), dimBag: dim, gold: 0, exp: 0, time: 0, stagesCleared: 0, roomCleared: false };
+    }
+    this.hud.setLocation(`${tier}-${stage} · ${dungeon.theme.name}`, dungeon.theme.portalColor);
     this.audio.playMusic('dungeon');
     this.audio.play('portal');
     this.mode = 'play';
     this.hud.setVisible(true);
-    this.hud.toast(`${tier}단계 · ${dungeon.theme.name} — 끝의 수호자를 쓰러뜨리면 귀환 차원문이 열립니다`, 3500);
+    const note = stage === 10 ? ' — 차원석을 지닌 수호자가 기다립니다' : stage === 5 ? ' — 파수꾼이 지키고 있습니다' : '';
+    this.hud.toast(`${tier}-${stage} · ${dungeon.theme.name}${note}`, 3000);
     this.refreshHud();
   }
 
   private enterHome(): void {
     this.factory.size = this.progress.factorySize;
-    const home = new HomeScene(this.factory, () => {
-      this.saveNow();
-      this.enterVillage('home');
-    });
-    this.loadLevel(home);
+    const home = new HomeScene(
+      this.factory,
+      () => {
+        this.saveNow();
+        this.enterVillage('home');
+      },
+      (b) => this.openBuilding(b),
+    );
+    this.loadLevel(home, false);
     this.hud.setLocation(`차원집 · ${this.factory.size}×${this.factory.size}`, 0xc28cff);
     this.audio.playMusic('home');
     this.audio.play('portal');
@@ -305,17 +370,17 @@ export class Game {
     this.mode = 'menu';
     this.hud.setVisible(false);
     this.buildBar.hide();
+    this.setBigMap(false);
     open();
     if (onClosed) this.afterMenu = onClosed;
   }
-
-  private afterMenu: (() => void) | null = null;
 
   private resume(): void {
     this.mode = 'play';
     this.hud.setVisible(true);
     if (this.building) this.buildBar.show((t) => this.buildingUnlocked(t));
     this.input.clearPressed();
+    this.applyStats();
     this.refreshHud();
     this.saveNow();
     const cb = this.afterMenu;
@@ -334,7 +399,7 @@ export class Game {
         sound: d.settings.sound,
         onReturnStone: () => {
           if (!this.progress.take('return_stone', 1)) return;
-          this.finishRun('return');
+          this.finishRun('귀환석으로 귀환');
         },
         onGiveUp: () => this.fall(),
         onToggleShadows: (on) => {
@@ -348,7 +413,7 @@ export class Game {
         onTitle: () => {
           this.saveNow();
           this.run = null;
-          this.enterDungeon(1, true);
+          this.enterDungeon(1, 1, true);
           this.showTitle();
         },
         onClose: () => this.resume(),
@@ -363,23 +428,20 @@ export class Game {
         this.screens.bag(
           run.bag,
           run.dimBag,
-          (from, i) => {
-            if (from === 'bag') {
-              if (run.bag.moveTo(i, run.dimBag) === 0) this.hud.toast('차원가방이 가득 찼습니다');
-            } else run.dimBag.moveTo(i, run.bag);
-          },
+          (from, i) => (from === 'bag' ? run.bag.moveTo(i, run.dimBag) : run.dimBag.moveTo(i, run.bag)) > 0,
           () => this.resume(),
         ),
       );
     } else this.openInventory('equip');
   }
 
-  private openInventory(tab: 'equip' | 'storage' | 'stats'): void {
-    this.openMenu(() => this.screens.inventory(this.progress, tab, () => this.applyStats(), () => this.resume()));
+  private openInventory(tab: 'equip' | 'storage' | 'stats' | 'quest'): void {
+    this.openMenu(() => this.screens.inventory(this.progress, this.quests, tab, () => this.applyStats(), () => this.resume()));
   }
 
-  /** 장비가 바뀌면 최대 HP/MP를 다시 계산한다 */
+  /** 장비·스탯이 바뀌면 최대 HP/MP를 다시 계산한다 */
   private applyStats(): void {
+    if (!this.player) return;
     const st = this.progress.stats();
     const hpRatio = this.player.hp / this.player.maxHp;
     this.player.maxHp = st.maxHp;
@@ -400,6 +462,7 @@ export class Game {
           p.data.factory.sizeLevel++;
           this.audio.play('level');
           this.afterMenu = () => {
+            this.building = false;
             this.enterHome();
             this.hud.toast(`차원집이 ${p.factorySize}×${p.factorySize}로 넓어졌습니다`);
           };
@@ -410,24 +473,21 @@ export class Game {
     );
   }
 
+  private setBigMap(on: boolean): void {
+    this.bigMap = on && !!this.minimap;
+    this.hud.showBigMap(this.bigMap ? this.minimap!.bigCanvas : null);
+    this.minimapTimer = 0;
+  }
+
   // =============== 마을 상호작용 ===============
   private interactVillage(spot: VillageSpot): void {
     const p = this.progress;
     switch (spot) {
       case 'portal':
-        this.openMenu(() =>
-          this.screens.tierSelect(
-            p,
-            (tier) => {
-              this.afterMenu = () => this.enterDungeon(tier);
-              this.screens.close();
-            },
-            () => this.resume(),
-          ),
-        );
+        this.openStageSelect(p.maxTier);
         break;
       case 'home':
-        if (!p.flag('home')) this.hud.toast('문이 굳게 닫혀 있다. 차원석의 힘이 필요해 보인다.');
+        if (!p.flag('home')) this.hud.toast('문이 굳게 닫혀 있다. 세라라면 방법을 알지도 모른다.');
         else {
           this.saveNow();
           this.enterHome();
@@ -459,15 +519,132 @@ export class Game {
     }
   }
 
+  private openStageSelect(tier: number): void {
+    this.openMenu(() =>
+      this.screens.stageSelect(
+        this.progress,
+        tier,
+        (t, s) => {
+          this.afterMenu = () => this.enterDungeon(t, s);
+          this.screens.close();
+        },
+        () => this.resume(),
+      ),
+    );
+  }
+
+  /** NPC와 대화: 퀘스트 보고 → 이야기 → 새 퀘스트 → 진행 중 안내 → 인사와 시설 */
   private talk(npc: NpcId): void {
     const p = this.progress;
+    const q = this.quests;
+    const ref = npc as NpcRef;
+
+    const ready = q.activeFor(ref).find((x) => q.canComplete(x));
+    if (ready) return this.playSteps(ready.complete, () => this.completeQuest(ready));
+
+    if (hasStory(npc, p)) {
+      const script = scriptFor(npc, p);
+      if (script === 'stone_n') p.setFlag(`stoneTalk${p.stoneCount}`);
+      return this.playScript(script);
+    }
+
+    const offer = q.available(ref)[0];
+    if (offer) return this.playSteps(offer.offer, () => this.offerQuest(offer));
+
+    const pending = q.activeFor(ref)[0];
+    if (pending?.pending) return this.playSteps(pending.pending);
+
     const script = scriptFor(npc, p);
     if (script === 'stone_n') p.setFlag(`stoneTalk${p.stoneCount}`);
     this.playScript(script, () => {
       if (npc === 'merchant') this.interactVillage('shop');
-      else if (npc === 'smith' && script === 'smith_idle') this.interactVillage('forge');
-      else if (script === 'home_unlock') this.enterVillage('start');
+      else if (npc === 'smith') this.interactVillage('forge');
+      else if (npc === 'engineer' && q.isDone('m4_factory')) this.openBlueprints();
+      else if (npc === 'chief' && p.flag('legend')) this.openDaily();
     });
+  }
+
+  private offerQuest(qd: QuestDef): void {
+    this.openMenu(() =>
+      this.screens.questOffer(
+        qd,
+        () => {
+          this.quests.accept(qd);
+          for (const f of qd.onAccept?.flags ?? []) this.progress.setFlag(f);
+          for (const [id, n] of Object.entries(qd.onAccept?.items ?? {})) this.progress.add(id, n);
+          this.audio.play('pickup');
+          this.hud.toast(`퀘스트 수락: ${qd.title}${qd.onAccept?.flags?.includes('tool_pickaxe') ? ' · 곡괭이와 도끼를 받았다!' : ''}`, 3000);
+          this.screens.close();
+        },
+        () => this.resume(),
+      ),
+    );
+  }
+
+  private completeQuest(qd: QuestDef): void {
+    const p = this.progress;
+    if (!this.quests.canComplete(qd)) return;
+    for (const o of qd.objectives) if (o.type === 'deliver') p.take(o.item, o.count);
+    this.quests.finish(qd);
+    const r = qd.rewards;
+    if (r.gold) p.data.gold += r.gold;
+    for (const [id, n] of Object.entries(r.items ?? {})) p.add(id, n);
+    for (const f of r.flags ?? []) p.setFlag(f);
+    if (r.exp) this.gainExp(r.exp);
+    this.audio.play('coin');
+    const parts = [r.gold ? `${r.gold} G` : '', r.exp ? `경험치 ${r.exp}` : '', ...Object.entries(r.items ?? {}).map(([id, n]) => `${ITEMS[id].name}×${n}`)].filter(Boolean);
+    this.hud.toast(`퀘스트 완료: ${qd.title}${parts.length ? ` (${parts.join(', ')})` : ''}`, 3500);
+    this.saveNow();
+    if (r.script) {
+      const pos = { ...this.player.position, facing: this.player.facing };
+      this.playScript(r.script, () => {
+        // 차원집이 열리면 문이 빛나도록 마을을 다시 만든다 (서 있던 자리 그대로)
+        if (r.flags?.includes('home') && this.level instanceof VillageScene) this.enterVillage(pos);
+      });
+    }
+    this.refreshHud();
+  }
+
+  private openDaily(): void {
+    this.quests.refreshDaily(this.progress.maxTier, this.progress.flag('home') > 0);
+    this.openMenu(() =>
+      this.screens.dailyBoard(
+        this.progress,
+        this.quests,
+        (i) => {
+          const d = this.quests.state.daily.list[i];
+          if (!d || d.claimed) return;
+          d.claimed = true;
+          const p = this.progress;
+          if (d.reward.gold) p.data.gold += d.reward.gold;
+          for (const [id, n] of Object.entries(d.reward.items ?? {})) p.add(id, n);
+          if (d.reward.exp) this.gainExp(d.reward.exp);
+          this.audio.play('coin');
+          this.hud.toast(`일일 의뢰 완료: ${d.title}`);
+          this.openDaily();
+        },
+        () => this.resume(),
+      ),
+    );
+  }
+
+  private openBlueprints(message?: string): void {
+    this.openMenu(() =>
+      this.screens.blueprints(
+        this.progress,
+        (t) => {
+          const p = this.progress;
+          const bp = BUILDINGS[t].blueprint;
+          if (!bp || p.flag(`bp_${t}`) || p.data.gold < bp.gold || !p.takeAll(bp.items)) return;
+          p.data.gold -= bp.gold;
+          p.setFlag(`bp_${t}`);
+          this.audio.play('coin');
+          this.openBlueprints(`${BUILDINGS[t].name} 도면을 샀습니다`);
+        },
+        () => this.resume(),
+        message,
+      ),
+    );
   }
 
   private switchClass(id: ClassId): void {
@@ -483,9 +660,14 @@ export class Game {
 
   // =============== 스토리 ===============
   private playScript(id: string, after?: () => void): void {
+    this.playSteps(null, after, id);
+  }
+
+  private playSteps(steps: Step[] | null, after?: () => void, scriptId?: string): void {
     this.mode = 'dialogue';
     this.hud.setVisible(false);
-    this.dialogue.play(id, () => {
+    this.setBigMap(false);
+    const done = () => {
       if (this.pendingNgPlus) {
         this.pendingNgPlus = false;
         this.startNewCycle();
@@ -497,7 +679,9 @@ export class Game {
       this.refreshHud();
       this.saveNow();
       after?.();
-    });
+    };
+    if (scriptId) this.dialogue.play(scriptId, done);
+    else this.dialogue.playSteps(steps ?? [], done);
   }
 
   private runCommand(cmd: string): void {
@@ -521,13 +705,13 @@ export class Game {
     }
   }
 
-  /** 엔딩 후 회차 넘기기: 장비, 레벨, 차원집은 남고 차원석은 다시 모은다 */
+  /** 엔딩 후 회차 넘기기: 장비, 레벨, 차원집은 남고 차원석과 스테이지는 다시 */
   private startNewCycle(): void {
     const p = this.progress;
     p.take('resonator', 1);
     p.data.ngPlus++;
     p.data.dimStones = [];
-    p.data.maxTier = 1;
+    p.data.cleared = 0;
     resetForNewCycle(p);
     this.saveNow();
     this.mode = 'dialogue';
@@ -556,6 +740,7 @@ export class Game {
     const st = this.progress.stats();
     const final = Math.max(1, Math.round(dmg * (0.9 + Math.random() * 0.2) * (60 / (60 + st.def))));
     pl.hurt(final);
+    this.gathering = null;
     const s = this.toScreen(pl.position.x, 2, pl.position.z);
     this.hud.floatText(s.x, s.y, `-${final}`, '#ff5a5a', 'hurt');
     this.shakeT = Math.max(this.shakeT, 0.25);
@@ -571,6 +756,18 @@ export class Game {
     }
   }
 
+  private gainExp(n: number): void {
+    const ups = this.progress.addExp(n);
+    if (ups > 0) {
+      this.applyStats();
+      this.player.hp = this.player.maxHp;
+      this.player.mp = this.player.maxMp;
+      this.level.effects.pillar(this.player.position.x, this.player.position.z, 0xffe07a);
+      this.audio.play('level');
+      this.hud.toast(`레벨 업! Lv.${this.progress.cls.level} · 스탯 포인트 +${ups * 5} (캐릭터 → 능력치)`, 3000);
+    }
+  }
+
   private monsterKilled(m: Monster): void {
     const run = this.run;
     if (!run || !(this.level instanceof DungeonScene)) return;
@@ -578,20 +775,14 @@ export class Game {
     const rng = new Rng(randomSeed());
     this.audio.play('kill');
     this.level.particles.burst(m.x, 0.7, m.z, 0xffffff, 12, 1.2);
+    this.quests.event({ type: 'kill', tier, elite: m.kind === 'elite' });
 
     const exp = Math.round(m.exp * (1 + this.progress.data.ngPlus * 0.5));
     run.exp += exp;
-    const ups = this.progress.addExp(exp);
-    if (ups > 0) {
-      this.applyStats();
-      this.player.hp = this.player.maxHp;
-      this.player.mp = this.player.maxMp;
-      this.level.effects.pillar(this.player.position.x, this.player.position.z, 0xffe07a);
-      this.audio.play('level');
-      this.hud.toast(`레벨 업! Lv.${this.progress.cls.level}`);
-    }
+    this.gainExp(exp);
 
-    const gold = Math.round(rng.int(2, 5) * tier * (m.isBoss ? 25 : m.kind === 'elite' ? 4 : 1));
+    const bossMult = m.kind === 'boss' ? 25 : m.kind === 'midboss' ? 10 : m.kind === 'elite' ? 4 : 1;
+    const gold = Math.round(rng.int(2, 5) * tier * (1 + (run.stage - 1) * 0.1) * bossMult);
     run.gold += gold;
     this.progress.data.gold += gold;
 
@@ -600,36 +791,116 @@ export class Game {
     const loot = (text: string, color: string) => this.hud.floatText(s.x, s.y - 22 * line++, text, color, 'small');
     loot(`+${gold} G`, '#ffd23a');
 
-    // 마력 정수
-    if (rng.chance(m.kind === 'normal' ? 0.65 : 1)) {
-      const n = m.isBoss ? 8 : m.kind === 'elite' ? 3 : 1;
+    if (rng.chance(m.kind === 'normal' ? 0.6 : 1)) {
+      const n = m.kind === 'boss' ? 8 : m.kind === 'midboss' ? 5 : m.kind === 'elite' ? 3 : 1;
       const id = ESSENCE(tier);
       const added = run.bag.add(id, n);
       if (added) loot(`+${added} ${ITEMS[id].name}`, hex(ITEMS[id].color));
       else this.hud.toast('가방이 가득 찼습니다');
     }
-    // 장비
-    const eqCount = m.isBoss ? 2 : rng.chance(m.kind === 'elite' ? 0.4 : 0.035) ? 1 : 0;
+    // 장비: 중간보스는 좋은 장비를 넉넉히
+    const eqCount = m.kind === 'boss' ? 2 : m.kind === 'midboss' ? 2 : rng.chance(m.kind === 'elite' ? 0.4 : 0.03) ? 1 : 0;
+    const bonus = m.kind === 'midboss' ? 0.35 : m.kind === 'boss' ? 0.3 : m.kind === 'elite' ? 0.12 : 0;
     for (let i = 0; i < eqCount; i++) {
-      const e = rollEquip(rng, tier, this.progress.data.currentClass, m.isBoss ? 0.3 : m.kind === 'elite' ? 0.12 : 0);
+      const e = rollEquip(rng, tier, this.progress.data.currentClass, bonus);
       if (run.bag.addEquip(e)) loot(`${GRADES[e.grade].name} ${equipName(e)}`, hex(GRADES[e.grade].color));
       else this.hud.toast('가방이 가득 차서 장비를 줍지 못했습니다');
+    }
+    if (m.kind === 'midboss') {
+      const stone = tier <= 2 ? 'stone_low' : tier <= 5 ? 'stone_mid' : 'stone_high';
+      if (run.bag.add(stone, 2)) loot(`+2 ${ITEMS[stone].name}`, hex(ITEMS[stone].color));
+      run.bag.add('potion', 2);
     }
 
     if (m.isBoss) {
       this.hud.setBoss(null);
       this.audio.playMusic('dungeon');
+    }
+    if (m.isFinal) {
       const p = this.progress;
-      p.data.maxTier = Math.min(7, Math.max(p.data.maxTier, tier + 1));
       if (!p.data.dimStones.includes(tier)) {
         p.data.dimStones.push(tier);
         this.audio.play('stone');
         this.level.effects.pillar(m.x, m.z, 0x5ef0ff, 8);
-        this.hud.toast(`차원석을 얻었다! (${p.stoneCount}/7) · 귀환 차원문이 열렸다`, 4000);
-      } else this.hud.toast('수호자를 쓰러뜨렸다 · 귀환 차원문이 열렸다', 3000);
-      this.saveNow();
+        this.hud.toast(`차원석을 얻었다! (${p.stoneCount}/7)`, 4000);
+      }
     }
     this.refreshHud();
+  }
+
+  /** 방의 몬스터를 모두 쓰러뜨렸을 때 */
+  private roomClear(): void {
+    const run = this.run!;
+    run.roomCleared = true;
+    run.stagesCleared++;
+    const g = stageIndex(run.tier, run.stage);
+    const p = this.progress;
+    p.data.cleared = Math.max(p.data.cleared, g);
+    this.quests.event({ type: 'stage' });
+    this.audio.play('portal');
+    this.hud.toast(`${run.tier}-${run.stage} 클리어! 워프 게이트가 열렸습니다`, 3000);
+    this.saveNow();
+    this.refreshHud();
+  }
+
+  private openWarp(): void {
+    const run = this.run;
+    if (!run) return;
+    const g = stageIndex(run.tier, run.stage);
+    const next = g < MAX_STAGE ? stageOf(g + 1) : null;
+    this.openMenu(() =>
+      this.screens.warp(
+        `${run.tier}-${run.stage}`,
+        next ? `${next.tier}-${next.stage}` : null,
+        () => {
+          this.afterMenu = () => this.enterDungeon(next!.tier, next!.stage);
+          this.screens.close();
+        },
+        () => {
+          this.afterMenu = () => this.finishRun('귀환 성공');
+          this.screens.close();
+        },
+        () => this.resume(),
+      ),
+    );
+  }
+
+  // =============== 채집 ===============
+  private startGather(n: NodeInstance): void {
+    if (!n.alive) return;
+    const p = this.progress;
+    if (n.def.style !== 'chest') {
+      const tool = n.def.style === 'tree' ? 'tool_axe' : 'tool_pickaxe';
+      if (!p.flag(tool)) {
+        this.hud.toast(tool === 'tool_axe' ? '도끼가 있어야 나무를 벨 수 있습니다 (대장장이 고른)' : '곡괭이가 있어야 캘 수 있습니다 (대장장이 고른)', 2500);
+        return;
+      }
+    }
+    this.gathering = n;
+  }
+
+  /** 채집 중: 도구를 휘두를 때마다 한 번씩 캔다. 움직이면 멈춘다 */
+  private updateGather(move: { x: number; y: number }): void {
+    const n = this.gathering;
+    const pl = this.player;
+    if (!n) return;
+    if (!n.alive || n.dying > 0 || Math.hypot(move.x, move.y) > 0.25 || Math.hypot(n.x - pl.position.x, n.z - pl.position.z) > n.def.radius + 2.2) {
+      this.gathering = null;
+      return;
+    }
+    if (!pl.canAct) return;
+    const chest = n.def.style === 'chest';
+    pl.startAction(
+      {
+        pose: chest ? 'thrust' : 'gather',
+        tool: n.def.style === 'tree' ? 'axe' : 'pickaxe',
+        duration: chest ? 0.35 : 0.7,
+        hitAt: 0.6,
+        moveMult: 0,
+        onHit: () => this.gather(n),
+      },
+      Math.atan2(n.x - pl.position.x, n.z - pl.position.z),
+    );
   }
 
   private gather(n: NodeInstance): void {
@@ -639,15 +910,22 @@ export class Game {
     for (const drop of this.level.hitNode(n)) {
       const added = this.run.bag.add(drop.itemId, drop.count);
       const item = ITEMS[drop.itemId];
-      if (added > 0) this.hud.floatText(s.x, s.y - line++ * 22, `+${added} ${item.name}`, hex(item.color), 'small');
-      if (added < drop.count) this.hud.toast('가방이 가득 찼습니다');
+      if (added > 0) {
+        this.hud.floatText(s.x, s.y - line++ * 22, `+${added} ${item.name}`, hex(item.color), 'small');
+        this.quests.event({ type: 'gather', item: drop.itemId, count: added });
+      }
+      if (added < drop.count) {
+        this.hud.toast('가방이 가득 찼습니다');
+        this.gathering = null;
+      }
     }
+    this.shakeT = Math.max(this.shakeT, 0.08);
     this.audio.play('gather');
     this.refreshHud();
   }
 
-  /** 던전을 무사히 나왔다 (보스 처치 후 차원문 또는 귀환석) */
-  private finishRun(how: 'clear' | 'return'): void {
+  /** 던전을 무사히 나왔다 (워프 게이트 또는 귀환석) */
+  private finishRun(title: string): void {
     const run = this.run;
     if (!run) return;
     const p = this.progress;
@@ -666,7 +944,7 @@ export class Game {
     this.openMenu(
       () =>
         this.screens.result(
-          { title: how === 'clear' ? '귀환 성공' : '귀환석으로 귀환', items, equips, seconds: run.time, explored, gold: run.gold, exp: run.exp },
+          { title, items, equips, seconds: run.time, explored, gold: run.gold, exp: run.exp, stages: run.stagesCleared },
           () => this.resume(),
         ),
       () => {
@@ -706,6 +984,7 @@ export class Game {
             explored,
             gold: run.gold,
             exp: run.exp,
+            stages: run.stagesCleared,
           },
           () => this.resume(),
         ),
@@ -730,9 +1009,17 @@ export class Game {
     return total ? seen / total : 0;
   }
 
-  // =============== 공장 건설 ===============
+  // =============== 공장 ===============
   private buildingUnlocked(t: BuildingType): boolean {
-    return this.progress.stoneCount >= BUILDINGS[t].unlockStones;
+    return !BUILDINGS[t].blueprint || this.progress.flag(`bp_${t}`) > 0;
+  }
+
+  private openBuilding(b: BuildingState): void {
+    const p = this.progress;
+    const save = () => this.saveNow();
+    if (b.type === 'generator') this.openMenu(() => this.screens.generator(this.factory, b, p, save, () => this.resume()));
+    else if (b.type === 'box') this.openMenu(() => this.screens.box(b, p, save, () => this.resume()));
+    else if (MACHINE_TYPES.has(b.type)) this.openMenu(() => this.screens.machine(this.factory, b, p, save, () => this.resume()));
   }
 
   private buildMode(on: boolean): void {
@@ -740,7 +1027,10 @@ export class Game {
     this.hud.setBuilding(on);
     if (on) this.buildBar.show((t) => this.buildingUnlocked(t));
     else this.buildBar.hide();
-    if (this.level instanceof HomeScene) this.level.setBuildMode(on);
+    if (this.level instanceof HomeScene) {
+      this.level.setBuildMode(on);
+      if (!on) this.level.hideGhost();
+    }
     this.camera.zoom = 1;
     this.camera.updateProjectionMatrix();
     if (on) this.fitBuildCamera();
@@ -756,7 +1046,7 @@ export class Game {
     const L = this.factory.size * TILE;
     const viewH = this.camera.top - this.camera.bottom;
     const viewW = this.camera.right - this.camera.left;
-    this.camera.zoom = Math.min(1, viewW / (L * 1.55), viewH / (L * 1.2));
+    this.camera.zoom = Math.min(1, viewW / (L * 1.55), viewH / (L * 1.25));
     this.camera.updateProjectionMatrix();
   }
 
@@ -771,27 +1061,42 @@ export class Game {
     return this.factory.inBounds(x, y) ? { x, y } : null;
   }
 
+  /**
+   * 건설 입력:
+   * - 레일·마력선·철거: 누르고 끌면 연속으로
+   * - 그 밖의 건물: 누른 채 움직이면 미리보기가 따라오고, 손을 떼면 그 자리에 짓는다
+   */
   private setupBuildPointer(): void {
     const canvas = this.renderer.domElement;
+    const isLine = () => this.buildBar.tool === 'belt' || this.buildBar.tool === 'wire' || this.buildBar.tool === 'remove';
     canvas.addEventListener('pointerdown', (e) => {
       if (!this.building || this.mode !== 'play') return;
       const cell = this.pickCell(e);
       if (!cell) return;
       canvas.setPointerCapture(e.pointerId);
-      this.dragCell = cell;
-      this.applyTool(cell, null);
+      if (isLine()) {
+        this.dragCell = cell;
+        this.applyTool(cell, null);
+      } else {
+        this.ghostCell = cell;
+        this.updateGhost(cell);
+      }
     });
     canvas.addEventListener('pointermove', (e) => {
       if (!this.building || !(this.level instanceof HomeScene)) return;
       const cell = this.pickCell(e);
-      const tool = this.buildBar.tool;
-      if (cell) {
-        const occupied = !!this.factory.at(cell.x, cell.y);
-        this.level.showCursor(cell.x, cell.y, tool === 'remove' || tool === 'config' ? occupied : !occupied);
-      } else this.level.hideCursor();
+      if (!isLine()) {
+        // 마우스는 누르지 않아도 미리보기를 보여 준다
+        if (cell && (this.ghostCell || e.pointerType === 'mouse')) {
+          if (this.ghostCell) this.ghostCell = cell;
+          this.updateGhost(cell);
+        } else if (!cell) this.level.hideGhost();
+        return;
+      }
+      this.level.hideGhost();
+      if (cell) this.level.showCursor(cell.x, cell.y, this.buildBar.tool === 'remove' ? !!this.factory.at(cell.x, cell.y) : !this.factory.at(cell.x, cell.y));
+      else this.level.hideCursor();
       if (!this.dragCell || !cell || (cell.x === this.dragCell.x && cell.y === this.dragCell.y)) return;
-      if (tool !== 'belt' && tool !== 'wire' && tool !== 'remove') return;
-      // 한 칸씩 이어지도록 가로·세로로만 따라간다
       let prev = this.dragCell;
       while (this.dragCell && (prev.x !== cell.x || prev.y !== cell.y)) {
         const dx = Math.sign(cell.x - prev.x);
@@ -802,9 +1107,28 @@ export class Game {
       }
       if (this.dragCell) this.dragCell = cell;
     });
-    const end = () => (this.dragCell = null);
+    const end = (e: PointerEvent) => {
+      this.dragCell = null;
+      if (this.ghostCell && this.building && e.type === 'pointerup') {
+        const cell = this.ghostCell;
+        this.ghostCell = null;
+        this.applyTool(cell, null);
+        if (e.pointerType !== 'mouse' && this.level instanceof HomeScene) this.level.hideGhost();
+      }
+      this.ghostCell = null;
+    };
     canvas.addEventListener('pointerup', end);
     canvas.addEventListener('pointercancel', end);
+  }
+
+  private updateGhost(cell: { x: number; y: number }): void {
+    if (!(this.level instanceof HomeScene)) return;
+    const tool = this.buildBar.tool;
+    if (tool === 'remove') return;
+    const existing = this.factory.at(cell.x, cell.y);
+    const ok = (!existing || existing.type === tool) && this.progress.hasAll(BUILDINGS[tool].cost);
+    this.level.showGhost(tool, cell.x, cell.y, existing && existing.type === tool ? existing.dir : this.buildBar.dir, ok);
+    this.level.showCursor(cell.x, cell.y, ok);
   }
 
   private applyTool(cell: { x: number; y: number }, from: { x: number; y: number } | null): void {
@@ -814,18 +1138,11 @@ export class Game {
     const existing = f.at(cell.x, cell.y);
     if (tool === 'remove') {
       if (!existing) return;
-      f.remove(cell.x, cell.y, p);
+      f.remove(cell.x, cell.y, (id, n) => p.add(id, n));
       for (const [id, n] of Object.entries(BUILDINGS[existing.type].cost)) p.add(id, n);
       this.audio.play('build');
       return;
     }
-    if (tool === 'config') {
-      if (!existing) return;
-      this.dragCell = null;
-      this.openMenu(() => this.screens.factoryConfig(f, existing, p, () => this.saveNow(), () => this.resume()));
-      return;
-    }
-    // 끌어서 깔 때: 레일 방향은 움직인 방향, 이전 레일도 이쪽을 보게 돌린다
     let dir = this.buildBar.dir as Dir;
     if (from) {
       const dx = cell.x - from.x;
@@ -854,13 +1171,9 @@ export class Game {
     const b = f.place(tool, cell.x, cell.y, dir);
     if (!b) return;
     if (tool === 'generator') p.setFlag('factoryBuilt');
+    this.quests.event({ type: 'build', building: tool });
     this.audio.play('build');
     this.level.particles.burst((cell.x + 0.5) * TILE, 0.5, (cell.y + 0.5) * TILE, BUILDINGS[tool].color, 5, 0.6);
-    if (tool === 'input' || tool === 'assembler') {
-      // 바로 설정 창을 연다
-      this.dragCell = null;
-      this.openMenu(() => this.screens.factoryConfig(f, b, p, () => this.saveNow(), () => this.resume()));
-    }
   }
 
   // =============== 매 프레임 ===============
@@ -872,7 +1185,7 @@ export class Game {
     if (this.mode !== 'title' && this.progress.flag('home')) {
       this.factoryAcc += dt;
       while (this.factoryAcc >= 0.1) {
-        this.factory.step(0.1, this.progress);
+        this.factory.step(0.1);
         this.factoryAcc -= 0.1;
       }
     }
@@ -925,9 +1238,19 @@ export class Game {
 
   private updatePlay(dt: number): void {
     const input = this.input;
-    if (input.consume('pause')) return this.openPause();
+    if (input.consume('pause')) {
+      if (this.bigMap) return this.setBigMap(false);
+      return this.openPause();
+    }
     if (input.consume('bag')) return this.openBagOrInventory();
-    if (input.consume('build') && this.level instanceof HomeScene) this.setBuilding(!this.building);
+    if (input.consume('map')) this.setBigMap(!this.bigMap);
+    if (input.consume('build')) {
+      if (this.level instanceof HomeScene) this.setBuilding(!this.building);
+    }
+
+    // 연타한 공격 입력을 잠시 기억해 두었다가 쓸 수 있을 때 쓴다
+    if (input.consume('attack')) this.attackBuffer = 0.35;
+    this.attackBuffer = Math.max(0, this.attackBuffer - dt);
 
     if (this.hitStopT > 0) {
       this.hitStopT -= dt;
@@ -943,22 +1266,28 @@ export class Game {
     const near = this.building ? null : this.nearestInteractable();
     this.hud.setInteract(near ? near.label : null);
 
-    const attack = input.consume('attack');
-    const interact = input.consume('interact');
-    if (near && (attack || interact)) {
-      input.attackButtonHeld = false;
+    if (input.consume('interact') && near) {
       near.action();
-      return;
+      if (this.mode !== 'play') return;
     }
-    if (input.consume('dodge') && !this.building && pl.startRoll(move)) this.audio.play('dash');
+    if (input.consume('dodge') && !this.building && pl.startRoll(move)) {
+      this.gathering = null;
+      this.audio.play('dash');
+    }
     for (let i = 0; i < 3; i++) {
       if (input.consume(`skill${i + 1}` as 'skill1')) {
         const msg = this.combat.useSkill(i);
         if (msg) this.hud.toast(msg);
+        else this.gathering = null;
       }
     }
     if (input.consume('potion')) this.drinkPotion();
-    if ((attack || input.attackHeld) && !near && !this.building && pl.canAct) this.combat.basicAttack();
+    if ((this.attackBuffer > 0 || input.attackHeld) && !this.building && pl.canAct) {
+      this.attackBuffer = 0;
+      this.gathering = null;
+      this.combat.basicAttack();
+    }
+    if (!this.building) this.updateGather(move);
 
     const level = this.level;
     const obstacles = level instanceof DungeonScene ? level.playerObstacles() : level.obstacles;
@@ -968,26 +1297,42 @@ export class Game {
     });
     level.update(dt, pl.position);
 
-    if (level instanceof DungeonScene) {
+    if (level instanceof DungeonScene && this.run) {
       const boss = level.boss;
       if (boss && boss.alive && boss.aggro) {
         this.hud.setBoss(`${boss.name}${boss.phase2 ? ' · 격노' : ''}`, boss.hp / boss.maxHp);
         this.audio.playMusic('boss');
       }
-      if (this.minimap) {
-        this.minimap.reveal(pl.position.x, pl.position.z);
-        this.minimapTimer -= dt;
-        if (this.minimapTimer <= 0) {
-          this.minimapTimer = 0.1;
-          const markers = level.nodes.filter((n) => n.alive).map((n) => ({ x: n.x, z: n.z, color: hex(n.def.accentColor), size: 0.45 }));
-          for (const m of level.monsters) if (m.alive) markers.push({ x: m.x, z: m.z, color: m.isBoss ? '#ff3030' : '#ff7a7a', size: m.isBoss ? 1 : 0.4 });
-          const exit = level.portals.find((p) => p.kind === 'exit')!;
-          markers.push({ x: exit.x, z: exit.z, color: level.exitOpen ? hex(level.theme.portalColor) : '#777', size: 1.1 });
-          this.minimap.draw({ ...pl.position, facing: pl.facing }, markers);
-        }
+      if (!this.run.roomCleared && level.exitOpen) this.roomClear();
+    }
+    this.updateMap(dt);
+    this.refreshHud();
+  }
+
+  private updateMap(dt: number): void {
+    const mm = this.minimap;
+    if (!mm) return;
+    const pl = this.player;
+    const level = this.level;
+    if (level instanceof DungeonScene) mm.reveal(pl.position.x, pl.position.z);
+    this.minimapTimer -= dt;
+    if (this.minimapTimer > 0) return;
+    this.minimapTimer = this.bigMap ? 0.2 : 0.1;
+    const markers: MapMarker[] = [];
+    if (level instanceof DungeonScene) {
+      for (const n of level.nodes) if (n.alive) markers.push({ x: n.x, z: n.z, color: hex(n.def.accentColor), size: 0.45 });
+      for (const m of level.monsters) if (m.alive) markers.push({ x: m.x, z: m.z, color: m.isBoss ? '#ff3030' : '#ff7a7a', size: m.isBoss ? 1 : 0.4, label: m.isBoss ? m.name : undefined });
+      const exit = level.portals.find((p) => p.kind === 'exit')!;
+      markers.push({ x: exit.x, z: exit.z, color: level.exitOpen ? hex(level.theme.portalColor) : '#777', size: 1.1, label: '워프 게이트' });
+    } else {
+      for (const it of level.interactables) {
+        if (!it.title) continue;
+        const npc = NPC_IDS.has(it.id);
+        markers.push({ x: it.x, z: it.z, color: npc ? '#ffe07a' : '#8fd8ff', size: npc ? 0.7 : 0.9, label: it.title });
       }
     }
-    this.refreshHud();
+    mm.draw({ ...pl.position, facing: pl.facing }, markers, false);
+    if (this.bigMap) mm.draw({ ...pl.position, facing: pl.facing }, markers, true);
   }
 
   private drinkPotion(): void {
@@ -1009,9 +1354,11 @@ export class Game {
     this.hud.setBars(pl.hp, pl.maxHp, pl.mp, pl.maxMp, c.exp, expToNext(c.level), c.level);
     this.hud.setGold(p.data.gold);
     if (this.run && this.level instanceof DungeonScene) {
-      const boss = this.level.boss;
-      this.hud.setObjective(boss && boss.alive ? '가장 깊은 방의 수호자를 쓰러뜨리자 (미니맵의 큰 빨간 점)' : '귀환 차원문으로 돌아가 전리품을 가져가자');
-    } else this.hud.setObjective(objective(p));
+      const d = this.level;
+      const left = d.aliveCount;
+      const boss = d.boss && d.boss.alive ? ` · ${d.boss.name}` : '';
+      this.hud.setObjective(left > 0 ? `남은 몬스터 ${left}${boss} (M: 지도)` : '워프 게이트로 가자 (다음 방 / 마을)');
+    } else this.hud.setObjective(objective(p, this.quests));
     this.hud.setPotions(p.count('potion'));
     this.hud.setDodgeCooldown(pl.rollCooldown / (PLAYER.rollCooldown + PLAYER.rollTime));
     const skills = pl.cls.skills;
@@ -1022,18 +1369,39 @@ export class Game {
     if (this.run) this.hud.setBagCount(this.run.bag.used, BAG_SLOTS);
   }
 
+  /** 이름표와 생산 아이콘 */
   private updateLabels(): void {
-    if (this.mode !== 'play' || this.building) return this.hud.setLabels([]);
+    if (this.mode !== 'play') {
+      this.hud.setLabels([]);
+      this.hud.setBubbles([]);
+      return;
+    }
     const labels: { text: string; x: number; y: number; accent?: boolean }[] = [];
     const p = this.player.position;
-    for (const it of this.level.interactables) {
-      if (!it.title || Math.hypot(it.x - p.x, it.z - p.z) > 14) continue;
-      const isNpc = NPC_IDS.has(it.id);
-      const news = isNpc && hasNews(it.id as NpcId, this.progress);
-      const s = this.toScreen(it.x, isNpc ? 2.3 : it.id === 'portal' ? 4.6 : 3.3, it.z);
-      labels.push({ text: news ? `! ${it.title}` : it.title, x: s.x, y: s.y, accent: news });
+    if (!this.building) {
+      for (const it of this.level.interactables) {
+        if (!it.title || Math.hypot(it.x - p.x, it.z - p.z) > 14) continue;
+        const isNpc = NPC_IDS.has(it.id);
+        let mark = '';
+        if (isNpc) {
+          const ref = it.id as NpcRef;
+          if (this.quests.activeFor(ref).some((q) => this.quests.canComplete(q))) mark = '? ';
+          else if (hasStory(it.id as NpcId, this.progress) || this.quests.available(ref).length) mark = '! ';
+        }
+        const s = this.toScreen(it.x, isNpc ? 2.3 : it.id === 'portal' ? 4.6 : 3.3, it.z);
+        labels.push({ text: `${mark}${it.title}`, x: s.x, y: s.y, accent: !!mark });
+      }
     }
     this.hud.setLabels(labels);
+    if (this.level instanceof HomeScene) {
+      this.hud.setBubbles(
+        this.level.producing().map(({ b, x, z }) => {
+          const s = this.toScreen(x, 2.6, z);
+          const r = RECIPE_BY_ID[b.crafting!];
+          return { x: s.x, y: s.y, color: hex(ITEMS[r.output].color), progress: b.progress ?? 0, onClick: () => this.openBuilding(b) };
+        }),
+      );
+    } else this.hud.setBubbles([]);
   }
 
   private toScreen(x: number, y: number, z: number): { x: number; y: number } {
@@ -1056,7 +1424,7 @@ export class Game {
 
   /** 개발용 (?debug): 현재 상태 */
   debugInfo(): Record<string, unknown> {
-    return { mode: this.mode, level: this.level.kind, player: { ...this.player.position, hp: this.player.hp }, gold: this.progress.data.gold, stones: this.progress.data.dimStones };
+    return { mode: this.mode, level: this.level.kind, player: { ...this.player.position, hp: this.player.hp }, gold: this.progress.data.gold, stones: this.progress.data.dimStones, cleared: this.progress.data.cleared };
   }
 }
 

@@ -13,6 +13,9 @@ export interface HeroRig {
   legL: Group;
   legR: Group;
   weapon: Group;
+  /** 채집 도구 (평소에는 숨김) */
+  pickaxe: Group;
+  axe: Group;
   meshes: Mesh[];
 }
 
@@ -205,5 +208,27 @@ export function buildHero(material: Material, look: HeroLook): HeroRig {
   }
   armR.add(weapon);
 
-  return { root, body, torso, head, armL, armR, legL, legR, weapon, meshes };
+  // 채집 도구: 손잡이가 -y로 뻗고 끝에 날이 달린다
+  const pickaxe = new Group();
+  pickaxe.position.copy(weapon.position);
+  pickaxe.add(
+    mesh([
+      part(new CylinderGeometry(0.03, 0.035, 0.75, 6), C.wood, { pos: [0, -0.3, 0] }),
+      part(new BoxGeometry(0.07, 0.08, 0.62), C.steelDark, { pos: [0, -0.66, 0] }),
+      part(new ConeGeometry(0.05, 0.16, 4), C.steel, { pos: [0, -0.66, 0.36], rot: [Math.PI / 2, 0, 0] }),
+      part(new ConeGeometry(0.05, 0.16, 4), C.steel, { pos: [0, -0.66, -0.36], rot: [-Math.PI / 2, 0, 0] }),
+    ]),
+  );
+  const axe = new Group();
+  axe.position.copy(weapon.position);
+  axe.add(
+    mesh([
+      part(new CylinderGeometry(0.03, 0.035, 0.75, 6), C.wood, { pos: [0, -0.3, 0] }),
+      part(new BoxGeometry(0.05, 0.26, 0.26), C.steel, { pos: [0, -0.6, 0.14] }),
+    ]),
+  );
+  pickaxe.visible = axe.visible = false;
+  armR.add(pickaxe, axe);
+
+  return { root, body, torso, head, armL, armR, legL, legR, weapon, pickaxe, axe, meshes };
 }

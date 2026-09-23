@@ -58,8 +58,11 @@ export class Dialogue {
   }
 
   play(scriptId: string, onDone?: () => void): void {
-    const steps = SCRIPTS[scriptId];
-    if (!steps) {
+    this.playSteps(SCRIPTS[scriptId] ?? [], onDone);
+  }
+
+  playSteps(steps: Step[], onDone?: () => void): void {
+    if (!steps.length) {
       onDone?.();
       return;
     }

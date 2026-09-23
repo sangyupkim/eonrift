@@ -67,6 +67,7 @@ function makeGrid(): DungeonData {
   return {
     seed: 7,
     tier: 0,
+    stage: 0,
     width: W,
     height: H,
     cells,
@@ -94,7 +95,7 @@ export class VillageScene extends Level {
     onInteract: (spot: VillageSpot) => void,
     visibleNpcs: (id: NpcId) => boolean,
     homeUnlocked: boolean,
-    arrival: 'portal' | 'home' | 'start',
+    arrival: 'portal' | 'home' | 'start' | { x: number; z: number; facing: number },
   ) {
     super();
     const rng = new Rng(12345);
@@ -221,7 +222,9 @@ export class VillageScene extends Level {
     spot('storage', 11, 16, 2.2, '창고', '창고');
 
     const start =
-      arrival === 'portal' ? { ...toWorld(14, 7), facing: Math.PI / 4 } : arrival === 'home' ? { ...toWorld(21, 11), facing: -Math.PI / 2 } : { ...toWorld(14, 17), facing: Math.PI + Math.PI / 4 };
+      typeof arrival === 'object'
+        ? arrival
+        : arrival === 'portal' ? { ...toWorld(14, 7), facing: Math.PI / 4 } : arrival === 'home' ? { ...toWorld(21, 11), facing: -Math.PI / 2 } : { ...toWorld(14, 17), facing: Math.PI + Math.PI / 4 };
     this.playerStart = start;
   }
 

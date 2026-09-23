@@ -1366,3 +1366,296 @@ button {
     padding: 14px 16px;
   }
 }
+
+/* ================= v1.1 추가 ================= */
+.screen.no-anim {
+  animation: none;
+}
+.panel .scroll {
+  overflow: auto;
+  min-height: 0;
+  flex: 1;
+}
+.panel.tall > .scroll,
+.panel.tall > .list.scroll {
+  flex: 1;
+}
+
+/* 상호작용 버튼 (공격 버튼과 분리) */
+.act.interact-btn {
+  right: 168px;
+  bottom: 84px;
+  width: 68px;
+  height: 68px;
+  grid-template-rows: 1fr auto;
+  padding: 10px 0 8px;
+  background: rgba(60, 170, 220, 0.65);
+  border-color: rgba(190, 240, 255, 0.85);
+  animation: pulse 1s ease-in-out infinite;
+}
+.act.interact-btn svg {
+  width: 28px;
+  height: 28px;
+}
+.act.interact-btn .lbl {
+  font-size: 11px;
+  font-weight: 800;
+}
+.act.interact-btn.hidden {
+  display: none;
+}
+.hud:not([data-mode='dungeon']) .act.interact-btn {
+  right: 108px;
+  bottom: 6px;
+}
+
+/* 미니맵 (모든 장소) · 큰 지도 */
+.hud .minimap-slot {
+  width: 128px;
+  pointer-events: auto;
+  cursor: pointer;
+}
+.hud:not([data-mode='dungeon']) .minimap-slot {
+  width: 112px;
+  height: 112px;
+}
+.hud:not([data-mode='dungeon']) .minimap {
+  width: 112px;
+  height: 112px;
+}
+.bigmap-wrap {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(4, 4, 12, 0.55);
+  pointer-events: auto;
+  z-index: 3;
+}
+.bigmap-wrap.hidden {
+  display: none;
+}
+.bigmap {
+  width: min(92vh, 92vw);
+  height: min(92vh, 92vw);
+}
+.bigmap-hint {
+  position: absolute;
+  bottom: calc(10px + var(--safe-bottom));
+  font-size: 12px;
+  color: var(--ink-dim);
+}
+
+/* 생산 아이콘 */
+.bubble-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.prod-bubble {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: auto;
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  padding: 5px 6px 4px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  background: rgba(12, 12, 28, 0.8);
+  animation: bob 1.4s ease-in-out infinite;
+}
+.prod-bubble i {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  transform: rotate(45deg);
+}
+.prod-bubble .bar {
+  width: 26px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.2);
+  overflow: hidden;
+}
+.prod-bubble .bar span {
+  display: block;
+  height: 100%;
+  background: #7aff9a;
+}
+@keyframes bob {
+  50% {
+    margin-top: -3px;
+  }
+}
+
+/* 글 사이 작은 아이콘 (강화 화면 가림 문제 수정) */
+.gem-inline {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin: 0 5px 0 2px;
+  border-radius: 2px;
+  background: var(--c);
+  transform: rotate(45deg);
+  vertical-align: 0;
+}
+.split .detail .gem {
+  display: none;
+}
+
+/* 스테이지 선택 */
+.tier-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+  overflow-x: auto;
+}
+.tier-tab {
+  flex: 1 0 44px;
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  padding: 6px 4px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--c) 45%, transparent);
+  background: rgba(255, 255, 255, 0.04);
+  touch-action: manipulation;
+}
+.tier-tab .gate {
+  width: 14px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--c);
+  box-shadow: 0 0 6px var(--c);
+}
+.tier-tab.on {
+  background: color-mix(in srgb, var(--c) 22%, transparent);
+  outline: 2px solid var(--c);
+}
+.tier-tab.locked {
+  opacity: 0.3;
+}
+.stage-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+}
+.stage-btn {
+  display: grid;
+  justify-items: center;
+  padding: 8px 4px;
+  border-radius: 10px;
+  border: 1px solid var(--panel-line);
+  background: rgba(255, 255, 255, 0.05);
+  touch-action: manipulation;
+}
+.stage-btn small {
+  font-size: 10px;
+  color: var(--ink-dim);
+}
+.stage-btn.done {
+  background: rgba(94, 224, 255, 0.12);
+}
+.stage-btn.boss {
+  border-color: rgba(255, 120, 100, 0.6);
+}
+.stage-btn.boss small {
+  color: #ffb0a0;
+}
+.stage-btn:disabled {
+  opacity: 0.35;
+}
+
+/* 가방 드래그 */
+.slot.sel {
+  outline: 2px solid #ffe07a;
+}
+.slot.dragging {
+  opacity: 0.35;
+}
+.drag-ghost {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 50;
+  pointer-events: none;
+  opacity: 0.9;
+  transform-origin: center;
+}
+.bag-grid.drop {
+  outline: 2px dashed #7aff9a;
+  outline-offset: 4px;
+  border-radius: 8px;
+}
+.item-info {
+  min-height: 38px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* 스탯 */
+.stat-rows {
+  display: grid;
+  gap: 6px;
+}
+.stat-row {
+  display: grid;
+  grid-template-columns: 44px 36px 1fr auto auto;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 13px;
+}
+.stat-row small {
+  color: var(--ink-dim);
+  font-size: 11px;
+}
+.stat-row button {
+  padding: 5px 9px;
+  border-radius: 8px;
+  border: 1px solid var(--panel-line);
+  background: rgba(122, 255, 154, 0.15);
+  font-weight: 800;
+  font-size: 12px;
+  touch-action: manipulation;
+}
+.stat-row button:disabled {
+  opacity: 0.35;
+}
+.tabs .dot {
+  font-style: normal;
+  font-size: 10px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: #d8443a;
+}
+
+/* 퀘스트 */
+.list li.quest {
+  padding-left: 12px;
+}
+.list li.quest.main {
+  border-left: 3px solid #ffe07a;
+}
+.list li.quest.daily {
+  border-left: 3px solid #7affc0;
+}
+.list li.quest.claimed {
+  opacity: 0.5;
+}
+
+/* 건설 도구 모델 아이콘 */
+.tool img {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+}
+.tool {
+  width: 70px;
+}

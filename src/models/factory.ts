@@ -53,18 +53,14 @@ export function buildBuildingGeometry(type: BuildingType, connections: boolean[]
         part(new TorusGeometry(0.62, 0.08, 4, 10), 0x5ac8ff, { pos: [0, 1.2, 0], rot: [Math.PI / 2, 0, 0] }),
         part(new OctahedronGeometry(0.35), 0x7fe8ff, { pos: [0, 1.85, 0] }),
       ]);
-    case 'input':
+    case 'box':
       return merge([
-        part(new BoxGeometry(1.5, 1, 1.5), 0x9a6a3c, { pos: [0, 0.5, 0] }),
-        part(new BoxGeometry(1.56, 0.1, 1.56), 0x6a4428, { pos: [0, 1, 0] }),
-        part(new BoxGeometry(0.8, 0.5, 0.1), dark, { pos: [0, 0.4, 0.76] }),
-        arrow(0x7affc0, 1.15),
-      ]);
-    case 'output':
-      return merge([
-        part(new BoxGeometry(1.6, 0.9, 1.6), 0xe8c14a, { pos: [0, 0.45, 0] }),
-        part(new BoxGeometry(1.66, 0.12, 1.66), 0xb08a2a, { pos: [0, 0.9, 0] }),
-        part(new BoxGeometry(1, 0.1, 1), dark, { pos: [0, 0.97, 0] }),
+        part(new BoxGeometry(1.6, 1, 1.6), 0x9a6a3c, { pos: [0, 0.5, 0] }),
+        part(new BoxGeometry(1.66, 0.12, 1.66), 0x6a4428, { pos: [0, 1.02, 0] }),
+        part(new BoxGeometry(1.66, 0.1, 0.12), 0x8c96a3, { pos: [0, 0.3, 0.78] }),
+        part(new BoxGeometry(1.66, 0.1, 0.12), 0x8c96a3, { pos: [0, 0.75, 0.78] }),
+        part(new BoxGeometry(0.2, 0.2, 0.06), 0xe8c14a, { pos: [0, 0.55, 0.82] }),
+        arrow(0xe8c14a, 1.15),
       ]);
     case 'smelter':
       return merge([

@@ -2,33 +2,42 @@ import { TILE } from '../config';
 import { isFloor, type DungeonData } from '../dungeon/generator';
 
 const REVEAL_RADIUS = 5;
-/** 미니맵 마름모의 한 변에 들어가는 타일 수 (플레이어 중심) */
+/** 작은 미니맵 마름모의 한 변에 들어가는 타일 수 (플레이어 중심) */
 const VIEW_TILES = 30;
 
+export interface MapMarker {
+  x: number;
+  z: number;
+  color: string;
+  size: number;
+  label?: string;
+}
+
 /**
- * 탐험한 곳만 보이는 미니맵.
+ * 미니맵. 던전은 탐험한 곳만 보이고, 마을과 차원집은 처음부터 다 보인다.
  * 화면과 방향을 맞추려고 45° 돌린 마름모 모양으로 그린다 (조이스틱 위 = 미니맵 위).
  */
 export class Minimap {
   readonly canvas: HTMLCanvasElement;
-  private ctx: CanvasRenderingContext2D;
+  readonly bigCanvas: HTMLCanvasElement;
   private explored: Uint8Array;
-  private size = 0;
 
-  constructor(private data: DungeonData) {
+  constructor(
+    private data: DungeonData,
+    fog: boolean,
+  ) {
     this.canvas = document.createElement('canvas');
     this.canvas.className = 'minimap';
-    this.ctx = this.canvas.getContext('2d')!;
-    this.explored = new Uint8Array(data.width * data.height);
+    this.bigCanvas = document.createElement('canvas');
+    this.bigCanvas.className = 'bigmap';
+    this.explored = new Uint8Array(data.width * data.height).fill(fog ? 0 : 1);
   }
 
-  private resize(): void {
-    const css = this.canvas.clientWidth || 140;
+  private fit(canvas: HTMLCanvasElement): number {
+    const css = canvas.clientWidth || 140;
     const px = Math.round(css * Math.min(window.devicePixelRatio || 1, 2));
-    if (px !== this.size) {
-      this.size = px;
-      this.canvas.width = this.canvas.height = px;
-    }
+    if (canvas.width !== px) canvas.width = canvas.height = px;
+    return px;
   }
 
   /** 플레이어 주변과, 들어간 방 전체를 밝힌다 */
@@ -55,13 +64,11 @@ export class Minimap {
     return this.explored[ty * this.data.width + tx] === 1;
   }
 
-  draw(
-    player: { x: number; z: number; facing: number },
-    markers: { x: number; z: number; color: string; size: number }[],
-  ): void {
-    this.resize();
-    const { ctx, size, data } = this;
-    const { width, height } = data;
+  draw(player: { x: number; z: number; facing: number }, markers: MapMarker[], big = false): void {
+    const canvas = big ? this.bigCanvas : this.canvas;
+    const size = this.fit(canvas);
+    const ctx = canvas.getContext('2d')!;
+    const { width, height } = this.data;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, size, size);
 
@@ -73,7 +80,7 @@ export class Minimap {
     ctx.lineTo(size / 2, size - 2);
     ctx.lineTo(2, size / 2);
     ctx.closePath();
-    ctx.fillStyle = 'rgba(8, 10, 24, 0.6)';
+    ctx.fillStyle = big ? 'rgba(8, 10, 24, 0.85)' : 'rgba(8, 10, 24, 0.6)';
     ctx.fill();
     ctx.lineWidth = Math.max(1, size / 110);
     ctx.strokeStyle = 'rgba(200, 210, 255, 0.35)';
@@ -81,48 +88,69 @@ export class Minimap {
     ctx.save();
     ctx.clip();
 
-    // 플레이어를 가운데 두고 45° 돌린다
-    const scale = (half * Math.SQRT2) / VIEW_TILES;
+    // 작은 지도는 플레이어 중심, 큰 지도는 맵 전체
+    const view = big ? (width + height) * 0.72 : VIEW_TILES;
+    const cx = big ? width / 2 : player.x / TILE;
+    const cy = big ? height / 2 : player.z / TILE;
+    const scale = (half * Math.SQRT2) / view;
     ctx.translate(size / 2, size / 2);
     ctx.rotate(Math.PI / 4);
     ctx.scale(scale, scale);
-    ctx.translate(-player.x / TILE, -player.z / TILE);
+    ctx.translate(-cx, -cy);
 
     ctx.fillStyle = 'rgba(210, 220, 240, 0.8)';
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
-        if (this.explored[y * width + x] && isFloor(data, x, y)) ctx.fillRect(x, y, 1.02, 1.02);
+        if (this.explored[y * width + x] && isFloor(this.data, x, y)) ctx.fillRect(x, y, 1.02, 1.02);
       }
     }
 
+    const labels: { x: number; y: number; text: string }[] = [];
     for (const m of markers) {
       const tx = m.x / TILE;
       const ty = m.z / TILE;
       if (!this.explored[Math.floor(ty) * width + Math.floor(tx)]) continue;
       ctx.fillStyle = m.color;
       ctx.beginPath();
-      ctx.arc(tx, ty, m.size, 0, Math.PI * 2);
+      ctx.arc(tx, ty, m.size * (big ? 1.2 : 1), 0, Math.PI * 2);
       ctx.fill();
+      if (big && m.label) labels.push({ x: tx, y: ty, text: m.label });
     }
 
-    // 플레이어 화살표
     const px = player.x / TILE;
     const py = player.z / TILE;
     ctx.save();
     ctx.translate(px, py);
     ctx.rotate(-player.facing);
+    const k = big ? 1.4 : 1;
     ctx.fillStyle = '#4fd1ff';
     ctx.strokeStyle = '#0b1a2a';
     ctx.lineWidth = 0.3;
     ctx.beginPath();
-    ctx.moveTo(0, 1.4);
-    ctx.lineTo(0.95, -0.9);
-    ctx.lineTo(0, -0.4);
-    ctx.lineTo(-0.95, -0.9);
+    ctx.moveTo(0, 1.4 * k);
+    ctx.lineTo(0.95 * k, -0.9 * k);
+    ctx.lineTo(0, -0.4 * k);
+    ctx.lineTo(-0.95 * k, -0.9 * k);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
     ctx.restore();
+
+    // 이름표는 회전하지 않은 화면 좌표로 쓴다
+    const m = ctx.getTransform();
     ctx.restore();
+    if (labels.length) {
+      ctx.font = `${Math.round(size / 40)}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#fff';
+      ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+      ctx.lineWidth = 3;
+      for (const l of labels) {
+        const sx = m.a * l.x + m.c * l.y + m.e;
+        const sy = m.b * l.x + m.d * l.y + m.f;
+        ctx.strokeText(l.text, sx, sy - size / 50);
+        ctx.fillText(l.text, sx, sy - size / 50);
+      }
+    }
   }
 }

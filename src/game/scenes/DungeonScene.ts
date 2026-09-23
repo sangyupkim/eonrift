@@ -63,6 +63,7 @@ export interface DungeonHooks {
   monsterKilled: (m: Monster) => void;
   monsterHitByProjectile: (m: Monster, p: Projectile) => void;
   exit: () => void;
+  gather: (node: NodeInstance) => void;
   shake: (amount: number) => void;
 }
 
@@ -124,7 +125,7 @@ export class DungeonScene extends Level {
       const arch = this.rng.pick(ARCH_WEIGHTS);
       const room = grid.roomIndex[m.y * grid.width + m.x];
       const mon = this.spawnMonster(arch, m.kind, p.x, p.z, room, false);
-      if (m.kind === 'boss') this.boss = mon;
+      if (m.kind === 'boss' || m.kind === 'midboss') this.boss = mon;
     });
 
     const exit = this.portals.find((p) => p.kind === 'exit')!;
@@ -133,10 +134,23 @@ export class DungeonScene extends Level {
       x: exit.x,
       z: exit.z,
       range: 3.4,
-      label: '귀환',
+      label: '워프',
+      title: '워프 게이트',
       action: () => hooks.exit(),
-      enabled: () => !this.boss || !this.boss.alive,
+      enabled: () => this.exitOpen,
     });
+    // 채집물: 앞에서 상호작용하면 캐기 시작한다
+    for (const n of this.nodes) {
+      this.interactables.push({
+        id: 'node',
+        x: n.x,
+        z: n.z,
+        range: n.def.radius + 1.7,
+        label: n.def.style === 'chest' ? '열기' : '채집',
+        action: () => hooks.gather(n),
+        enabled: () => n.alive && n.dying === 0,
+      });
+    }
   }
 
   private ngPlus = 0;
@@ -146,7 +160,7 @@ export class DungeonScene extends Level {
   }
 
   spawnMonster(arch: Archetype, kind: Monster['kind'], x: number, z: number, room: number, aggro: boolean): Monster {
-    const m = new Monster(arch, kind, this.grid.tier, this.ngPlus, x, z, room);
+    const m = new Monster(arch, kind, this.grid.tier, this.grid.stage, this.ngPlus, x, z, room);
     m.aggro = aggro;
     m.addTo(this.scene);
     this.monsters.push(m);
@@ -215,8 +229,13 @@ export class DungeonScene extends Level {
     make(this.grid.exit.x, this.grid.exit.y, 'exit');
   }
 
+  /** 모든 몬스터를 쓰러뜨리면 워프 게이트가 열린다 */
   get exitOpen(): boolean {
-    return !this.boss || !this.boss.alive;
+    return this.monsters.every((m) => !m.alive);
+  }
+
+  get aliveCount(): number {
+    return this.monsters.filter((m) => m.alive).length;
   }
 
   /** 채집물을 한 번 친다. 나온 아이템을 돌려준다 */

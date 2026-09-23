@@ -1,83 +1,73 @@
 import { describe, expect, it } from 'vitest';
-import { Factory, type Storage } from '../src/factory/sim';
+import { Factory } from '../src/factory/sim';
 
-function makeStorage(init: Record<string, number>): Storage & { items: Record<string, number> } {
-  const items = { ...init };
-  return {
-    items,
-    count: (id) => items[id] ?? 0,
-    take: (id, n) => {
-      if ((items[id] ?? 0) < n) return false;
-      items[id] -= n;
-      return true;
-    },
-    add: (id, n) => {
-      items[id] = (items[id] ?? 0) + n;
-    },
-  };
-}
-
-/** 투입 상자 → 레일 → 제련로 → 레일 → 출하 상자, 발전기는 마력선으로 연결 */
-function smeltLine(withPower: boolean) {
+/** 투입 상자 → 레일 → 제련로 → 레일 → 출하 상자, 발전기는 마력선으로 제련로와 연결 */
+function smeltLine(opts: { wire: boolean; fuel: number }) {
   const f = new Factory({ sizeLevel: 0, buildings: [] }, 8);
-  const storage = makeStorage({ iron_ore: 10, essence_low: 5 });
-  f.onOutput = (item) => storage.add(item, 1);
-  f.place('input', 0, 0, 0)!.recipe = 'iron_ore';
+  const inBox = f.place('box', 0, 0, 0)!;
+  inBox.buffer = { iron_ore: 5 };
   f.place('belt', 1, 0, 0);
   f.place('smelter', 2, 0, 0);
   f.place('belt', 3, 0, 0);
-  f.place('output', 4, 0, 0);
-  if (withPower) {
+  const outBox = f.place('box', 4, 0, 0)!;
+  outBox.mode = 'out';
+  const gen = f.place('generator', 2, 3, 0)!;
+  gen.buffer = { essence_low: opts.fuel };
+  if (opts.wire) {
     f.place('wire', 2, 1, 0);
     f.place('wire', 2, 2, 0);
-    f.place('generator', 3, 2, 0);
   }
-  return { f, storage };
+  return { f, inBox, outBox, gen };
 }
 
 describe('Factory', () => {
-  it('전력이 연결되면 광석을 주괴로 만들어 창고로 보낸다', () => {
-    const { f, storage } = smeltLine(true);
-    for (let i = 0; i < 400; i++) f.step(0.1, storage);
-    expect(storage.items.iron_ingot).toBeGreaterThanOrEqual(8);
-    expect(storage.items.essence_low).toBeLessThan(5);
+  it('마력선으로 이어지면 광석을 주괴로 만들어 출하 상자에 모은다', () => {
+    const { f, outBox, gen } = smeltLine({ wire: true, fuel: 3 });
+    f.simulate(200);
+    expect(outBox.buffer!.iron_ingot).toBe(5);
+    expect(gen.buffer!.essence_low).toBeLessThan(3);
   });
 
-  it('전력이 없으면 가공하지 않는다', () => {
-    const { f, storage } = smeltLine(false);
-    for (let i = 0; i < 400; i++) f.step(0.1, storage);
-    expect(storage.items.iron_ingot ?? 0).toBe(0);
+  it('마력선이 없으면 발전기와 떨어진 기계는 멈춘다', () => {
+    const { f, outBox } = smeltLine({ wire: false, fuel: 3 });
+    f.simulate(200);
+    expect(outBox.buffer!.iron_ingot ?? 0).toBe(0);
   });
 
-  it('오프라인 진행도 같은 결과를 낸다', () => {
-    const { f, storage } = smeltLine(true);
-    f.simulate(3600, storage);
-    expect(storage.items.iron_ingot).toBe(10);
-    expect(storage.items.iron_ore).toBe(0);
+  it('발전기에 정수가 없으면 멈춘다', () => {
+    const { f, outBox } = smeltLine({ wire: true, fuel: 0 });
+    f.simulate(200);
+    expect(outBox.buffer!.iron_ingot ?? 0).toBe(0);
+  });
+
+  it('투입 상자는 기계가 비었을 때만 보낸다', () => {
+    const { f, inBox } = smeltLine({ wire: true, fuel: 3 });
+    f.simulate(5);
+    // 레일 하나, 제련로 하나 분량만 나가고 나머지는 상자에 남는다
+    expect(inBox.buffer!.iron_ore).toBeGreaterThanOrEqual(2);
   });
 
   it('조립기는 고른 레시피의 재료만 받는다', () => {
     const f = new Factory({ sizeLevel: 0, buildings: [] }, 8);
-    const storage = makeStorage({ mana_iron: 2, plank: 2, essence_low: 3 });
-    f.onOutput = (item) => storage.add(item, 1);
-    f.place('input', 0, 0, 0)!.recipe = 'mana_iron';
-    f.place('input', 1, 1, 3)!.recipe = 'plank';
+    f.place('box', 0, 0, 0)!.buffer = { mana_iron: 2, plank: 2 };
     f.place('belt', 1, 0, 0);
     const asm = f.place('assembler', 2, 0, 0)!;
     asm.recipe = 'stone_low';
-    f.place('output', 3, 0, 0);
-    f.place('generator', 2, 1, 0);
-    f.simulate(60, storage);
-    expect(storage.items.stone_low).toBe(2);
+    const out = f.place('box', 3, 0, 0)!;
+    out.mode = 'out';
+    f.place('wire', 2, 1, 0);
+    f.place('generator', 2, 2, 0)!.buffer = { essence_low: 5 };
+    f.simulate(400);
+    expect(out.buffer!.stone_low).toBe(2);
   });
 
   it('철거하면 안에 든 아이템을 돌려준다', () => {
     const f = new Factory({ sizeLevel: 0, buildings: [] }, 8);
-    const storage = makeStorage({});
+    const got: Record<string, number> = {};
     const belt = f.place('belt', 0, 0, 0)!;
     belt.item = 'wood';
-    f.remove(0, 0, storage);
-    expect(storage.items.wood).toBe(1);
+    f.remove(0, 0, (id, n) => (got[id] = (got[id] ?? 0) + n));
+    expect(got.wood).toBe(1);
     expect(f.at(0, 0)).toBeUndefined();
   });
 });

@@ -3,7 +3,7 @@ import { PLAYER, SCREEN_RIGHT, SCREEN_UP } from '../config';
 import type { ClassDef } from '../data/classes';
 import { buildHero, type HeroRig } from '../models/hero';
 
-export type Pose = 'swing' | 'spin' | 'cast' | 'shoot' | 'thrust';
+export type Pose = 'swing' | 'spin' | 'cast' | 'shoot' | 'thrust' | 'gather';
 export type DashPose = 'roll' | 'lunge' | 'leap';
 
 export interface ActionSpec {
@@ -14,6 +14,8 @@ export interface ActionSpec {
   onHit: () => void;
   combo?: number;
   moveMult?: number;
+  /** 채집 도구 */
+  tool?: 'pickaxe' | 'axe';
 }
 
 export interface DashSpec {
@@ -254,6 +256,14 @@ export class Player {
           r.torso.rotation.y = torsoY;
           break;
         }
+        case 'gather':
+          // 도구를 머리 위로 들었다가 내려찍는다
+          armR = -0.35 - up * 2.4 - (1 - up) * down * 0.2;
+          armL = -0.3 - up * 1.8;
+          weaponX = -1.2 + up * 0.3;
+          torsoX = -up * 0.1 + down * 0.3;
+          r.armR.rotation.x = armR;
+          break;
         case 'spin':
           spin = t * Math.PI * 2;
           armR = -1.5;
@@ -315,6 +325,12 @@ export class Player {
     ease(r.torso.rotation, torsoX);
     r.torso.rotation.y += (torsoY - r.torso.rotation.y) * k;
     r.body.rotation.y = spin;
+    // 채집 중에는 무기 대신 도구를 든다
+    const tool = this.state === 'action' && this.action?.pose === 'gather' ? this.action.tool : undefined;
+    r.weapon.visible = !tool;
+    r.pickaxe.visible = tool === 'pickaxe';
+    r.axe.visible = tool === 'axe';
+    r.pickaxe.rotation.x = r.axe.rotation.x = weaponX;
     r.body.position.y = bodyY;
 
     // 맞았을 때 붉게, 무적 시간에는 깜빡인다

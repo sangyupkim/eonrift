@@ -1,10 +1,9 @@
-import { PLAYER } from '../config';
 import type { ClassId } from '../data/classes';
 import type { Monster } from './Monster';
 import type { Player } from './Player';
 import type { Stats } from './Progress';
 import type { Projectile } from './Projectiles';
-import type { DungeonScene, NodeInstance } from './scenes/DungeonScene';
+import type { DungeonScene } from './scenes/DungeonScene';
 import type { Level } from './scenes/Level';
 
 export interface CombatHost {
@@ -14,13 +13,12 @@ export interface CombatHost {
   dungeon: () => DungeonScene | null;
   /** 몬스터에게 피해 (치명타·방어 계산 포함) */
   damageMonster: (m: Monster, mult: number, knock: number, fromX: number, fromZ: number) => void;
-  gather: (node: NodeInstance) => void;
   shake: (a: number) => void;
   hitStop: (t: number) => void;
   sfx: (name: string) => void;
 }
 
-type Target = { kind: 'monster'; m: Monster; x: number; z: number } | { kind: 'node'; n: NodeInstance; x: number; z: number };
+type Target = { kind: 'monster'; m: Monster; x: number; z: number };
 
 const COLORS: Record<ClassId, number> = { sword: 0xdfefff, mage: 0x9fe8ff, archer: 0xc8ffb0 };
 
@@ -38,7 +36,7 @@ export class Combat {
     for (let i = 0; i < 3; i++) this.cooldowns[i] = Math.max(0, this.cooldowns[i] - dt);
   }
 
-  /** 자동 조준: 사거리 안의 가장 가까운 몬스터, 없으면 가까운 채집물 */
+  /** 자동 조준: 사거리 안의 가장 가까운 몬스터 */
   findTarget(range: number): Target | null {
     const p = this.host.player.position;
     const d = this.host.dungeon();
@@ -53,16 +51,6 @@ export class Combat {
         best = { kind: 'monster', m, x: m.x, z: m.z };
       }
     }
-    if (best) return best;
-    bestD = PLAYER.autoAimRange;
-    for (const n of d.nodes) {
-      if (!n.alive || n.dying > 0) continue;
-      const dist = Math.hypot(n.x - p.x, n.z - p.z) - n.def.radius;
-      if (dist < bestD) {
-        bestD = dist;
-        best = { kind: 'node', n, x: n.x, z: n.z };
-      }
-    }
     return best;
   }
 
@@ -72,8 +60,8 @@ export class Combat {
     return Math.atan2(t.x - p.x, t.z - p.z);
   }
 
-  /** 부채꼴 안의 몬스터와 채집물을 친다 */
-  private arcHit(range: number, angle: number, mult: number, knock: number, hitNodes = true): number {
+  /** 부채꼴 안의 몬스터를 친다 */
+  private arcHit(range: number, angle: number, mult: number, knock: number): number {
     const p = this.host.player.position;
     const f = this.host.player.facing;
     const fx = Math.sin(f);
@@ -95,14 +83,6 @@ export class Combat {
         hits++;
       }
     }
-    if (hitNodes) {
-      for (const n of d.nodes) {
-        if (n.alive && n.dying === 0 && inArc(n.x, n.z, n.def.radius)) {
-          this.host.gather(n);
-          hits++;
-        }
-      }
-    }
     if (hits > 0) {
       this.host.hitStop(0.045);
       this.host.shake(0.15);
@@ -119,15 +99,16 @@ export class Combat {
     const level = this.host.level();
     const color = COLORS[cls];
 
-    // 채집물이 목표면 어느 직업이든 가까이서 두드린다
-    if (target?.kind === 'node' || cls === 'sword' || !this.host.dungeon()) {
+    const speed = this.host.stats().speed;
+    // 검사이거나 던전 밖이면 근접 휘두르기
+    if (cls === 'sword' || !this.host.dungeon()) {
       const combo = cls === 'sword' ? this.combo : 0;
       const big = combo === 2;
       player.startAction(
         {
           pose: cls === 'sword' ? 'swing' : 'thrust',
           combo,
-          duration: player.cls.attackTime * (big ? 1.35 : 1),
+          duration: (player.cls.attackTime * (big ? 1.25 : 1)) / speed,
           hitAt: 0.45,
           onHit: () => {
             const range = big ? 2.9 : 2.3;
@@ -151,7 +132,7 @@ export class Combat {
       player.startAction(
         {
           pose: 'cast',
-          duration: player.cls.attackTime,
+          duration: player.cls.attackTime / speed,
           hitAt: 0.5,
           onHit: () => {
             this.host.sfx('magic');
@@ -164,7 +145,7 @@ export class Combat {
       player.startAction(
         {
           pose: 'shoot',
-          duration: player.cls.attackTime,
+          duration: player.cls.attackTime / speed,
           hitAt: 0.55,
           onHit: () => {
             this.host.sfx('bow');

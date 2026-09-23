@@ -20,7 +20,7 @@ import { Rng } from '../../core/rng';
 import type { BuildingType } from '../../data/factory';
 import { ITEMS } from '../../data/items';
 import { CELL_FLOOR, type DungeonData } from '../../dungeon/generator';
-import { DIRS, MACHINE_TYPES, type Factory } from '../../factory/sim';
+import { DIRS, MACHINE_TYPES, type BuildingState, type Factory } from '../../factory/sim';
 import { buildBuildingGeometry } from '../../models/factory';
 import { buildPortalFrame } from '../../models/props';
 import { merge } from '../../models/util';
@@ -46,9 +46,14 @@ export class HomeScene extends Level {
   private color = new Color();
   private layoutKey = '';
 
+  private ghost: Mesh | null = null;
+  private ghostKey = '';
+  private exitInteract!: import('./Level').Interactable;
+
   constructor(
     readonly factory: Factory,
     onExit: () => void,
+    private onBuilding: (b: BuildingState) => void,
   ) {
     super();
     const n = factory.size;
@@ -57,6 +62,7 @@ export class HomeScene extends Level {
     this.grid = {
       seed: 99,
       tier: 0,
+      stage: 0,
       width: n,
       height: h,
       cells,
@@ -89,7 +95,8 @@ export class HomeScene extends Level {
     this.swirl.scale.setScalar(0.9);
     this.scene.add(this.swirl);
     this.obstacles.push({ x: ex, z: ez + 0.6, radius: 1 });
-    this.interactables.push({ id: 'exit', x: ex, z: ez + 0.6, range: 2.8, label: '마을로', title: '차원마을로', action: onExit });
+    this.exitInteract = { id: 'exit', x: ex, z: ez + 0.6, range: 2.8, label: '마을로', title: '차원마을로', action: onExit };
+    this.interactables.push(this.exitInteract);
     this.playerStart = { x: ex, z: ez - 1.6, facing: Math.PI + Math.PI / 4 };
 
     this.items = new InstancedMesh(new BoxGeometry(0.42, 0.42, 0.42), new MeshLambertMaterial(), MAX_ITEMS);
@@ -134,6 +141,48 @@ export class HomeScene extends Level {
     this.cursor.visible = false;
   }
 
+  /** 배치 미리보기: 지을 건물이 희미하게 보인다 */
+  showGhost(type: BuildingType, x: number, y: number, dir: number, ok: boolean): void {
+    const key = type;
+    if (!this.ghost || this.ghostKey !== key) {
+      if (this.ghost) {
+        this.scene.remove(this.ghost);
+        this.ghost.geometry.dispose();
+      }
+      this.ghost = new Mesh(
+        buildBuildingGeometry(type, type === 'wire' ? [true, false, true, false] : undefined),
+        new MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.5, depthWrite: false }),
+      );
+      this.ghostKey = key;
+      this.scene.add(this.ghost);
+    }
+    const [dx, dy] = DIRS[dir];
+    this.ghost.visible = true;
+    this.ghost.position.set((x + 0.5) * TILE, 0.02, (y + 0.5) * TILE);
+    this.ghost.rotation.y = type === 'wire' ? 0 : Math.atan2(dx, dy);
+    (this.ghost.material as MeshLambertMaterial).emissive.setHex(ok ? 0x103a20 : 0x5a1010);
+  }
+
+  hideGhost(): void {
+    if (this.ghost) this.ghost.visible = false;
+  }
+
+  /** 생산 중인 기계 (머리 위 아이콘용) */
+  producing(): { b: BuildingState; x: number; z: number }[] {
+    return this.factory.state.buildings.filter((b) => MACHINE_TYPES.has(b.type) && b.crafting).map((b) => ({ b, x: (b.x + 0.5) * TILE, z: (b.y + 0.5) * TILE }));
+  }
+
+  /** 발전기·보관상자·기계 앞에서 상호작용할 수 있게 한다 */
+  private rebuildInteractables(): void {
+    this.interactables.length = 0;
+    this.interactables.push(this.exitInteract);
+    for (const b of this.factory.state.buildings) {
+      if (b.type !== 'generator' && b.type !== 'box' && !MACHINE_TYPES.has(b.type)) continue;
+      const label = b.type === 'generator' ? '연료' : b.type === 'box' ? '열기' : '보기';
+      this.interactables.push({ id: 'building', x: (b.x + 0.5) * TILE, z: (b.y + 0.5) * TILE, range: 2.1, label, action: () => this.onBuilding(b) });
+    }
+  }
+
   /** 건물 배치가 바뀌면 전체를 한 덩어리로 다시 합친다 (그리기 호출 1번) */
   rebuild(): void {
     const f = this.factory;
@@ -171,6 +220,7 @@ export class HomeScene extends Level {
       this.scene.add(this.buildingMesh);
     }
     this.layoutKey = this.currentKey();
+    this.rebuildInteractables();
   }
 
   private currentKey(): string {
@@ -204,9 +254,10 @@ export class HomeScene extends Level {
     // 기계 상태등: 초록=가동, 빨강=전력 없음, 노랑=막힘, 회색=대기
     let j = 0;
     for (const b of f.state.buildings) {
-      if (!MACHINE_TYPES.has(b.type) && b.type !== 'generator') continue;
+      if (!MACHINE_TYPES.has(b.type) && b.type !== 'generator' && b.type !== 'box') continue;
       let c = 0x8a8a9a;
-      if (b.type === 'generator') c = (b.fuel ?? 0) > 0 ? 0x5affd0 : 0xff5a5a;
+      if (b.type === 'generator') c = (b.fuel ?? 0) > 0 || Object.values(b.buffer ?? {}).some((n) => n > 0) ? 0x5affd0 : 0xff5a5a;
+      else if (b.type === 'box') c = b.mode === 'in' ? 0x6ad0ff : 0xffd04a;
       else {
         const s = f.status(b);
         c = s === 'working' ? 0x6aff6a : s === 'no-power' ? 0xff4a4a : s === 'blocked' ? 0xffd04a : s === 'no-recipe' ? 0xff9a3a : 0x8a8a9a;
