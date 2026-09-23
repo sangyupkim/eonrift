@@ -7,7 +7,7 @@
 ```bash
 npm install
 npm run dev        # 개발 서버 (같은 와이파이의 폰에서 http://<PC IP>:5173 으로 접속 가능)
-npm run build      # 타입 검사 + 배포용 빌드 (dist/)
+npm run build      # 타입 검사 + 배포용 빌드 (저장소 최상단 index.html, assets/)
 npm test           # 단위 테스트
 ```
 
