@@ -76,7 +76,7 @@ export function questLines(p: Progress, quests: Quests): string[] {
     else lines.push(`${q.title}: ${prog.filter((x) => x.cur < x.need).map((x) => `${x.text} ${x.cur}/${x.need}`).join(', ')}`);
   }
   for (const d of quests.state.daily.list) {
-    if (d.claimed) continue;
+    if (d.claimed || !d.accepted) continue;
     const need = objectiveNeed(d.objective);
     const cur = Math.min(need, objectiveProgress(d.objective, d.progress, { count: (id) => p.count(id), stones: p.stoneCount, cleared: p.data.cleared, flag: (f) => p.flag(f) }));
     if (cur < need) lines.push(`[일일] ${objectiveText(d.objective)} ${cur}/${need}`);

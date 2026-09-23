@@ -462,6 +462,7 @@ export class Screens {
           <small class="${done ? 'ok' : 'dim'}">${done ? `✔ ${npcName(q.npc)}에게 보고하기` : `의뢰인: ${npcName(q.npc)}`}</small></div></li>`;
       };
       const daily = quests.state.daily.list
+        .filter((d) => d.accepted)
         .map((d) => {
           const need = objectiveNeed(d.objective);
           const cur = objectiveProgress(d.objective, d.progress, { count: (id) => p.count(id), stones: p.stoneCount, cleared: p.data.cleared, flag: (f) => p.flag(f) });
@@ -689,7 +690,7 @@ export class Screens {
   }
 
   /** 촌장의 일일 의뢰 게시판 */
-  dailyBoard(p: Progress, quests: Quests, onClaim: (i: number) => void, onClose: () => void): void {
+  dailyBoard(p: Progress, quests: Quests, onClaim: (i: number) => void, onAccept: (i: number) => void, onClose: () => void): void {
     const ctx = { count: (id: string) => p.count(id), stones: p.stoneCount, cleared: p.data.cleared, flag: (f: string) => p.flag(f) };
     const rows = quests.state.daily.list
       .map((d, i) => {
@@ -697,20 +698,25 @@ export class Screens {
         const cur = Math.min(need, objectiveProgress(d.objective, d.progress, ctx));
         const r = d.reward;
         const reward = [r.gold ? `${r.gold} G` : '', r.exp ? `경험치 ${r.exp}` : '', ...Object.entries(r.items ?? {}).map(([id, n]) => `${ITEMS[id].name}×${n}`)].filter(Boolean).join(' · ');
-        return `<li><div><b>${d.title}</b><small>${objectiveText(d.objective)} ${cur}/${need}</small><small class="dim">보상: ${reward}</small></div>
-          <button data-claim="${i}" ${d.claimed || cur < need ? 'disabled' : ''}>${d.claimed ? '완료' : '보상 받기'}</button></li>`;
+        const btn = d.claimed
+          ? '<button disabled>완료</button>'
+          : !d.accepted
+            ? `<button data-accept="${i}">수락</button>`
+            : `<button data-claim="${i}" ${cur < need ? 'disabled' : ''}>${cur < need ? '진행 중' : '완료 보고'}</button>`;
+        return `<li class="${d.accepted && !d.claimed ? 'sel' : ''}"><div><b>${d.title}</b><small>${objectiveText(d.objective)} ${d.accepted ? `${cur}/${need}` : `(목표 ${need})`}</small><small class="dim">보상: ${reward}</small></div>${btn}</li>`;
       })
       .join('');
     const s = this.open(
       'daily',
       `<div class="panel wide">
          <button class="close">${ICONS.close}</button>
-         <h2>촌장의 일일 의뢰 <small>매일 새로 바뀝니다</small></h2>
+         <h2>촌장의 일일 의뢰 <small>매일 새로 바뀝니다 · 수락한 의뢰만 진행되고, 다 하면 촌장에게 보고하세요</small></h2>
          <ul class="list">${rows}</ul>
        </div>`,
       onClose,
     );
     this.on(s, '[data-claim]', (b) => onClaim(Number(b.dataset.claim)));
+    this.on(s, '[data-accept]', (b) => onAccept(Number(b.dataset.accept)));
   }
 
   // ---------------- 상점 ----------------

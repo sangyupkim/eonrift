@@ -23,7 +23,7 @@ import { Combat } from './Combat';
 import type { Monster } from './Monster';
 import { Player } from './Player';
 import { DIM_BAG_MAX, deleteSave, hasSave, loadSave, newSave, Progress, stageIndex, stageOf, type SaveData } from './Progress';
-import { Quests } from './Quests';
+import { objectiveNeed, objectiveProgress, Quests } from './Quests';
 import { hasStory, objective, questLines, resetForNewCycle, scriptFor } from './Story';
 import { DungeonScene, type NodeInstance } from './scenes/DungeonScene';
 import { HomeScene } from './scenes/HomeScene';
@@ -659,6 +659,13 @@ export class Game {
     );
   }
 
+  /** 촌장에게 보고할 수 있는 일일 의뢰가 있는지 */
+  private dailyReady(): boolean {
+    const p = this.progress;
+    const ctx = { count: (id: string) => p.count(id), stones: p.stoneCount, cleared: p.data.cleared, flag: (f: string) => p.flag(f) };
+    return this.quests.state.daily.list.some((d) => d.accepted && !d.claimed && objectiveProgress(d.objective, d.progress, ctx) >= objectiveNeed(d.objective));
+  }
+
   private openDaily(): void {
     this.quests.refreshDaily(this.progress.maxTier, this.progress.flag('home') > 0);
     this.openMenu(() =>
@@ -675,6 +682,15 @@ export class Game {
           if (d.reward.exp) this.gainExp(d.reward.exp);
           this.audio.play('coin');
           this.hud.toast(`일일 의뢰 완료: ${d.title}`);
+          this.openDaily();
+        },
+        (i) => {
+          const d = this.quests.state.daily.list[i];
+          if (!d || d.accepted) return;
+          d.accepted = true;
+          d.progress = 0;
+          this.audio.play('pickup');
+          this.hud.toast(`일일 의뢰 수락: ${d.title}`);
           this.openDaily();
         },
         () => this.resume(),
@@ -1514,7 +1530,8 @@ export class Game {
         let mark = '';
         if (isNpc) {
           const ref = it.id as NpcRef;
-          if (this.quests.activeFor(ref).some((q) => this.quests.canComplete(q))) mark = '? ';
+          const dailyReady = it.id === 'chief' && this.dailyReady();
+          if (dailyReady || this.quests.activeFor(ref).some((q) => this.quests.canComplete(q))) mark = '? ';
           else if (hasStory(it.id as NpcId, this.progress) || this.quests.available(ref).length) mark = '! ';
         }
         const s = this.toScreen(it.x, isNpc ? 2.3 : it.id === 'portal' ? 4.6 : 3.3, it.z);

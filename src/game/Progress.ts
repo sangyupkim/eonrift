@@ -127,6 +127,7 @@ function migrate(d: SaveData & { maxTier?: number }): SaveData {
   if (d.cleared === undefined || d.cleared === null) d.cleared = Math.max(0, ((d.maxTier ?? 1) - 1) * 10);
   delete d.maxTier;
   d.quests ??= newQuestState();
+  for (const q of d.quests.daily.list) q.accepted ??= q.progress > 0;
   // 예전 방식으로 차원집을 연 저장은 튜토리얼 퀘스트를 끝낸 것으로 본다
   if (d.flags.home && d.quests.done.length === 0) {
     d.quests.done.push('m1_hunt', 'm2_tools', 'm3_essence', 'm4_factory');

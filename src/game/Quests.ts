@@ -10,6 +10,8 @@ export interface DailyQuest {
   reward: Reward;
   progress: number;
   claimed: boolean;
+  /** 촌장에게 받은 의뢰만 진행된다 */
+  accepted?: boolean;
 }
 
 export interface QuestState {
@@ -155,7 +157,7 @@ export class Quests {
       if (!q) continue;
       q.objectives.forEach((o, i) => (arr[i] = apply(o, arr[i] ?? 0)));
     }
-    for (const d of this.state.daily.list) if (!d.claimed) d.progress = apply(d.objective, d.progress);
+    for (const d of this.state.daily.list) if (d.accepted && !d.claimed) d.progress = apply(d.objective, d.progress);
   }
 
   /** 날짜가 바뀌면 촌장의 일일 퀘스트 3개를 새로 뽑는다 */
