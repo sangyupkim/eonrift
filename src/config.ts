@@ -32,3 +32,6 @@ export const PLAYER = {
 
 export const BAG_SLOTS = 20;
 export const STACK_SIZE = 50;
+
+/** 화면에 보이는 게임 버전 (업데이트마다 올린다) */
+export const GAME_VERSION = '1.3';

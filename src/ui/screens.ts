@@ -1,3 +1,4 @@
+import { GAME_VERSION } from '../config';
 import { CLASSES, CLASS_ORDER, expToNext, MAX_LEVEL, MAX_SKILL_LEVEL, SKILL_LEARN, skillUpgradeCost, STAT_INFO, STAT_KEYS, type ClassId, type StatKey } from '../data/classes';
 import { durability, EQUIP_SLOTS, EQUIP_MAX_DUR, enhanceCost, repairCost, toolRepairCost, TOOL_MAX_DUR, type EquipSlot, equipName, equipStats, equipValue, GRADES, slotName, type Equip } from '../data/equipment';
 import { BUILDINGS, BUILD_ORDER, FACTORY_SIZES, RECIPES, type BuildingType } from '../data/factory';
@@ -146,7 +147,7 @@ export class Screens {
            ${canInstall() ? '<button class="install" data-a="install">📲 앱으로 설치</button>' : ''}
          </div>
        </div>
-       <div class="version">v1.1 · 모바일 가로 화면 권장</div>`,
+       <div class="version">v${GAME_VERSION} · 모바일 가로 화면 권장</div>`,
     );
     this.on(s, '[data-a="continue"]', onContinue);
     this.on(s, '[data-a="install"]', () => void promptInstall());

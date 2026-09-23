@@ -4227,7 +4227,7 @@ void main() {
            ${Bd()?`<button class="install" data-a="install">📲 앱으로 설치</button>`:``}
          </div>
        </div>
-       <div class="version">v1.1 · 모바일 가로 화면 권장</div>`);this.on(r,`[data-a="continue"]`,n),this.on(r,`[data-a="install"]`,()=>void Vd()),this.on(r,`[data-a="new"]`,()=>{(!e||confirm(`저장된 진행을 지우고 새로 시작할까요?`))&&t()})}stageSelect(e,t,n,r){let i=e.maxTier,a=uu.map(n=>{let r=n.tier>i;return`<button class="tier-tab ${n.tier===t?`on`:``} ${r?`locked`:``}" data-tier="${n.tier}" style="--c:${Hd(n.portalColor)}" ${r?`disabled`:``}>
+       <div class="version">v1.3 · 모바일 가로 화면 권장</div>`);this.on(r,`[data-a="continue"]`,n),this.on(r,`[data-a="install"]`,()=>void Vd()),this.on(r,`[data-a="new"]`,()=>{(!e||confirm(`저장된 진행을 지우고 새로 시작할까요?`))&&t()})}stageSelect(e,t,n,r){let i=e.maxTier,a=uu.map(n=>{let r=n.tier>i;return`<button class="tier-tab ${n.tier===t?`on`:``} ${r?`locked`:``}" data-tier="${n.tier}" style="--c:${Hd(n.portalColor)}" ${r?`disabled`:``}>
           <span class="gate"></span><b>${n.tier}${e.data.dimStones.includes(n.tier)?`<i class="stone">◆</i>`:``}</b></button>`}).join(``),o=uu[t-1],s=Array.from({length:10},(n,r)=>{let i=r+1,a=Bu(t,i),o=a<=e.data.cleared+1,s=a<=e.data.cleared,c=i===10?`수호자`:i===5?`파수꾼`:``;return`<button class="stage-btn ${s?`done`:``} ${c?`boss`:``}" data-stage="${i}" ${o?``:`disabled`}>
           <b>${t}-${i}</b><small>${o?c||(s?`클리어`:`도전`):`봉인`}</small></button>`}).join(``),c=this.open(`select`,`<div class="panel wide">
          <button class="close">${Ju.close}</button>
