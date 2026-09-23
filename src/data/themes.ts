@@ -13,8 +13,8 @@ export interface DungeonTheme {
   wallTop: number;
   ambient: number;
   sun: number;
-  /** 채집물 두 종류 (NodeDef id) */
-  nodes: [string, string];
+  /** 광석·나무 말고 이 단계에서만 나오는 채집물 (NodeDef id) */
+  special: string[];
   decor: { kind: DecorKind; color: number }[];
 }
 
@@ -30,7 +30,7 @@ export const THEMES: DungeonTheme[] = [
     wallTop: 0x6f8f4a,
     ambient: 0xcfe8c8,
     sun: 0xfff1d6,
-    nodes: ['iron_vein', 'old_tree'],
+    special: [],
     decor: [
       { kind: 'grass', color: 0x86b453 },
       { kind: 'mushroom', color: 0xd9543f },
@@ -48,7 +48,7 @@ export const THEMES: DungeonTheme[] = [
     wallTop: 0xc78152,
     ambient: 0xffd9c2,
     sun: 0xffe0b0,
-    nodes: ['copper_vein', 'dry_tree'],
+    special: [],
     decor: [
       { kind: 'rock', color: 0x8e4a2c },
       { kind: 'bone', color: 0xe8dcc4 },
@@ -66,7 +66,7 @@ export const THEMES: DungeonTheme[] = [
     wallTop: 0xe8f4fb,
     ambient: 0xd4ecff,
     sun: 0xe6f4ff,
-    nodes: ['silver_vein', 'frost_cluster'],
+    special: ['frost_cluster'],
     decor: [
       { kind: 'shard', color: 0x9fe3ff },
       { kind: 'rock', color: 0x8fa9bf },
@@ -83,7 +83,7 @@ export const THEMES: DungeonTheme[] = [
     wallTop: 0x6d5b99,
     ambient: 0xd8c8ff,
     sun: 0xf0e0ff,
-    nodes: ['mana_cluster', 'mithril_vein'],
+    special: ['mana_cluster'],
     decor: [
       { kind: 'shard', color: 0xc28cff },
       { kind: 'shard', color: 0x7fe0d0 },
@@ -101,7 +101,7 @@ export const THEMES: DungeonTheme[] = [
     wallTop: 0x8a7a62,
     ambient: 0xe8e0d0,
     sun: 0xffe6c0,
-    nodes: ['gear_pile', 'alloy_pile'],
+    special: ['gear_pile', 'alloy_pile'],
     decor: [
       { kind: 'gear', color: 0xb08a3a },
       { kind: 'rock', color: 0x55524e },
@@ -118,7 +118,7 @@ export const THEMES: DungeonTheme[] = [
     wallTop: 0x6a2a1a,
     ambient: 0xffc0a0,
     sun: 0xffb080,
-    nodes: ['obsidian_rock', 'fire_cluster'],
+    special: ['fire_cluster'],
     decor: [
       { kind: 'shard', color: 0xff6a2a },
       { kind: 'rock', color: 0x2e2228 },
@@ -136,7 +136,7 @@ export const THEMES: DungeonTheme[] = [
     wallTop: 0x4a3f8a,
     ambient: 0xc0c8ff,
     sun: 0xd8e8ff,
-    nodes: ['dimension_cluster', 'void_vein'],
+    special: ['dimension_cluster'],
     decor: [
       { kind: 'shard', color: 0x5ef0ff },
       { kind: 'shard', color: 0x7a5cff },

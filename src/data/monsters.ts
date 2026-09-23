@@ -56,6 +56,6 @@ export const MIDBOSS_NAMES = [
 /** 단계·방·회차에 따른 몬스터 능력치 배율. 같은 단계 안에서도 방이 깊을수록 강해진다 */
 export function tierScale(tier: number, stage: number, ngPlus: number): { hp: number; atk: number } {
   const ng = 1 + ngPlus * 0.6;
-  const deep = 1 + (stage - 1) * 0.07;
+  const deep = 1 + (stage - 1) * 0.12;
   return { hp: (1 + (tier - 1) * 1.05) * deep * ng, atk: (1 + (tier - 1) * 0.85) * deep * ng };
 }

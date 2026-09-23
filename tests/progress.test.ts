@@ -87,12 +87,12 @@ describe('Quests', () => {
     expect(q.available('guide').map((x) => x.id)).toContain('m1_hunt');
     expect(q.available('smith')).toHaveLength(0);
     q.accept(QUEST_BY_ID.m1_hunt);
-    for (let i = 0; i < 5; i++) q.event({ type: 'kill', tier: 1, elite: false });
+    for (let i = 0; i < 20; i++) q.event({ type: 'kill', tier: 1, elite: false });
     expect(q.canComplete(QUEST_BY_ID.m1_hunt)).toBe(true);
     q.finish(QUEST_BY_ID.m1_hunt);
     expect(q.available('smith').map((x) => x.id)).toContain('m2_tools');
     q.accept(QUEST_BY_ID.m2_tools);
-    p.add('iron_ore', 10);
+    p.add('copper_ore', 10);
     expect(q.canComplete(QUEST_BY_ID.m2_tools)).toBe(false);
     p.add('wood', 5);
     expect(q.canComplete(QUEST_BY_ID.m2_tools)).toBe(true);
@@ -130,5 +130,19 @@ describe('Story', () => {
     expect(p.flag('smith3')).toBe(0);
     expect(p.flag('home')).toBe(1);
     expect(p.flag('bp_crusher')).toBe(1);
+  });
+});
+
+describe('자원 단계', () => {
+  it('2단계는 앞쪽 방에서 구리가, 뒤쪽 방에서 철이 많이 나온다', async () => {
+    const { resourceTier } = await import('../src/data/nodes');
+    const count = (stage: number) => {
+      let high = 0;
+      for (let i = 0; i < 1000; i++) if (resourceTier(2, stage, i / 1000) === 2) high++;
+      return high;
+    };
+    expect(count(1)).toBeLessThan(200);
+    expect(count(10)).toBeGreaterThan(800);
+    expect(resourceTier(1, 10, 0)).toBe(1);
   });
 });

@@ -4,7 +4,7 @@ import { Audio } from '../core/audio';
 import { Input } from '../core/input';
 import { Rng, randomSeed } from '../core/rng';
 import { CLASSES, expToNext, MAX_SKILL_LEVEL, SKILL_LEARN, skillUpgradeCost, type ClassId } from '../data/classes';
-import { equipName, GRADES, rollEquip } from '../data/equipment';
+import { durability, equipName, GRADES, rollEquip, type Equip } from '../data/equipment';
 import { BUILDINGS, FACTORY_SIZES, OFFLINE_CAP_HOURS, type BuildingType } from '../data/factory';
 import { ITEMS } from '../data/items';
 import { QUEST_BY_ID, type NpcRef, type QuestDef } from '../data/quests';
@@ -352,6 +352,7 @@ export class Game {
         this.enterVillage('home');
       },
       (b) => this.openBuilding(b),
+      () => this.openStorage(),
     );
     this.loadLevel(home, false);
     this.hud.setLocation(`차원집 · ${this.factory.size}×${this.factory.size}`, 0xc28cff);
@@ -436,8 +437,12 @@ export class Game {
     } else this.openInventory('equip');
   }
 
-  private openInventory(tab: 'equip' | 'storage' | 'stats' | 'quest'): void {
+  private openInventory(tab: 'equip' | 'stats' | 'quest'): void {
     this.openMenu(() => this.screens.inventory(this.progress, this.quests, tab, () => this.applyStats(), () => this.resume()));
+  }
+
+  private openStorage(): void {
+    this.openMenu(() => this.screens.storage(this.progress, () => this.resume()));
   }
 
   /** 장비·스탯이 바뀌면 최대 HP/MP를 다시 계산한다 */
@@ -513,7 +518,7 @@ export class Game {
         );
         break;
       case 'storage':
-        this.openInventory('storage');
+        this.openStorage();
         break;
       default:
         this.talk(spot);
@@ -765,6 +770,11 @@ export class Game {
     const final = Math.max(1, Math.round(dmg * (0.9 + Math.random() * 0.2) * (60 / (60 + st.def))));
     pl.hurt(final);
     this.gathering = null;
+    // 맞을 때마다 가끔 방어구 하나가 닳는다
+    if (Math.random() < 0.25) {
+      const armor = (['helmet', 'armor', 'pants', 'boots'] as const).map((k) => this.progress.cls.equipment[k]).filter((e): e is Equip => !!e && durability(e) > 0);
+      if (armor.length) this.wearEquip(armor[Math.floor(Math.random() * armor.length)]);
+    }
     const s = this.toScreen(pl.position.x, 2, pl.position.z);
     this.hud.floatText(s.x, s.y, `-${final}`, '#ff5a5a', 'hurt');
     this.shakeT = Math.max(this.shakeT, 0.25);
@@ -778,6 +788,15 @@ export class Game {
       this.hud.setVisible(false);
       this.audio.play('fall');
     }
+  }
+
+  /** 장비 내구도 1 감소. 망가지면 능력치가 사라진다 */
+  private wearEquip(e: Equip): void {
+    e.dur = Math.max(0, durability(e) - 1);
+    if (e.dur === 0) {
+      this.applyStats();
+      this.hud.toast(`${equipName(e)}이(가) 망가졌습니다! 대장장이 고른에게 수리하세요`, 3000);
+    } else if (e.dur === 20) this.hud.toast(`${equipName(e)} 내구도 20 — 수리가 필요합니다`, 2000);
   }
 
   private gainExp(n: number): void {
@@ -801,12 +820,15 @@ export class Game {
     this.level.particles.burst(m.x, 0.7, m.z, 0xffffff, 12, 1.2);
     this.quests.event({ type: 'kill', tier, elite: m.kind === 'elite' });
 
+    const weapon = this.progress.cls.equipment.weapon;
+    if (weapon && durability(weapon) > 0 && Math.random() < 0.12) this.wearEquip(weapon);
+
     const exp = Math.round(m.exp * (1 + this.progress.data.ngPlus * 0.5));
     run.exp += exp;
     this.gainExp(exp);
 
     const bossMult = m.kind === 'boss' ? 25 : m.kind === 'midboss' ? 10 : m.kind === 'elite' ? 4 : 1;
-    const gold = Math.round(rng.int(2, 5) * tier * (1 + (run.stage - 1) * 0.1) * bossMult);
+    const gold = Math.max(1, Math.round((m.kind === 'normal' ? rng.range(0.6, 1.6) : rng.int(2, 5)) * tier * (1 + (run.stage - 1) * 0.15) * bossMult));
     run.gold += gold;
     this.progress.data.gold += gold;
 
@@ -815,16 +837,16 @@ export class Game {
     const loot = (text: string, color: string) => this.hud.floatText(s.x, s.y - 22 * line++, text, color, 'small');
     loot(`+${gold} G`, '#ffd23a');
 
-    if (rng.chance(m.kind === 'normal' ? 0.6 : 1)) {
-      const n = m.kind === 'boss' ? 8 : m.kind === 'midboss' ? 5 : m.kind === 'elite' ? 3 : 1;
+    if (rng.chance(m.kind === 'normal' ? 0.18 + run.stage * 0.01 : 1)) {
+      const n = m.kind === 'boss' ? 8 + Math.floor(run.stage / 5) : m.kind === 'midboss' ? 5 : m.kind === 'elite' ? 3 + Math.floor(run.stage / 4) : 1;
       const id = ESSENCE(tier);
       const added = run.bag.add(id, n);
       if (added) loot(`+${added} ${ITEMS[id].name}`, hex(ITEMS[id].color));
       else this.hud.toast('가방이 가득 찼습니다');
     }
     // 장비: 중간보스는 좋은 장비를 넉넉히
-    const eqCount = m.kind === 'boss' ? 2 : m.kind === 'midboss' ? 2 : rng.chance(m.kind === 'elite' ? 0.4 : 0.03) ? 1 : 0;
-    const bonus = m.kind === 'midboss' ? 0.35 : m.kind === 'boss' ? 0.3 : m.kind === 'elite' ? 0.12 : 0;
+    const eqCount = m.kind === 'boss' ? 2 : m.kind === 'midboss' ? 2 : rng.chance(m.kind === 'elite' ? 0.4 + run.stage * 0.02 : 0.008 + run.stage * 0.0008) ? 1 : 0;
+    const bonus = (m.kind === 'midboss' ? 0.35 : m.kind === 'boss' ? 0.3 : m.kind === 'elite' ? 0.12 : 0) + run.stage * 0.01;
     for (let i = 0; i < eqCount; i++) {
       const e = rollEquip(rng, tier, this.progress.data.currentClass, bonus);
       if (run.bag.addEquip(e)) loot(`${GRADES[e.grade].name} ${equipName(e)}`, hex(GRADES[e.grade].color));
@@ -899,6 +921,11 @@ export class Game {
         this.hud.toast(tool === 'tool_axe' ? '도끼가 있어야 나무를 벨 수 있습니다 (대장장이 고른)' : '곡괭이가 있어야 캘 수 있습니다 (대장장이 고른)', 2500);
         return;
       }
+      const key = tool === 'tool_axe' ? 'axe' : 'pickaxe';
+      if (p.data.tools[key] <= 0) {
+        this.hud.toast(`${key === 'axe' ? '도끼' : '곡괭이'}가 망가졌습니다. 대장장이 고른에게 수리를 맡기세요`, 2500);
+        return;
+      }
     }
     this.gathering = n;
   }
@@ -936,6 +963,15 @@ export class Game {
     if (!(this.level instanceof DungeonScene) || !this.run) return;
     const s = this.toScreen(n.x, 1.6, n.z);
     let line = 0;
+    if (n.def.style !== 'chest') {
+      const tools = this.progress.data.tools;
+      const key = n.def.style === 'tree' ? 'axe' : 'pickaxe';
+      tools[key] = Math.max(0, tools[key] - 1);
+      if (tools[key] === 0) {
+        this.gathering = null;
+        this.hud.toast(`${key === 'axe' ? '도끼' : '곡괭이'}가 망가졌습니다! (대장장이 고른에게 수리)`, 3000);
+      } else if (tools[key] === 15) this.hud.toast(`${key === 'axe' ? '도끼' : '곡괭이'} 내구도가 얼마 남지 않았습니다`, 2000);
+    }
     for (const drop of this.level.hitNode(n)) {
       const added = this.run.bag.add(drop.itemId, drop.count);
       const item = ITEMS[drop.itemId];

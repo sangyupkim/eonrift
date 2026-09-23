@@ -49,7 +49,7 @@ describe('Factory', () => {
 
   it('조립기는 고른 레시피의 재료만 받는다', () => {
     const f = new Factory({ sizeLevel: 0, buildings: [] }, 8);
-    f.place('box', 0, 0, 0)!.buffer = { mana_iron: 2, plank: 2 };
+    f.place('box', 0, 0, 0)!.buffer = { mana_iron: 2, plank: 4 };
     f.place('belt', 1, 0, 0);
     const asm = f.place('assembler', 2, 0, 0)!;
     asm.recipe = 'stone_low';

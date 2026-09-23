@@ -1,6 +1,7 @@
 import { CLASSES, CLASS_ORDER, expToNext, MAX_LEVEL, POINTS_PER_LEVEL, STAT_KEYS, type BaseStats, type ClassId, type StatKey } from '../data/classes';
-import { equipStats, type Equip, type EquipSlot } from '../data/equipment';
-import { FACTORY_SIZES } from '../data/factory';
+import { equipStats, TOOL_MAX_DUR, type Equip, type EquipSlot } from '../data/equipment';
+import { FACTORY_SIZES, RECIPE_RENAMES } from '../data/factory';
+import { ITEM_RENAMES } from '../data/items';
 import type { FactoryState } from '../factory/sim';
 import type { Slot } from './Bag';
 import { newQuestState, type QuestState } from './Quests';
@@ -38,6 +39,8 @@ export interface SaveData {
   factory: FactoryState;
   lastSaved: number;
   settings: { shadows: boolean; sound: boolean };
+  /** 곡괭이·도끼 내구도 */
+  tools: { pickaxe: number; axe: number };
 }
 
 const KEY = 'yeongeop-teumsae-save-v1';
@@ -63,6 +66,7 @@ export function newSave(): SaveData {
     factory: { sizeLevel: 0, buildings: [] },
     lastSaved: Date.now(),
     settings: { shadows: true, sound: true },
+    tools: { pickaxe: TOOL_MAX_DUR, axe: TOOL_MAX_DUR },
   };
 }
 
@@ -133,6 +137,26 @@ function migrate(d: SaveData & { maxTier?: number }): SaveData {
     }
     if (b.type === 'generator') b.buffer ??= {};
   }
+  // 광석·나무 개편 전 아이템 id를 새 id로 옮긴다
+  const re = (id: string) => ITEM_RENAMES[id] ?? id;
+  const reRecord = (r: Record<string, number>) => {
+    for (const [id, n] of Object.entries(r)) {
+      const to = re(id);
+      if (to === id) continue;
+      delete r[id];
+      r[to] = (r[to] ?? 0) + n;
+    }
+  };
+  reRecord(d.storage);
+  for (const s of d.dimBag) if (s && !s.equip) s.itemId = re(s.itemId);
+  for (const b of d.factory.buildings) {
+    if (b.buffer) reRecord(b.buffer);
+    if (b.item) b.item = re(b.item);
+    if (b.out) b.out = b.out.map(re);
+    if (b.recipe) b.recipe = RECIPE_RENAMES[b.recipe] ?? b.recipe;
+    if (b.crafting) b.crafting = RECIPE_RENAMES[b.crafting] ?? b.crafting;
+  }
+  d.tools ??= { pickaxe: TOOL_MAX_DUR, axe: TOOL_MAX_DUR };
   return d;
 }
 

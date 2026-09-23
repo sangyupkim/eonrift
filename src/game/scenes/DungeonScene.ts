@@ -14,9 +14,9 @@ import {
 } from 'three';
 import { TILE } from '../../config';
 import { Rng } from '../../core/rng';
-import { ITEMS } from '../../data/items';
+import { ITEMS, ORE_TIERS, WOOD_TIERS } from '../../data/items';
 import type { Archetype } from '../../data/monsters';
-import { NODES, type NodeDef } from '../../data/nodes';
+import { NODES, resourceTier, type NodeDef } from '../../data/nodes';
 import { themeForTier, type DungeonTheme } from '../../data/themes';
 import type { CircleObstacle } from '../../dungeon/collision';
 import type { DungeonData } from '../../dungeon/generator';
@@ -253,8 +253,11 @@ export class DungeonScene extends Level {
     const drops: Drop[] = [];
     this.particles.burst(node.x, 0.7, node.z, node.def.accentColor, 7);
     if (node.def.style === 'chest') {
-      const pool = this.theme.nodes.map((id) => NODES[id].itemId);
-      for (let i = 0; i < node.def.bonus; i++) drops.push({ itemId: this.rng.pick(pool), count: 1 });
+      for (let i = 0; i < node.def.bonus; i++) {
+        const t = resourceTier(this.grid.tier, this.grid.stage, this.rng.next()) - 1;
+        const pool = [ORE_TIERS[t], WOOD_TIERS[t], ...this.theme.special.map((id) => NODES[id].itemId)];
+        drops.push({ itemId: this.rng.pick(pool), count: 1 });
+      }
     } else {
       drops.push({ itemId: node.def.itemId, count: 1 });
     }

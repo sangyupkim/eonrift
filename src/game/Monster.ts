@@ -119,7 +119,7 @@ export class Monster {
     this.x = x;
     this.z = z;
     this.name = kind === 'boss' ? BOSS_NAMES[tier - 1] : kind === 'midboss' ? MIDBOSS_NAMES[tier - 1] : (kind === 'elite' ? '정예 ' : '') + MONSTER_NAMES[tier][archetype];
-    this.exp = Math.round(this.def.exp * Math.pow(tier, 1.6) * (1 + (stage - 1) * 0.15) * (kind === 'boss' ? 30 : kind === 'midboss' ? 15 : kind === 'elite' ? 3 : 1));
+    this.exp = Math.round(this.def.exp * Math.pow(tier, 1.6) * (1 + (stage - 1) * 0.15) * (kind === 'boss' ? 30 : kind === 'midboss' ? 15 : kind === 'elite' ? 3 : 0.3));
 
     this.material = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
     const colors = MONSTER_COLORS[tier - 1];

@@ -1,4 +1,5 @@
 import { Rng } from '../core/rng';
+import { pickResourceNode } from '../data/nodes';
 import { themeForTier, type DecorKind } from '../data/themes';
 
 /**
@@ -255,7 +256,7 @@ function tryGenerate(rng: Rng, seed: number, tier: number, stage: number): Dunge
     for (let i = 0; i < count; i++) {
       const cell = pickInteriorCell(r, 1);
       if (!cell) break;
-      nodes.push({ nodeId: rng.pick(theme.nodes), x: cell.x + rng.range(-0.15, 0.15), y: cell.y + rng.range(-0.15, 0.15) });
+      nodes.push({ nodeId: pickResourceNode(tier, stage, theme.special, () => rng.next()), x: cell.x + rng.range(-0.15, 0.15), y: cell.y + rng.range(-0.15, 0.15) });
     }
     if (r.type === 'treasure') {
       const cell = pickInteriorCell(r, 1);
@@ -265,8 +266,9 @@ function tryGenerate(rng: Rng, seed: number, tier: number, stage: number): Dunge
     // 몬스터는 M3(전투)에서 쓰일 배치 정보만 미리 만든다
     if (r.type === 'combat' || r.type === 'resource') {
       // 깊은 방일수록 몬스터가 많다
-      const extra = Math.floor(stage / 4);
-      const count = r.type === 'combat' ? rng.int(2, 3) + extra : rng.int(0, 1) + (stage > 5 ? 1 : 0);
+      // 핵앤슬래시: 방마다 한 무리씩 몰려 있다
+      const extra = Math.floor(stage / 3);
+      const count = r.type === 'combat' ? rng.int(9, 12) + extra : rng.int(2, 4) + (stage > 5 ? 1 : 0);
       for (let i = 0; i < count; i++) {
         const cell = pickInteriorCell(r, 0);
         if (cell) monsters.push({ ...cell, kind: 'normal' });
@@ -274,12 +276,19 @@ function tryGenerate(rng: Rng, seed: number, tier: number, stage: number): Dunge
     } else if (r.type === 'elite') {
       const cell = pickInteriorCell(r, 0);
       if (cell) monsters.push({ ...cell, kind: 'elite' });
+      // 정예는 부하를 거느린다
+      for (let i = 0; i < 3 + Math.floor(stage / 4); i++) {
+        const c = pickInteriorCell(r, 0);
+        if (c) monsters.push({ ...c, kind: 'normal' });
+      }
     } else if (r.type === 'exit') {
       if (stage === 10) monsters.push({ x: exit.x, y: exit.y - 2, kind: 'boss' });
       else if (stage === 5) monsters.push({ x: exit.x, y: exit.y - 2, kind: 'midboss' });
       else {
-        const cell = pickInteriorCell(r, 0);
-        if (cell) monsters.push({ ...cell, kind: 'normal' });
+        for (let i = 0; i < rng.int(4, 6); i++) {
+          const cell = pickInteriorCell(r, 0);
+          if (cell) monsters.push({ ...cell, kind: 'normal' });
+        }
       }
     }
   }

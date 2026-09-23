@@ -22,7 +22,8 @@ import { ITEMS } from '../../data/items';
 import { CELL_FLOOR, type DungeonData } from '../../dungeon/generator';
 import { DIRS, MACHINE_TYPES, type BuildingState, type Factory } from '../../factory/sim';
 import { buildBuildingGeometry } from '../../models/factory';
-import { buildPortalFrame } from '../../models/props';
+import { NODES } from '../../data/nodes';
+import { buildNodeGeometry, buildPortalFrame } from '../../models/props';
 import { merge } from '../../models/util';
 import { Level } from './Level';
 
@@ -49,11 +50,13 @@ export class HomeScene extends Level {
   private ghost: Mesh | null = null;
   private ghostKey = '';
   private exitInteract!: import('./Level').Interactable;
+  private storageInteract!: import('./Level').Interactable;
 
   constructor(
     readonly factory: Factory,
     onExit: () => void,
     private onBuilding: (b: BuildingState) => void,
+    onStorage: () => void,
   ) {
     super();
     const n = factory.size;
@@ -97,6 +100,13 @@ export class HomeScene extends Level {
     this.obstacles.push({ x: ex, z: ez + 0.6, radius: 1 });
     this.exitInteract = { id: 'exit', x: ex, z: ez + 0.6, range: 2.8, label: '마을로', title: '차원마을로', action: onExit };
     this.interactables.push(this.exitInteract);
+    // 입구 왼쪽의 공유 창고 상자
+    const sx = ex - 3.2 * TILE;
+    const chest = this.addMesh(buildNodeGeometry(NODES.chest, 1), new MeshLambertMaterial({ vertexColors: true, flatShading: true }), sx, ez + 0.3, 0);
+    chest.scale.setScalar(1.3);
+    this.obstacles.push({ x: sx, z: ez + 0.3, radius: 0.8 });
+    this.storageInteract = { id: 'storage', x: sx, z: ez + 0.3, range: 2.4, label: '창고', title: '공유 창고', action: onStorage };
+    this.interactables.push(this.storageInteract);
     this.playerStart = { x: ex, z: ez - 1.6, facing: Math.PI + Math.PI / 4 };
 
     this.items = new InstancedMesh(new BoxGeometry(0.42, 0.42, 0.42), new MeshLambertMaterial(), MAX_ITEMS);
@@ -175,7 +185,7 @@ export class HomeScene extends Level {
   /** 발전기·보관상자·기계 앞에서 상호작용할 수 있게 한다 */
   private rebuildInteractables(): void {
     this.interactables.length = 0;
-    this.interactables.push(this.exitInteract);
+    this.interactables.push(this.exitInteract, this.storageInteract);
     for (const b of this.factory.state.buildings) {
       if (b.type !== 'generator' && b.type !== 'box' && !MACHINE_TYPES.has(b.type)) continue;
       const label = b.type === 'generator' ? '연료' : b.type === 'box' ? '열기' : '보기';

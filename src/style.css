@@ -1665,3 +1665,169 @@ button {
   border-color: rgba(122, 255, 192, 0.55);
   font-size: 14px;
 }
+
+/* ---- 3D 아이콘 ---- */
+img.gem.ico {
+  background: none;
+  box-shadow: none;
+  transform: none;
+  border-radius: 0;
+  object-fit: contain;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
+}
+img.gem.ico.eq-ico {
+  border-radius: 8px;
+  background: radial-gradient(circle, color-mix(in srgb, var(--c) 35%, transparent), transparent 70%);
+}
+.slot img.gem.ico {
+  inset: 4%;
+  width: 92%;
+  height: 92%;
+}
+.list li img.gem.ico,
+.loot li img.gem.ico,
+.eq-slot img.gem.ico {
+  width: 30px;
+  height: 30px;
+  left: 4px;
+  top: 50%;
+  margin-top: -15px;
+}
+img.gem-inline.ico {
+  width: 18px;
+  height: 18px;
+  background: none;
+  transform: none;
+  vertical-align: -4px;
+  margin: 0 3px 0 0;
+}
+.list li,
+.loot li {
+  padding-left: 40px;
+}
+.split .detail img.gem.ico {
+  display: none;
+}
+
+/* ---- 장비창 (인형) ---- */
+.doll {
+  display: grid;
+  grid-template-columns: 1fr minmax(110px, 150px) 1fr;
+  gap: 8px;
+  align-items: center;
+}
+.doll-col {
+  display: grid;
+  gap: 6px;
+}
+.doll-body {
+  display: grid;
+  justify-items: center;
+  align-self: stretch;
+  align-content: center;
+  background: radial-gradient(ellipse at 50% 70%, rgba(94, 224, 255, 0.18), transparent 70%);
+  border-radius: 12px;
+}
+.doll-body img {
+  width: 100%;
+  max-height: 210px;
+  object-fit: contain;
+}
+.doll-body small {
+  color: var(--ink-dim);
+  font-size: 11px;
+}
+.doll-slot {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 4px 8px 6px 46px;
+  border: 1px dashed var(--panel-line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  text-align: left;
+  touch-action: manipulation;
+  overflow: hidden;
+}
+.doll-slot.filled {
+  border: 1px solid color-mix(in srgb, var(--c) 60%, transparent);
+  background: color-mix(in srgb, var(--c) 10%, transparent);
+}
+.doll-slot.sel {
+  outline: 2px solid #ffe07a;
+}
+.doll-slot.broken {
+  filter: grayscale(0.8);
+}
+.doll-slot img.gem.ico {
+  position: absolute;
+  left: 5px;
+  top: 50%;
+  width: 36px;
+  height: 36px;
+  margin-top: -18px;
+}
+.doll-label {
+  font-size: 12px;
+  font-weight: 700;
+}
+.doll-slot:not(.filled) .doll-label {
+  color: var(--ink-dim);
+}
+.doll-slot .dur {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  background: #7aff9a;
+}
+.doll-slot.broken .dur {
+  background: #ff5a5a;
+  width: 100% !important;
+}
+.doll-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 8px;
+  font-size: 11px;
+  color: var(--ink-dim);
+  padding: 4px 2px;
+}
+.doll-stats b {
+  color: var(--ink);
+}
+.item-info button {
+  margin-left: 6px;
+  border: 1px solid var(--panel-line);
+  background: rgba(94, 224, 255, 0.14);
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.panel h3 a {
+  color: var(--accent);
+  cursor: pointer;
+}
+.warn {
+  color: #ffcf6b;
+}
+.store-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+  gap: 6px;
+}
+.act.ult {
+  width: 50px;
+  height: 50px;
+  bottom: 168px;
+  right: 40px;
+  border-color: rgba(255, 210, 90, 0.7);
+  background: rgba(120, 80, 20, 0.55);
+}
+.hud[data-mode='village'] .act.ult,
+.hud[data-mode='home'] .act.ult {
+  display: none;
+}

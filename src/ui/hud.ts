@@ -167,10 +167,17 @@ export class Hud {
       this.skillLabels.push(label);
       this.skillShades.push(shade);
     }
+    // 궁극기 칸: 보스 보상 시스템과 함께 열린다 (지금은 잠김)
+    const ult = el('button', 'act skill ult locked') as HTMLButtonElement;
+    ult.append(el('span', 'skill-name', '궁극기'));
+    ult.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      this.toast('궁극기는 보스를 쓰러뜨려야 얻을 수 있습니다 (준비 중)', 2200);
+    });
     this.potionBtn = this.button('act potion', ICONS.potion, 'potion');
     this.potionCount = el('span', 'badge');
     this.potionBtn.appendChild(this.potionCount);
-    actions.append(this.attackBtn, this.interactBtn, dodge, ...this.skillBtns, this.potionBtn);
+    actions.append(this.attackBtn, this.interactBtn, dodge, ...this.skillBtns, ult, this.potionBtn);
     this.root.appendChild(actions);
 
     this.bigMapEl = el('div', 'bigmap-wrap hidden');

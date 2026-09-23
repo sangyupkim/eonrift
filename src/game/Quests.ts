@@ -1,9 +1,7 @@
 import { Rng } from '../core/rng';
 import { BUILDINGS } from '../data/factory';
-import { ITEMS } from '../data/items';
-import { NODES } from '../data/nodes';
+import { ITEMS, ORE_TIERS, WOOD_TIERS } from '../data/items';
 import { ALL_QUESTS, QUEST_BY_ID, type NpcRef, type Objective, type QuestDef, type Reward } from '../data/quests';
-import { themeForTier } from '../data/themes';
 
 export interface DailyQuest {
   id: string;
@@ -167,16 +165,16 @@ export class Quests {
     const rng = new Rng(hashString(key) ^ 0x9e3779b9);
     const t = Math.max(1, maxTier);
     const pool: (() => DailyQuest)[] = [
-      () => ({ id: 'kill', title: '틈새 정화', objective: { type: 'kill', count: 20 + t * 5 }, reward: { gold: 150 * t, exp: 80 * t * t }, progress: 0, claimed: false }),
+      () => ({ id: 'kill', title: '틈새 정화', objective: { type: 'kill', count: 80 + t * 20 }, reward: { gold: 150 * t, exp: 80 * t * t }, progress: 0, claimed: false }),
       () => ({ id: 'elite', title: '정예 사냥', objective: { type: 'elite', count: 2 }, reward: { gold: 250 * t, exp: 120 * t * t, items: { stone_low: 1 } }, progress: 0, claimed: false }),
       () => ({ id: 'stages', title: '차원문 순찰', objective: { type: 'stages', count: 3 }, reward: { gold: 200 * t, exp: 100 * t * t, items: { potion: 2 } }, progress: 0, claimed: false }),
       () => {
-        const theme = themeForTier(rng.int(1, t));
-        const item = NODES[rng.pick(theme.nodes)].itemId;
+        const rt = rng.int(1, t) - 1;
+        const item = rng.chance(0.5) ? ORE_TIERS[rt] : WOOD_TIERS[rt];
         return { id: 'gather', title: '자원 조달', objective: { type: 'gather', item, count: 12 }, reward: { gold: 180 * t, exp: 90 * t * t }, progress: 0, claimed: false };
       },
     ];
-    if (hasHome) pool.push(() => ({ id: 'craft', title: '공장 가동', objective: { type: 'craft', item: 'iron_ingot', count: 5 }, reward: { gold: 200 * t, exp: 100 * t * t, items: { essence_low: 5 } }, progress: 0, claimed: false }));
+    if (hasHome) pool.push(() => ({ id: 'craft', title: '공장 가동', objective: { type: 'craft', item: 'copper_ingot', count: 5 }, reward: { gold: 200 * t, exp: 100 * t * t, items: { essence_low: 5 } }, progress: 0, claimed: false }));
     rng.shuffle(pool);
     this.state.daily = { date: key, list: pool.slice(0, 3).map((f, i) => ({ ...f(), id: `${key}-${i}` })) };
     return true;

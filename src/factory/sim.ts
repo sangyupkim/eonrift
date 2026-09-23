@@ -341,7 +341,7 @@ export class Factory {
       case 'infuser':
       case 'assembler':
       case 'alchemy': {
-        // 가공할 재료 한 번 분량만 받는다 (비었을 때 채운다)
+        // 가공할 재료를 한 번 분량만 받는다. 한 재료를 여러 개 쓰는 레시피는 레일이 막히지 않게 두 번 분량까지
         const recipes = target.recipe ? [RECIPE_BY_ID[target.recipe]] : recipesFor(target.type);
         const recipe = recipes.find((r) => r.inputs[item] !== undefined);
         if (!recipe) return false;
@@ -351,7 +351,8 @@ export class Factory {
           if (other) return false;
         }
         const have = target.buffer![item] ?? 0;
-        if (have >= recipe.inputs[item]) return false;
+        const multi = Object.values(recipe.inputs).some((n) => n > 1);
+        if (have >= recipe.inputs[item] * (multi ? 2 : 1)) return false;
         target.buffer![item] = have + 1;
         return true;
       }

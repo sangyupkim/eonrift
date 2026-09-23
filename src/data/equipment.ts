@@ -22,6 +22,8 @@ export interface Equip {
   tier: number;
   grade: number;
   plus: number;
+  /** 내구도 (없으면 가득). 0이 되면 망가져서 능력치가 사라진다 */
+  dur?: number;
 }
 
 export const GRADES = [
@@ -32,7 +34,7 @@ export const GRADES = [
   { name: '전설', color: 0xffa53a, mult: 2.1 },
 ];
 
-const MATERIAL = ['철', '구리', '은', '수정', '마공', '흑요석', '차원'];
+const MATERIAL = ['구리', '철', '황금', '다이아', '티타늄', '오리하르콘', '차원'];
 
 export function slotName(slot: EquipSlot, cls?: ClassId): string {
   return slot === 'weapon' ? CLASSES[cls ?? 'sword'].weaponNoun : SLOT_NAMES[slot];
@@ -51,6 +53,7 @@ export interface EquipStats {
 }
 
 export function equipStats(e: Equip): EquipStats {
+  if (durability(e) <= 0) return { atk: 0, def: 0, hp: 0, mp: 0, crit: 0 };
   const m = GRADES[e.grade].mult * (1 + e.plus * 0.12);
   const t = e.tier;
   const s: EquipStats = { atk: 0, def: 0, hp: 0, mp: 0, crit: 0 };
@@ -111,4 +114,30 @@ export function enhanceCost(e: Equip): { stone: string; count: number; gold: num
   const stone = p < 3 ? 'stone_low' : p < 6 ? 'stone_mid' : 'stone_high';
   const rates = [1, 0.95, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2];
   return { stone, count: 1 + Math.floor((p % 3) / 1.5), gold: 50 * (p + 1) * e.tier, rate: rates[p] };
+}
+
+// ---- 내구도와 수리 ----
+export const EQUIP_MAX_DUR = 100;
+export const TOOL_MAX_DUR = 150;
+
+export function durability(e: Equip): number {
+  return e.dur ?? EQUIP_MAX_DUR;
+}
+
+/** 강화 단계가 높을수록 더 높은 광석으로 고친다: +0~1 구리, +2~3 철, +4~5 금, +6~7 다이아, +8 티타늄, +9 오리하르콘, +10 차원광물 */
+export function repairOre(plus: number): string {
+  const ores = ['copper_ore', 'copper_ore', 'iron_ore', 'iron_ore', 'gold_ore', 'gold_ore', 'diamond_ore', 'diamond_ore', 'titanium_ore', 'orichalcum_ore', 'dim_ore'];
+  return ores[Math.min(10, Math.max(0, plus))];
+}
+
+export function repairCost(e: Equip): { ore: string; count: number; gold: number } | null {
+  const missing = EQUIP_MAX_DUR - durability(e);
+  if (missing <= 0) return null;
+  return { ore: repairOre(e.plus), count: Math.ceil(missing / 10) * (1 + Math.floor(e.tier / 3)), gold: Math.round(missing * e.tier * 1.5) };
+}
+
+export function toolRepairCost(dur: number): { ore: string; count: number; gold: number } | null {
+  const missing = TOOL_MAX_DUR - dur;
+  if (missing <= 0) return null;
+  return { ore: 'copper_ore', count: Math.ceil(missing / 15), gold: missing };
 }

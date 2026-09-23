@@ -1,5 +1,5 @@
 import { CLASSES, CLASS_ORDER, expToNext, MAX_LEVEL, MAX_SKILL_LEVEL, SKILL_LEARN, skillUpgradeCost, STAT_INFO, STAT_KEYS, type ClassId, type StatKey } from '../data/classes';
-import { EQUIP_SLOTS, enhanceCost, equipName, equipStats, equipValue, GRADES, slotName, type Equip } from '../data/equipment';
+import { durability, EQUIP_SLOTS, EQUIP_MAX_DUR, enhanceCost, repairCost, toolRepairCost, TOOL_MAX_DUR, type EquipSlot, equipName, equipStats, equipValue, GRADES, slotName, type Equip } from '../data/equipment';
 import { BUILDINGS, BUILD_ORDER, FACTORY_SIZES, RECIPES, type BuildingType } from '../data/factory';
 import { ITEMS, ITEM_LIST } from '../data/items';
 import type { QuestDef } from '../data/quests';
@@ -9,6 +9,7 @@ import type { Bag, Slot } from '../game/Bag';
 import { stageIndex, type Progress } from '../game/Progress';
 import { objectiveNeed, objectiveProgress, objectiveText, type Quests } from '../game/Quests';
 import { ICONS } from './icons';
+import { equipIconUrl, heroPortraitUrl, itemIconUrl } from './itemIcons';
 import { canInstall, promptInstall } from './install';
 
 export const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
@@ -29,10 +30,20 @@ export interface ResultInfo {
 }
 
 /** 목록 안의 아이콘 (절대 위치) */
-const itemGem = (id: string) => `<span class="gem" style="--c:${hex(ITEMS[id]?.color ?? 0xffffff)}"></span>`;
-const equipGem = (e: Equip) => `<span class="gem eq" style="--c:${hex(GRADES[e.grade].color)}"></span>`;
+/** 3D 모델로 그린 아이콘. 그리기에 실패하면 예전 보석 모양으로 */
+const itemGem = (id: string) => {
+  const url = itemIconUrl(id);
+  return url ? `<img class="gem ico" src="${url}" alt="">` : `<span class="gem" style="--c:${hex(ITEMS[id]?.color ?? 0xffffff)}"></span>`;
+};
+const equipGem = (e: Equip) => {
+  const url = equipIconUrl(e);
+  return url ? `<img class="gem ico eq-ico" style="--c:${hex(GRADES[e.grade].color)}" src="${url}" alt="">` : `<span class="gem eq" style="--c:${hex(GRADES[e.grade].color)}"></span>`;
+};
 /** 글 사이에 들어가는 작은 아이콘 */
-const inlineGem = (id: string) => `<i class="gem-inline" style="--c:${hex(ITEMS[id]?.color ?? 0xffffff)}"></i>`;
+const inlineGem = (id: string) => {
+  const url = itemIconUrl(id);
+  return url ? `<img class="gem-inline ico" src="${url}" alt="">` : `<i class="gem-inline" style="--c:${hex(ITEMS[id]?.color ?? 0xffffff)}"></i>`;
+};
 
 export function equipLine(e: Equip): string {
   const s = equipStats(e);
@@ -248,7 +259,7 @@ export class Screens {
         const on = sel && sel.from === from && sel.i === i ? 'sel' : '';
         if (!s) return `<div class="slot" data-empty="${from}"></div>`;
         const color = s.equip ? GRADES[s.equip.grade].color : ITEMS[s.itemId].color;
-        return `<div class="slot filled ${on}" data-from="${from}" data-i="${i}" style="--c:${hex(color)}"><span class="gem ${s.equip ? 'eq' : ''}"></span><span class="cnt">${s.equip ? `+${s.equip.plus}` : s.count}</span></div>`;
+        return `<div class="slot filled ${on}" data-from="${from}" data-i="${i}" style="--c:${hex(color)}">${s.equip ? equipGem(s.equip) : itemGem(s.itemId)}<span class="cnt">${s.equip ? `+${s.equip.plus}` : s.count}</span></div>`;
       };
       const target = sel ? (sel.from === 'bag' ? 'dim' : 'bag') : '';
       const s = this.open(
@@ -313,30 +324,44 @@ export class Screens {
   }
 
   // ---------------- 캐릭터: 장비 · 창고 · 능력치 · 퀘스트 ----------------
-  inventory(p: Progress, quests: Quests, tab: 'equip' | 'storage' | 'stats' | 'quest', onChange: () => void, onClose: () => void): void {
+  inventory(p: Progress, quests: Quests, tab: 'equip' | 'stats' | 'quest', onChange: () => void, onClose: () => void, selSlot?: EquipSlot): void {
     const cls = CLASSES[p.data.currentClass];
     const st = p.stats();
     const c = p.cls;
     let body = '';
     if (tab === 'equip') {
-      const equipped = EQUIP_SLOTS.map((slot) => {
+      // 인형 옷 입히기: 가운데 캐릭터, 왼쪽은 몸에 입는 것, 오른쪽은 무기와 장신구
+      const slotBox = (slot: EquipSlot) => {
         const e = c.equipment[slot];
-        return `<div class="eq-slot">${e ? `${equipGem(e)}<div>${equipTitle(e)}<small>${equipLine(e)}</small></div><button data-un="${slot}">해제</button>` : `<span class="gem empty"></span><div><b class="dim">${slotName(slot, p.data.currentClass)} 없음</b></div>`}</div>`;
-      }).join('');
+        const name = slotName(slot, p.data.currentClass);
+        const broken = e && durability(e) <= 0;
+        return `<button class="doll-slot ${slot} ${e ? 'filled' : ''} ${selSlot === slot ? 'sel' : ''} ${broken ? 'broken' : ''}" data-slot="${slot}" ${e ? `style="--c:${hex(GRADES[e.grade].color)}"` : ''}>
+          ${e ? equipGem(e) : ''}<span class="doll-label">${name}${e && e.plus ? ` +${e.plus}` : ''}</span>${e ? `<i class="dur" style="width:${durability(e)}%"></i>` : ''}</button>`;
+      };
+      const sel = selSlot ? c.equipment[selSlot] : undefined;
+      const info = sel
+        ? `${equipTitle(sel)}<br><small>${equipLine(sel) || '<span class="bad">망가짐 — 대장간에서 수리하세요</span>'} · 내구도 ${durability(sel)}/${EQUIP_MAX_DUR}</small> <button data-un="${selSlot}">해제</button>`
+        : selSlot
+          ? `<span class="dim">${slotName(selSlot, p.data.currentClass)} 칸이 비어 있습니다. 아래 목록에서 장착하세요.</span>`
+          : '<span class="dim">칸을 누르면 장비 정보가 나옵니다.</span>';
       const list = p.data.equips
+        .filter((e) => !selSlot || e.slot === selSlot)
         .slice()
         .sort((a, b) => b.tier * 10 + b.grade - (a.tier * 10 + a.grade))
         .map((e) => {
           const ok = p.canEquip(e);
-          return `<li>${equipGem(e)}<div>${equipTitle(e)}<small>${slotName(e.slot, e.cls)} · ${equipLine(e)}${e.cls && e.cls !== p.data.currentClass ? ` · ${CLASSES[e.cls].name} 전용` : ''}</small></div><button data-eq="${e.uid}" ${ok ? '' : 'disabled'}>장착</button></li>`;
+          return `<li>${equipGem(e)}<div>${equipTitle(e)}<small>${slotName(e.slot, e.cls)} · ${equipLine(e) || '<span class="bad">망가짐</span>'} · 내구 ${durability(e)}${e.cls && e.cls !== p.data.currentClass ? ` · ${CLASSES[e.cls].name} 전용` : ''}</small></div><button data-eq="${e.uid}" ${ok ? '' : 'disabled'}>장착</button></li>`;
         })
         .join('');
-      body = `<div class="scroll"><div class="eq-slots">${equipped}</div><h3>보관 중인 장비</h3><ul class="list">${list || '<li class="empty">장비가 없습니다</li>'}</ul></div>`;
-    } else if (tab === 'storage') {
-      const items = ITEM_LIST.filter((i) => p.count(i.id) > 0)
-        .map((i) => `<li>${itemGem(i.id)}<div><b>${i.name}</b><small>${i.description}</small></div><b class="num">${p.count(i.id)}</b></li>`)
-        .join('');
-      body = `<ul class="list scroll">${items || '<li class="empty">창고가 비어 있습니다</li>'}</ul>`;
+      const portrait = heroPortraitUrl(p.data.currentClass);
+      body = `<div class="scroll"><div class="doll">
+          <div class="doll-col">${(['helmet', 'armor', 'pants', 'boots'] as EquipSlot[]).map(slotBox).join('')}</div>
+          <div class="doll-body">${portrait ? `<img src="${portrait}" alt="">` : ''}<small>${cls.name} Lv.${c.level}</small></div>
+          <div class="doll-col">${(['weapon', 'necklace', 'ring'] as EquipSlot[]).map(slotBox).join('')}
+            <div class="doll-stats"><span>공격 <b>${st.atk}</b></span><span>방어 <b>${st.def}</b></span><span>HP <b>${st.maxHp}</b></span><span>치명 <b>${st.crit}%</b></span></div></div>
+        </div>
+        <div class="item-info">${info}</div>
+        <h3>보관 중인 장비 ${selSlot ? `<small>${slotName(selSlot, p.data.currentClass)}만 · <a data-slot="">전체 보기</a></small>` : ''}</h3><ul class="list">${list || '<li class="empty">장비가 없습니다</li>'}</ul></div>`;
     } else if (tab === 'stats') {
       const next = expToNext(c.level);
       const statRows = STAT_KEYS.map(
@@ -384,7 +409,6 @@ export class Screens {
          <button class="close">${ICONS.close}</button>
          <div class="tabs">
            <button data-tab="equip" class="${tab === 'equip' ? 'on' : ''}">장비</button>
-           <button data-tab="storage" class="${tab === 'storage' ? 'on' : ''}">창고</button>
            <button data-tab="stats" class="${tab === 'stats' ? 'on' : ''}">능력치${c.points ? ` <i class="dot">${c.points}</i>` : ''}</button>
            <button data-tab="quest" class="${tab === 'quest' ? 'on' : ''}">퀘스트</button>
          </div>
@@ -392,8 +416,13 @@ export class Screens {
        </div>`,
       onClose,
     );
-    const again = (t = tab) => this.inventory(p, quests, t, onChange, onClose);
-    this.on(s, '[data-tab]', (b) => again(b.dataset.tab as typeof tab));
+    const again = (t = tab, slot = selSlot) => this.inventory(p, quests, t, onChange, onClose, slot);
+    this.on(s, '[data-tab]', (b) => again(b.dataset.tab as typeof tab, undefined));
+    this.on(s, '[data-slot]', (b) => {
+      this.click();
+      const slot = (b.dataset.slot || undefined) as EquipSlot | undefined;
+      again(tab, slot === selSlot ? undefined : slot);
+    });
     this.on(s, '[data-eq]', (b) => {
       const e = p.data.equips.find((x) => x.uid === b.dataset.eq);
       if (e) p.equip(e);
@@ -414,6 +443,39 @@ export class Screens {
       p.allocate(b.dataset.stat5 as StatKey, 5);
       onChange();
       again();
+    });
+  }
+
+  // ---------------- 창고 (차원집에서만) ----------------
+  storage(p: Progress, onClose: () => void): void {
+    const groups: [string, string[]][] = [
+      ['광석·나무·재료', ['material']],
+      ['마력 정수', ['essence']],
+      ['가공품', ['processed']],
+      ['소모품·중요 물품', ['consumable', 'key']],
+    ];
+    const body = groups
+      .map(([title, kinds]) => {
+        const items = ITEM_LIST.filter((i) => kinds.includes(i.kind) && p.count(i.id) > 0);
+        if (!items.length) return '';
+        return `<h3>${title}</h3><div class="store-grid">${items.map((i) => `<div class="slot filled" data-item="${i.id}">${itemGem(i.id)}<span class="cnt">${p.count(i.id)}</span></div>`).join('')}</div>`;
+      })
+      .join('');
+    const s = this.open(
+      'storage',
+      `<div class="panel wide tall">
+         <button class="close">${ICONS.close}</button>
+         <h2>공유 창고 <small>모든 직업이 함께 씁니다 · 장비 ${p.data.equips.length}개는 캐릭터 → 장비에서</small></h2>
+         <div class="item-info">아이템을 누르면 정보가 나옵니다.</div>
+         <div class="scroll">${body || '<p class="hint">창고가 비어 있습니다.</p>'}</div>
+       </div>`,
+      onClose,
+    );
+    const infoEl = s.querySelector('.item-info')!;
+    this.on(s, '[data-item]', (el) => {
+      s.querySelectorAll('.slot.sel').forEach((x) => x.classList.remove('sel'));
+      el.classList.add('sel');
+      infoEl.innerHTML = slotInfo({ itemId: el.dataset.item!, count: p.count(el.dataset.item!) });
     });
   }
 
@@ -559,24 +621,49 @@ export class Screens {
     this.on(s, '[data-bp]', (b) => onBuy(b.dataset.bp as BuildingType));
   }
 
-  // ---------------- 대장간 (강화) ----------------
+  // ---------------- 대장간 (강화 · 수리) ----------------
   forge(p: Progress, onChange: () => void, onClose: () => void, selected?: string, message?: string): void {
     const c = p.cls;
-    const all: Equip[] = [...(Object.values(c.equipment).filter(Boolean) as Equip[]), ...p.data.equips];
-    const sel = all.find((e) => e.uid === selected) ?? all[0];
-    const list = all
-      .map((e) => `<li class="${e === sel ? 'sel' : ''}" data-pick="${e.uid}">${equipGem(e)}<div>${equipTitle(e)}<small>${equipLine(e)}${Object.values(c.equipment).includes(e) ? ' · 착용 중' : ''}</small></div></li>`)
+    const worn = Object.values(c.equipment).filter(Boolean) as Equip[];
+    const all: Equip[] = [...worn, ...p.data.equips];
+    const tools = p.data.tools;
+    const toolRows = (['pickaxe', 'axe'] as const)
+      .filter((k) => p.flag(k === 'axe' ? 'tool_axe' : 'tool_pickaxe'))
+      .map((k) => `<li class="${selected === `tool:${k}` ? 'sel' : ''}" data-pick="tool:${k}"><span class="key">${k === 'axe' ? '🪓' : '⛏'}</span><div><b>${k === 'axe' ? '도끼' : '곡괭이'}</b><small>내구도 <span class="${tools[k] <= 0 ? 'bad' : ''}">${tools[k]}/${TOOL_MAX_DUR}</span></small></div></li>`)
       .join('');
-    let detail = '<p class="hint">강화할 장비가 없습니다.</p>';
-    if (sel) {
+    const selTool = selected?.startsWith('tool:') ? (selected.slice(5) as 'pickaxe' | 'axe') : null;
+    const sel = selTool ? undefined : (all.find((e) => e.uid === selected) ?? all[0]);
+    const durTxt = (e: Equip) => `<span class="${durability(e) <= 0 ? 'bad' : durability(e) < 30 ? 'warn' : 'dim'}">내구 ${durability(e)}</span>`;
+    const list = all
+      .map((e) => `<li class="${e === sel ? 'sel' : ''}" data-pick="${e.uid}">${equipGem(e)}<div>${equipTitle(e)}<small>${equipLine(e) || '<span class="bad">망가짐</span>'} · ${durTxt(e)}${worn.includes(e) ? ' · 착용 중' : ''}</small></div></li>`)
+      .join('');
+    const costLine = (ore: string, count: number, gold: number) => {
+      const have = p.count(ore);
+      return `<p>${inlineGem(ore)}${ITEMS[ore].name} ${count}개 <span class="${have >= count ? 'dim' : 'bad'}">(창고 ${have})</span> · ${gold} G</p>`;
+    };
+    let detail = '<p class="hint">장비가 없습니다.</p>';
+    if (selTool) {
+      const cost = toolRepairCost(tools[selTool]);
+      detail = `<p><b>${selTool === 'axe' ? '도끼' : '곡괭이'}</b> · 내구도 ${tools[selTool]}/${TOOL_MAX_DUR}</p><p class="hint">한 번 캘 때마다 내구도가 1 줄어듭니다. 0이 되면 채집할 수 없습니다.</p>`;
+      if (cost) {
+        const ok = p.count(cost.ore) >= cost.count && p.data.gold >= cost.gold;
+        detail += `<h3>수리</h3>${costLine(cost.ore, cost.count, cost.gold)}<div class="menu"><button class="primary" data-repair-tool="${selTool}" ${ok ? '' : 'disabled'}>수리하기</button></div>`;
+      } else detail += '<p class="ok">수리할 필요가 없습니다.</p>';
+    } else if (sel) {
       const cost = enhanceCost(sel);
-      if (!cost) detail = `<p>${equipTitle(sel)}</p><p class="hint">이미 최대 강화(+10)입니다.</p>`;
+      detail = `<p>${equipTitle(sel)}</p><p class="hint">${equipLine(sel) || '<span class="bad">망가짐</span>'} · 내구도 ${durability(sel)}/${EQUIP_MAX_DUR}</p>`;
+      const rc = repairCost(sel);
+      if (rc) {
+        const ok = p.count(rc.ore) >= rc.count && p.data.gold >= rc.gold;
+        detail += `<h3>수리 <small>+${sel.plus} 장비는 ${ITEMS[rc.ore].name}으로 고칩니다</small></h3>${costLine(rc.ore, rc.count, rc.gold)}<div class="menu"><button data-repair ${ok ? '' : 'disabled'}>수리하기</button></div>`;
+      }
+      if (!cost) detail += '<p class="hint">이미 최대 강화(+10)입니다.</p>';
       else {
         const next = { ...sel, plus: sel.plus + 1 };
         const have = p.count(cost.stone);
         const ok = have >= cost.count && p.data.gold >= cost.gold;
-        detail = `<p>${equipTitle(sel)} → <b>+${next.plus}</b></p>
-          <p class="hint">${equipLine(sel)}<br>→ ${equipLine(next)}</p>
+        detail += `<h3>강화 → +${next.plus}</h3>
+          <p class="hint">→ ${equipLine({ ...next, dur: EQUIP_MAX_DUR })}${durability(sel) <= 0 ? " (수리 후)" : ""}</p>
           <p>${inlineGem(cost.stone)}${ITEMS[cost.stone].name} ${cost.count}개 <span class="${have >= cost.count ? 'dim' : 'bad'}">(보유 ${have})</span></p>
           <p>${cost.gold} G · 성공 확률 <b>${Math.round(cost.rate * 100)}%</b></p>
           <p class="hint">실패해도 단계가 내려가지 않지만 재료는 사라집니다.</p>
@@ -589,11 +676,31 @@ export class Screens {
          <button class="close">${ICONS.close}</button>
          <h2>대장장이 고른의 대장간 <small class="gold">${p.data.gold} G</small></h2>
          ${message ? `<div class="notice">${message}</div>` : ''}
-         <div class="split"><ul class="list pick scroll">${list || '<li class="empty">장비 없음</li>'}</ul><div class="detail">${detail}</div></div>
+         <div class="split"><ul class="list pick scroll">${toolRows}${list || '<li class="empty">장비 없음</li>'}</ul><div class="detail">${detail}</div></div>
        </div>`,
       onClose,
     );
-    this.on(s, '[data-pick]', (el) => this.forge(p, onChange, onClose, el.dataset.pick));
+    const again = (id?: string, msg?: string) => this.forge(p, onChange, onClose, id, msg);
+    this.on(s, '[data-pick]', (el) => again(el.dataset.pick));
+    this.on(s, '[data-repair-tool]', (b) => {
+      const k = b.dataset.repairTool as 'pickaxe' | 'axe';
+      const cost = toolRepairCost(tools[k]);
+      if (!cost || p.count(cost.ore) < cost.count || p.data.gold < cost.gold) return;
+      p.take(cost.ore, cost.count);
+      p.data.gold -= cost.gold;
+      tools[k] = TOOL_MAX_DUR;
+      again(`tool:${k}`, '<b class="ok">수리 완료!</b>');
+    });
+    this.on(s, '[data-repair]', () => {
+      if (!sel) return;
+      const rc = repairCost(sel);
+      if (!rc || p.count(rc.ore) < rc.count || p.data.gold < rc.gold) return;
+      p.take(rc.ore, rc.count);
+      p.data.gold -= rc.gold;
+      sel.dur = EQUIP_MAX_DUR;
+      onChange();
+      again(sel.uid, '<b class="ok">수리 완료!</b>');
+    });
     this.on(s, '[data-enh]', () => {
       if (!sel) return;
       const cost = enhanceCost(sel)!;
@@ -603,7 +710,7 @@ export class Screens {
       const success = Math.random() < cost.rate;
       if (success) sel.plus++;
       onChange();
-      this.forge(p, onChange, onClose, sel.uid, success ? `<b class="ok">강화 성공! +${sel.plus}</b>` : '<b class="bad">강화 실패…</b>');
+      again(sel.uid, success ? `<b class="ok">강화 성공! +${sel.plus}</b>` : '<b class="bad">강화 실패…</b>');
     });
   }
 

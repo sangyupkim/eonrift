@@ -1,0 +1,89 @@
+import { AmbientLight, BufferGeometry, DirectionalLight, Group, Mesh, MeshLambertMaterial, OrthographicCamera, Scene, Sphere, WebGLRenderer } from 'three';
+import { CLASSES, type ClassId } from '../data/classes';
+import type { Equip } from '../data/equipment';
+import { buildHero } from '../models/hero';
+import { buildEquipGeometry, buildItemGeometry } from '../models/items';
+
+/**
+ * 아이템 모델을 한 번 그려서 이미지로 만들어 두는 아이콘 공장.
+ * 작은 WebGL 캔버스 하나로 그리고 dataURL로 저장해 UI의 <img>에 쓴다.
+ */
+let renderer: WebGLRenderer | null = null;
+let failed = false;
+const scene = new Scene();
+const camera = new OrthographicCamera(-1, 1, 1, -1, 0.1, 20);
+const material = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
+const cache = new Map<string, string>();
+
+scene.add(new AmbientLight(0xffffff, 1.6));
+const sun = new DirectionalLight(0xffffff, 2.4);
+sun.position.set(2, 4, 3);
+scene.add(sun);
+
+function getRenderer(w: number, h: number): WebGLRenderer | null {
+  if (failed) return null;
+  try {
+    if (!renderer) {
+      renderer = new WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+      renderer.setClearColor(0x000000, 0);
+    }
+    renderer.setPixelRatio(1);
+    renderer.setSize(w, h, false);
+    return renderer;
+  } catch {
+    failed = true;
+    return null;
+  }
+}
+
+/** 쿼터뷰 각도에서 물체가 꽉 차게 찍는다 */
+function snap(obj: Group | Mesh, w: number, h: number, radius: number, cy: number): string {
+  const r = getRenderer(w, h);
+  if (!r) return '';
+  const aspect = w / h;
+  camera.left = -radius * aspect;
+  camera.right = radius * aspect;
+  camera.top = radius;
+  camera.bottom = -radius;
+  camera.position.set(3.2, cy + 3, 4.2);
+  camera.lookAt(0, cy, 0);
+  camera.updateProjectionMatrix();
+  scene.add(obj);
+  r.render(scene, camera);
+  scene.remove(obj);
+  return r.domElement.toDataURL('image/png');
+}
+
+function geoIcon(key: string, make: () => BufferGeometry): string {
+  const hit = cache.get(key);
+  if (hit !== undefined) return hit;
+  const g = make();
+  g.computeBoundingSphere();
+  const s = g.boundingSphere ?? new Sphere();
+  g.translate(-s.center.x, -s.center.y, -s.center.z);
+  const url = snap(new Mesh(g, material), 96, 96, s.radius * 1.05, 0);
+  g.dispose();
+  cache.set(key, url);
+  return url;
+}
+
+export function itemIconUrl(id: string): string {
+  return geoIcon(`i:${id}`, () => buildItemGeometry(id));
+}
+
+export function equipIconUrl(e: Equip): string {
+  return geoIcon(`e:${e.slot}:${e.cls ?? ''}:${e.tier}:${e.grade}`, () => buildEquipGeometry(e));
+}
+
+/** 장비창 왼쪽에 서 있는 캐릭터 */
+export function heroPortraitUrl(cls: ClassId): string {
+  const key = `h:${cls}`;
+  const hit = cache.get(key);
+  if (hit !== undefined) return hit;
+  const rig = buildHero(material, CLASSES[cls].look);
+  rig.root.rotation.y = 0.35;
+  const url = snap(rig.root, 180, 260, 1.05, 0.95);
+  for (const m of rig.meshes) m.geometry.dispose();
+  cache.set(key, url);
+  return url;
+}
