@@ -252,7 +252,7 @@ export class Hud {
   }
 
   setObjective(text: string): void {
-    this.objectiveEl.textContent = text ? `▶ ${text}` : '';
+    this.objectiveEl.textContent = text ? text.split('\n').map((l, i) => (i === 0 ? `▶ ${l}` : `· ${l}`)).join('\n') : '';
     this.objectiveEl.classList.toggle('hidden', !text);
   }
 

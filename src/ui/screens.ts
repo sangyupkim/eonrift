@@ -1,4 +1,5 @@
-import { GAME_VERSION } from '../config';
+import { BUILD_ID, GAME_VERSION } from '../config';
+import { applyUpdate, fetchRemoteVersion, isNewer, type RemoteVersion } from './update';
 import { CLASSES, CLASS_ORDER, expToNext, MAX_LEVEL, MAX_SKILL_LEVEL, SKILL_LEARN, skillUpgradeCost, STAT_INFO, STAT_KEYS, type ClassId, type StatKey } from '../data/classes';
 import { durability, EQUIP_SLOTS, EQUIP_MAX_DUR, enhanceCost, repairCost, toolRepairCost, TOOL_MAX_DUR, type EquipSlot, equipName, equipStats, equipValue, GRADES, slotName, type Equip } from '../data/equipment';
 import { BUILDINGS, BUILD_ORDER, FACTORY_SIZES, RECIPES, type BuildingType } from '../data/factory';
@@ -145,12 +146,31 @@ export class Screens {
            ${hasSave ? '<button class="primary" data-a="continue">이어하기</button>' : ''}
            <button class="${hasSave ? '' : 'primary'}" data-a="new">새로 시작</button>
            ${canInstall() ? '<button class="install" data-a="install">📲 앱으로 설치</button>' : ''}
+           <button class="update" data-a="update">🔄 업데이트 확인</button>
          </div>
        </div>
-       <div class="version">v${GAME_VERSION} · 모바일 가로 화면 권장</div>`,
+       <div class="version">v${GAME_VERSION} (${BUILD_ID}) · 모바일 가로 화면 권장</div>`,
     );
     this.on(s, '[data-a="continue"]', onContinue);
     this.on(s, '[data-a="install"]', () => void promptInstall());
+    // 업데이트 확인 → 새 버전이 있으면 같은 버튼이 "업데이트" 버튼으로 바뀐다
+    let remote: RemoteVersion | null = null;
+    this.on(s, '[data-a="update"]', (b) => {
+      if (remote && isNewer(remote)) {
+        b.textContent = '업데이트 중…';
+        void applyUpdate(remote);
+        return;
+      }
+      b.textContent = '확인 중…';
+      void fetchRemoteVersion().then((r) => {
+        remote = r;
+        if (!r) b.textContent = '⚠ 확인 실패 (인터넷 연결 확인)';
+        else if (isNewer(r)) {
+          b.textContent = `⬆ 새 버전 v${r.version} 받기`;
+          b.classList.add('primary');
+        } else b.textContent = `✔ 최신 버전입니다 (v${GAME_VERSION})`;
+      });
+    });
     this.on(s, '[data-a="new"]', () => {
       if (hasSave && !confirm('저장된 진행을 지우고 새로 시작할까요?')) return;
       onNew();
@@ -252,7 +272,7 @@ export class Screens {
   }
 
   // ---------------- 던전 가방: 누르면 정보, 반대쪽 가방을 누르면 옮기기 ----------------
-  bag(bag: Bag, dimBag: Bag, onMove: (from: 'bag' | 'dim', index: number) => boolean, onClose: () => void): void {
+  bag(bag: Bag, dimBag: Bag, onMove: (from: 'bag' | 'dim', index: number) => boolean, onClose: () => void, onEquip?: () => void): void {
     let info = '아이템을 누르면 정보가 나옵니다. 그다음 반대쪽 가방을 누르면 그쪽으로 옮겨집니다.';
     let sel: { from: 'bag' | 'dim'; i: number } | null = null;
     const render = () => {
@@ -267,7 +287,7 @@ export class Screens {
         'bag',
         `<div class="panel wide">
            <button class="close">${ICONS.close}</button>
-           <h2>가방 <small>${bag.used}/${bag.slots.length}</small></h2>
+           <h2>가방 <small>${bag.used}/${bag.slots.length}</small> ${onEquip ? '<button class="tool-sm" data-a="equip">🛡 장비 교체</button>' : ''}</h2>
            <div class="bag-grid ${target === 'bag' ? 'drop' : ''}" data-bag="bag">${bag.slots.map((x, i) => cell(x, 'bag', i)).join('')}</div>
            <div class="item-info">${info}</div>
            <h3>차원가방 <small>쓰러져도 지켜지는 가방 · ${dimBag.used}/${dimBag.slots.length}</small></h3>
@@ -275,6 +295,7 @@ export class Screens {
          </div>`,
         onClose,
       );
+      if (onEquip) this.on(s, '[data-a="equip"]', onEquip);
       s.querySelectorAll<HTMLElement>('.bag-grid').forEach((grid) =>
         grid.addEventListener('click', (e) => {
           const el = (e.target as HTMLElement).closest<HTMLElement>('.slot');
@@ -302,6 +323,21 @@ export class Screens {
     render();
   }
 
+  // ---------------- 예/아니오 ----------------
+  ask(title: string, text: string, onYes: () => void, onNo: () => void): void {
+    const s = this.open(
+      'ask',
+      `<div class="panel">
+         <h2>${title}</h2>
+         <p class="hint">${text}</p>
+         <div class="menu two"><button class="primary" data-a="yes">예</button><button data-a="no">아니오</button></div>
+       </div>`,
+      onNo,
+    );
+    this.on(s, '[data-a="yes"]', onYes);
+    this.on(s, '[data-a="no"]', () => this.close());
+  }
+
   // ---------------- 결과 ----------------
   result(info: ResultInfo, onContinue: () => void): void {
     const rows = [...info.items].map(([id, n]) => `<li>${itemGem(id)}${ITEMS[id].name}<b>× ${n}</b></li>`).join('');
@@ -325,7 +361,8 @@ export class Screens {
   }
 
   // ---------------- 캐릭터: 장비 · 창고 · 능력치 · 퀘스트 ----------------
-  inventory(p: Progress, quests: Quests, tab: 'equip' | 'stats' | 'quest', onChange: () => void, onClose: () => void, selSlot?: EquipSlot): void {
+  /** field: 던전 안이면 가방들. 장비는 창고 대신 가방에서 꺼내고 가방으로 넣는다 */
+  inventory(p: Progress, quests: Quests, tab: 'equip' | 'stats' | 'quest', onChange: () => void, onClose: () => void, selSlot?: EquipSlot, field?: Bag[]): void {
     const cls = CLASSES[p.data.currentClass];
     const st = p.stats();
     const c = p.cls;
@@ -345,7 +382,8 @@ export class Screens {
         : selSlot
           ? `<span class="dim">${slotName(selSlot, p.data.currentClass)} 칸이 비어 있습니다. 아래 목록에서 장착하세요.</span>`
           : '<span class="dim">칸을 누르면 장비 정보가 나옵니다.</span>';
-      const list = p.data.equips
+      const pool = field ? field.flatMap((b) => b.equips()) : p.data.equips;
+      const list = pool
         .filter((e) => !selSlot || e.slot === selSlot)
         .slice()
         .sort((a, b) => b.tier * 10 + b.grade - (a.tier * 10 + a.grade))
@@ -362,7 +400,7 @@ export class Screens {
             <div class="doll-stats"><span>공격 <b>${st.atk}</b></span><span>방어 <b>${st.def}</b></span><span>HP <b>${st.maxHp}</b></span><span>치명 <b>${st.crit}%</b></span></div></div>
         </div>
         <div class="item-info">${info}</div>
-        <h3>보관 중인 장비 ${selSlot ? `<small>${slotName(selSlot, p.data.currentClass)}만 · <a data-slot="">전체 보기</a></small>` : ''}</h3><ul class="list">${list || '<li class="empty">장비가 없습니다</li>'}</ul></div>`;
+        <h3>${field ? '가방 속 장비 <small>던전에서는 가방에 든 장비로만 바꿀 수 있습니다</small>' : '보관 중인 장비'} ${selSlot ? `<small>${slotName(selSlot, p.data.currentClass)}만 · <a data-slot="">전체 보기</a></small>` : ''}</h3><ul class="list">${list || '<li class="empty">장비가 없습니다</li>'}</ul></div>`;
     } else if (tab === 'stats') {
       const next = expToNext(c.level);
       const statRows = STAT_KEYS.map(
@@ -417,7 +455,7 @@ export class Screens {
        </div>`,
       onClose,
     );
-    const again = (t = tab, slot = selSlot) => this.inventory(p, quests, t, onChange, onClose, slot);
+    const again = (t = tab, slot = selSlot) => this.inventory(p, quests, t, onChange, onClose, slot, field);
     this.on(s, '[data-tab]', (b) => again(b.dataset.tab as typeof tab, undefined));
     this.on(s, '[data-slot]', (b) => {
       this.click();
@@ -425,13 +463,35 @@ export class Screens {
       again(tab, slot === selSlot ? undefined : slot);
     });
     this.on(s, '[data-eq]', (b) => {
+      if (field) {
+        // 가방 칸의 장비와 끼고 있던 장비를 맞바꾼다
+        for (const bag of field) {
+          const i = bag.slots.findIndex((x) => x?.equip?.uid === b.dataset.eq);
+          if (i < 0) continue;
+          const e = bag.slots[i]!.equip!;
+          const prev = c.equipment[e.slot];
+          bag.slots[i] = prev ? { itemId: 'equip', count: 1, equip: prev } : null;
+          c.equipment[e.slot] = e;
+          break;
+        }
+        onChange();
+        return again();
+      }
       const e = p.data.equips.find((x) => x.uid === b.dataset.eq);
       if (e) p.equip(e);
       onChange();
       again();
     });
     this.on(s, '[data-un]', (b) => {
-      p.unequip(b.dataset.un as 'weapon');
+      const slot = b.dataset.un as EquipSlot;
+      if (field) {
+        const e = c.equipment[slot];
+        if (e && field.some((bag) => bag.addEquip(e))) delete c.equipment[slot];
+        else if (e) alert('가방에 빈 칸이 없습니다');
+        onChange();
+        return again();
+      }
+      p.unequip(slot);
       onChange();
       again();
     });

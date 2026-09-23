@@ -1,7 +1,7 @@
 import { MAIN_QUESTS } from '../data/quests';
 import { npcName } from '../ui/screens';
 import type { Progress } from './Progress';
-import type { Quests } from './Quests';
+import { objectiveNeed, objectiveProgress, objectiveText, type Quests } from './Quests';
 import type { NpcId } from './scenes/VillageScene';
 
 /** 지금 해야 할 일 (HUD 목표 표시). 메인 퀘스트가 먼저, 그 뒤로는 차원석 이야기 */
@@ -65,4 +65,21 @@ export function hasStory(npc: NpcId, p: Progress): boolean {
 export function resetForNewCycle(p: Progress): void {
   const keep = new Set(['intro', 'returned', 'legend', 'home', 'factoryBuilt', 'endingA', 'endingB', 'tool_pickaxe', 'tool_axe', 'stone1Talk']);
   for (const k of Object.keys(p.data.flags)) if (!keep.has(k) && !k.startsWith('bp_')) delete p.data.flags[k];
+}
+
+/** 던전 HUD용: 진행 중인 퀘스트의 남은 목표 (최대 3줄) */
+export function questLines(p: Progress, quests: Quests): string[] {
+  const lines: string[] = [];
+  for (const q of quests.activeList()) {
+    const prog = quests.progress(q);
+    if (prog.every((x) => x.cur >= x.need)) lines.push(`${q.title}: 완료! ${npcName(q.npc)}에게 보고`);
+    else lines.push(`${q.title}: ${prog.filter((x) => x.cur < x.need).map((x) => `${x.text} ${x.cur}/${x.need}`).join(', ')}`);
+  }
+  for (const d of quests.state.daily.list) {
+    if (d.claimed) continue;
+    const need = objectiveNeed(d.objective);
+    const cur = Math.min(need, objectiveProgress(d.objective, d.progress, { count: (id) => p.count(id), stones: p.stoneCount, cleared: p.data.cleared, flag: (f) => p.flag(f) }));
+    if (cur < need) lines.push(`[일일] ${objectiveText(d.objective)} ${cur}/${need}`);
+  }
+  return lines.slice(0, 3);
 }

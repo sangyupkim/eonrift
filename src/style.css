@@ -1831,3 +1831,16 @@ img.gem-inline.ico {
 .hud[data-mode='home'] .act.ult {
   display: none;
 }
+.objective {
+  white-space: pre-line;
+}
+.hud[data-mode='dungeon'] .objective {
+  font-size: 11px;
+}
+.menu.two {
+  grid-template-columns: 1fr 1fr;
+}
+.title-menu button.update {
+  font-size: 13px;
+  background: rgba(255, 255, 255, 0.06);
+}

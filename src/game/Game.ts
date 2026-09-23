@@ -23,7 +23,7 @@ import type { Monster } from './Monster';
 import { Player } from './Player';
 import { DIM_BAG_MAX, deleteSave, hasSave, loadSave, newSave, Progress, stageIndex, stageOf, type SaveData } from './Progress';
 import { Quests } from './Quests';
-import { hasStory, objective, resetForNewCycle, scriptFor } from './Story';
+import { hasStory, objective, questLines, resetForNewCycle, scriptFor } from './Story';
 import { DungeonScene, type NodeInstance } from './scenes/DungeonScene';
 import { HomeScene } from './scenes/HomeScene';
 import type { Interactable, Level } from './scenes/Level';
@@ -432,6 +432,7 @@ export class Game {
           run.dimBag,
           (from, i) => (from === 'bag' ? run.bag.moveTo(i, run.dimBag) : run.dimBag.moveTo(i, run.bag)) > 0,
           () => this.resume(),
+          () => this.screens.inventory(this.progress, this.quests, 'equip', () => this.applyStats(), () => this.resume(), undefined, [run.bag, run.dimBag]),
         ),
       );
     } else this.openInventory('equip');
@@ -884,9 +885,42 @@ export class Game {
     p.data.cleared = Math.max(p.data.cleared, g);
     this.quests.event({ type: 'stage' });
     this.audio.play('portal');
-    this.hud.toast(`${run.tier}-${run.stage} 클리어! 워프 게이트가 열렸습니다`, 3000);
     this.saveNow();
     this.refreshHud();
+    this.openMenu(() =>
+      this.screens.ask(
+        `${run.tier}-${run.stage} 클리어!`,
+        '워프 게이트가 열렸습니다. 워프 게이트로 이동하시겠습니까?',
+        () => {
+          this.afterMenu = () => this.moveToWarp();
+          this.screens.close();
+        },
+        () => this.resume(),
+      ),
+    );
+  }
+
+  /** 워프 게이트 바로 앞 빈 바닥으로 순간이동 */
+  private moveToWarp(): void {
+    const lv = this.level;
+    if (!(lv instanceof DungeonScene)) return;
+    const gate = lv.interactables.find((i) => i.id === 'exit');
+    if (!gate) return;
+    const pos = this.player.position;
+    for (let r = 1.6; r <= 4; r += 0.8) {
+      for (let k = 0; k < 8; k++) {
+        const a = (k / 8) * Math.PI * 2;
+        const x = gate.x + Math.sin(a) * r;
+        const z = gate.z + Math.cos(a) * r;
+        if (!isFloor(lv.grid, Math.floor(x / TILE), Math.floor(z / TILE))) continue;
+        if (lv.obstacles.some((o) => Math.hypot(o.x - x, o.z - z) < o.radius + PLAYER.radius)) continue;
+        lv.effects.ring(pos.x, pos.z, 1.5, 0x7affc0, 0.4);
+        this.player.setPosition(x, z);
+        lv.effects.pillar(x, z, 0x7affc0);
+        this.audio.play('portal');
+        return;
+      }
+    }
   }
 
   private openWarp(): void {
@@ -1422,7 +1456,8 @@ export class Game {
       const d = this.level;
       const left = d.aliveCount;
       const boss = d.boss && d.boss.alive ? ` · ${d.boss.name}` : '';
-      this.hud.setObjective(left > 0 ? `남은 몬스터 ${left}${boss} (M: 지도)` : '워프 게이트로 가자 (다음 방 / 마을)');
+      const head = left > 0 ? `남은 몬스터 ${left}${boss} (M: 지도)` : '워프 게이트로 가자 (다음 방 / 마을)';
+      this.hud.setObjective([head, ...questLines(p, this.quests)].join('\n'));
     } else this.hud.setObjective(objective(p, this.quests));
     this.hud.setPotions(p.count('potion'));
     this.hud.setDodgeCooldown(pl.rollCooldown / (PLAYER.rollCooldown + PLAYER.rollTime));

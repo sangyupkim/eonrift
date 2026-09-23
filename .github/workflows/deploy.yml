@@ -26,7 +26,7 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
-      - run: mkdir _site && cp -r index.html assets manifest.webmanifest icon.svg sw.js .nojekyll _site/
+      - run: mkdir _site && cp -r index.html version.json assets manifest.webmanifest icon*.png icon.svg sw.js .nojekyll _site/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
