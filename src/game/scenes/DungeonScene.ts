@@ -65,6 +65,7 @@ export interface DungeonHooks {
   exit: () => void;
   gather: (node: NodeInstance) => void;
   shake: (amount: number) => void;
+  announce: (text: string) => void;
 }
 
 const ARCH_WEIGHTS: Archetype[] = ['melee', 'melee', 'melee', 'ranged', 'ranged', 'charger', 'bomber', 'tank'];
@@ -116,6 +117,7 @@ export class DungeonScene extends Level {
       summon: (arch, x, z) => self.spawnMonster(arch, 'normal', x, z, -1, true),
       burst: (x, y, z, c, n, p) => self.particles.burst(x, y, z, c, n, p),
       shake: (a) => hooks.shake(a),
+      announce: (t) => hooks.announce(t),
     };
 
     this.ngPlus = ngPlus;

@@ -94,6 +94,17 @@ export function starterWeapon(cls: ClassId): Equip {
   return { uid: `starter-${cls}`, slot: 'weapon', cls, tier: 1, grade: 0, plus: 0 };
 }
 
+/** 저장 JSON 문자열을 검사하고 지금 구조로 바꾼다 (저장 코드 불러오기용) */
+export function parseSave(raw: string): SaveData | null {
+  try {
+    const data = JSON.parse(raw) as SaveData & { maxTier?: number };
+    if (!data || data.version !== 1 || !data.classes || !data.currentClass) return null;
+    return migrate({ ...newSave(), ...data });
+  } catch {
+    return null;
+  }
+}
+
 export function loadSave(): SaveData | null {
   try {
     const raw = localStorage.getItem(KEY);
@@ -128,6 +139,8 @@ function migrate(d: SaveData & { maxTier?: number }): SaveData {
   if (d.cleared === undefined || d.cleared === null) d.cleared = Math.max(0, ((d.maxTier ?? 1) - 1) * 10);
   delete d.maxTier;
   d.quests ??= newQuestState();
+  // 중간보스 퀘스트가 생기기 전에 이미 전설 퀘스트를 받았거나 끝낸 저장은 건너뛴다
+  if ((d.quests.done.includes('m5_legend') || d.quests.active.m5_legend) && !d.quests.done.includes('m5_mid')) d.quests.done.push('m5_mid');
   for (const q of d.quests.daily.list) q.accepted ??= q.progress > 0;
   // 예전 방식으로 차원집을 연 저장은 튜토리얼 퀘스트를 끝낸 것으로 본다
   if (d.flags.home && d.quests.done.length === 0) {

@@ -19,6 +19,9 @@ export class Input {
   constructor(canvas: HTMLElement) {
     window.addEventListener('keydown', (e) => {
       if (e.repeat) return;
+      // 글자 입력칸(저장 코드)에서는 게임 키로 쓰지 않는다
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === 'TEXTAREA' || tag === 'INPUT') return;
       const key = e.key.toLowerCase();
       this.keys.add(key);
       const action = KEY_ACTIONS[key];

@@ -1,4 +1,5 @@
 import { bustUrl, itemIconUrl } from '../ui/itemIcons';
+import { decodeSave, encodeSave } from './saveCode';
 import { gearLook } from '../models/items';
 import { TOOL_KIND_NAMES, TOOL_TIER_NAMES, toolBonusChance, toolName, toolSpeed, toolWear, type ToolKind } from '../data/tools';
 import { MeshLambertMaterial, OrthographicCamera, PCFShadowMap, Plane, Raycaster, Vector2, Vector3, WebGLRenderer } from 'three';
@@ -177,6 +178,23 @@ export class Game {
         const data = loadSave();
         this.startGame(data ?? newSave(), !data);
       },
+      () => {
+        let loaded = false;
+        this.screens.loadCode(
+          (code, done) => {
+            void decodeSave(code).then((data) => {
+              if (!data) return done('<span class="bad">코드를 읽을 수 없습니다. 전부 복사했는지 확인해 주세요.</span>');
+              if (hasSave() && !confirm('지금 기기의 진행을 이 코드의 내용으로 바꿀까요?')) return done('취소했습니다');
+              loaded = true;
+              new Progress(data).save();
+              this.startGame(data, false);
+            });
+          },
+          () => {
+            if (!loaded) this.showTitle();
+          },
+        );
+      },
     );
   }
 
@@ -331,6 +349,10 @@ export class Game {
       exit: () => this.openWarp(),
       gather: (n) => this.startGather(n),
       shake: (a) => (this.shakeT = Math.max(this.shakeT, a)),
+      announce: (t) => {
+        this.hud.toast(t, 3000);
+        this.audio.play('portal');
+      },
     });
     const continuing = !background && this.run !== null;
     const prevPlayer = this.player;
@@ -435,6 +457,10 @@ export class Game {
           this.run = null;
           this.enterDungeon(1, 1, true);
           this.showTitle();
+        },
+        onSaveCode: () => {
+          this.saveNow();
+          void encodeSave(this.progress.data).then((code) => this.screens.saveCode(code, () => this.resume()));
         },
         onClose: () => this.resume(),
       }),
@@ -828,6 +854,12 @@ export class Game {
   // =============== 전투 ===============
   private damageMonster(m: Monster, mult: number, knock: number, fx: number, fz: number): void {
     if (!m.alive) return;
+    if (m.shielded) {
+      m.damage(0, fx, fz, 0);
+      const s = this.toScreen(m.x, m.rig.height * m.rig.root.scale.y + 0.3, m.z);
+      this.hud.floatText(s.x, s.y, '보호막', '#7fd6ff', 'small');
+      return;
+    }
     const st = this.progress.stats();
     const crit = Math.random() * 100 < st.crit;
     const raw = st.atk * mult * (0.9 + Math.random() * 0.2) * (crit ? 1.6 : 1);
@@ -1342,7 +1374,8 @@ export class Game {
       if (prev && prev.type === 'belt' && tool === 'belt') prev.dir = dir;
     }
     if (existing) {
-      if (existing.type === tool && !from) {
+      // 이미 지은 건물을 누르면 (마력선·레일 도구가 아닐 때) 방향을 돌린다
+      if (!from && (existing.type === tool || (tool !== 'belt' && tool !== 'wire' && existing.type !== 'wire'))) {
         f.rotate(cell.x, cell.y);
         this.audio.play('click');
       } else if (existing.type === tool && tool === 'belt') existing.dir = dir;
@@ -1492,7 +1525,8 @@ export class Game {
     if (level instanceof DungeonScene && this.run) {
       const boss = level.boss;
       if (boss && boss.alive && boss.aggro) {
-        this.hud.setBoss(`${boss.name}${boss.phase2 ? ' · 격노' : ''}`, boss.hp / boss.maxHp);
+        const tag = boss.shielded ? ` · 보호막 (수호병 ${boss.guardsLeft})` : boss.phase2 ? ' · 격노' : '';
+        this.hud.setBoss(`${boss.name}${tag}`, boss.hp / boss.maxHp, boss.bars, boss.shielded);
         this.audio.playMusic('boss');
       }
       if (!this.run.roomCleared && level.exitOpen) this.roomClear();

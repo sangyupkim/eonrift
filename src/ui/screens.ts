@@ -152,7 +152,7 @@ export class Screens {
   }
 
   // ---------------- 타이틀 ----------------
-  title(hasSave: boolean, onNew: () => void, onContinue: () => void): void {
+  title(hasSave: boolean, onNew: () => void, onContinue: () => void, onLoadCode?: () => void): void {
     const s = this.open(
       'title',
       `<div class="title-box">
@@ -162,6 +162,7 @@ export class Screens {
            ${hasSave ? '<button class="primary" data-a="continue">이어하기</button>' : ''}
            <button class="${hasSave ? '' : 'primary'}" data-a="new">새로 시작</button>
            ${canInstall() ? '<button class="install" data-a="install">📲 앱으로 설치</button>' : ''}
+           <button class="update" data-a="loadcode">📥 저장 코드로 불러오기</button>
            <button class="update" data-a="update">🔄 업데이트 확인</button>
          </div>
        </div>
@@ -169,6 +170,7 @@ export class Screens {
     );
     this.on(s, '[data-a="continue"]', onContinue);
     this.on(s, '[data-a="install"]', () => void promptInstall());
+    if (onLoadCode) this.on(s, '[data-a="loadcode"]', onLoadCode);
     // 업데이트 확인 → 새 버전이 있으면 같은 버튼이 "업데이트" 버튼으로 바뀐다
     let remote: RemoteVersion | null = null;
     this.on(s, '[data-a="update"]', (b) => {
@@ -257,6 +259,7 @@ export class Screens {
     onToggleShadows: (on: boolean) => void;
     onToggleSound: (on: boolean) => void;
     onTitle: () => void;
+    onSaveCode: () => void;
     onClose: () => void;
   }): void {
     const s = this.open(
@@ -270,6 +273,7 @@ export class Screens {
            ${opts.inDungeon ? '<button data-a="giveup" class="danger">포기하고 쓰러지기</button>' : ''}
            <label class="toggle"><input type="checkbox" data-t="shadow" ${opts.shadows ? 'checked' : ''}/> 그림자</label>
            <label class="toggle"><input type="checkbox" data-t="sound" ${opts.sound ? 'checked' : ''}/> 소리</label>
+           <button data-a="savecode">💾 저장 코드 만들기</button>
            <button data-a="title">타이틀로 (자동 저장)</button>
          </div>
          ${opts.seed !== undefined ? `<div class="seed">던전 시드 ${opts.seed}</div>` : ''}
@@ -283,6 +287,7 @@ export class Screens {
       if (confirm('포기하면 일반 가방의 아이템을 모두 잃습니다. 계속할까요?')) opts.onGiveUp();
     });
     this.on(s, '[data-a="title"]', opts.onTitle);
+    this.on(s, '[data-a="savecode"]', opts.onSaveCode);
     s.querySelector<HTMLInputElement>('[data-t="shadow"]')!.addEventListener('change', (e) => opts.onToggleShadows((e.target as HTMLInputElement).checked));
     s.querySelector<HTMLInputElement>('[data-t="sound"]')!.addEventListener('change', (e) => opts.onToggleSound((e.target as HTMLInputElement).checked));
   }
@@ -337,6 +342,53 @@ export class Screens {
       );
     };
     render();
+  }
+
+  // ---------------- 저장 코드 ----------------
+  saveCode(code: string, onClose: () => void): void {
+    const s = this.open(
+      'savecode',
+      `<div class="panel wide">
+         <button class="close">${ICONS.close}</button>
+         <h2>저장 코드 <small>${code.length.toLocaleString()}자</small></h2>
+         <p class="hint">이 코드를 메모장·메신저 등에 복사해 두세요. 타이틀 화면의 <b>저장 코드로 불러오기</b>에 붙여 넣으면 지금 상태로 돌아옵니다. (다른 기기로 옮길 때도 쓸 수 있어요)</p>
+         <textarea class="code" readonly>${code}</textarea>
+         <div class="menu two"><button class="primary" data-a="copy">복사하기</button><button data-a="close">닫기</button></div>
+       </div>`,
+      onClose,
+    );
+    const ta = s.querySelector<HTMLTextAreaElement>('textarea')!;
+    this.on(s, '[data-a="copy"]', (b) => {
+      ta.select();
+      const done = () => (b.textContent = '✔ 복사했습니다');
+      navigator.clipboard?.writeText(code).then(done, () => {
+        document.execCommand('copy');
+        done();
+      }) ?? (document.execCommand('copy'), done());
+    });
+    this.on(s, '[data-a="close"]', () => this.close());
+  }
+
+  loadCode(onLoad: (code: string, done: (msg: string) => void) => void, onClose: () => void): void {
+    const s = this.open(
+      'loadcode',
+      `<div class="panel wide">
+         <button class="close">${ICONS.close}</button>
+         <h2>저장 코드로 불러오기</h2>
+         <p class="hint">복사해 둔 저장 코드를 붙여 넣으세요. <b class="bad">지금 이 기기의 진행은 코드의 내용으로 바뀝니다.</b></p>
+         <textarea class="code" placeholder="YG1Z:..."></textarea>
+         <div class="item-info" data-msg></div>
+         <div class="menu two"><button class="primary" data-a="load">불러오기</button><button data-a="close">취소</button></div>
+       </div>`,
+      onClose,
+    );
+    const ta = s.querySelector<HTMLTextAreaElement>('textarea')!;
+    const msg = s.querySelector<HTMLElement>('[data-msg]')!;
+    this.on(s, '[data-a="load"]', () => {
+      msg.textContent = '확인 중…';
+      onLoad(ta.value, (m) => (msg.innerHTML = m));
+    });
+    this.on(s, '[data-a="close"]', () => this.close());
   }
 
   // ---------------- 예/아니오 ----------------
@@ -1050,6 +1102,14 @@ export class Screens {
     return html + '</div>';
   }
 
+  /** 설치된 건물의 방향(출구)을 돌린다 */
+  private bindRotate(s: HTMLElement, b: BuildingState, redraw: () => void): void {
+    this.on(s, '[data-rotate]', () => {
+      b.dir = ((b.dir + 1) % 4) as BuildingState['dir'];
+      redraw();
+    });
+  }
+
   private bindUpgrade(s: HTMLElement, b: BuildingState, p: Progress, redraw: () => void): void {
     this.on(s, '[data-upgrade]', () => {
       const next = (b.level ?? 1) + 1;
@@ -1073,7 +1133,7 @@ export class Screens {
       'factory-config',
       `<div class="panel wide tall">
          <button class="close">${ICONS.close}</button>
-         <h2>마력 발전기</h2>
+         <h2>마력 발전기 <button class="tool-sm rot" data-rotate>↻ 방향 돌리기</button></h2>
          ${this.levelBlock(b, p)}
          <p class="hint">여기에 넣은 마력 정수만 탑니다 (하급 2분 · 중급 5분 · 상급 10분). 전력을 쓰는 기계가 있을 때만 연료가 줄어듭니다.</p>
          <p>지금 타는 연료: <b>${Math.ceil(b.fuel ?? 0)}초</b> · 전력망 공급 ${net?.supply ?? 0} / 수요 ${net?.demand ?? 0}</p>
@@ -1086,6 +1146,7 @@ export class Screens {
       this.generator(f, b, p, onChange, onClose);
     };
     this.bindUpgrade(s, b, p, again);
+    this.bindRotate(s, b, again);
     this.on(s, '[data-put]', (el) => {
       const id = el.dataset.put!;
       const n = el.dataset.n === 'all' ? p.count(id) : Math.min(p.count(id), Number(el.dataset.n));
@@ -1116,7 +1177,7 @@ export class Screens {
       'factory-config',
       `<div class="panel wide tall">
          <button class="close">${ICONS.close}</button>
-         <h2>보관상자 <small>${boxTotal(b)} / ${BOX_CAPACITY}</small></h2>
+         <h2>보관상자 <small>${boxTotal(b)} / ${BOX_CAPACITY}</small> <button class="tool-sm rot" data-rotate>↻ 방향 돌리기</button></h2>
          <div class="tabs">
            <button data-mode="in" class="${b.mode === 'in' ? 'on' : ''}">투입 (앞 기계로 보내기)</button>
            <button data-mode="out" class="${b.mode === 'out' ? 'on' : ''}">출하 (완성품 받기)</button>
@@ -1134,6 +1195,7 @@ export class Screens {
       onChange();
       this.box(b, p, onChange, onClose);
     };
+    this.bindRotate(s, b, again);
     this.on(s, '[data-mode]', (el) => {
       b.mode = el.dataset.mode as 'in' | 'out';
       again();
@@ -1217,7 +1279,7 @@ export class Screens {
       'workbench',
       `<div class="panel wide tall">
          <button class="close">${ICONS.close}</button>
-         <h2>제작대 Lv.${lv} <small class="gold">${p.data.gold} G</small></h2>
+         <h2>제작대 Lv.${lv} <small class="gold">${p.data.gold} G</small> <button class="tool-sm rot" data-rotate>↻ 방향 돌리기</button></h2>
          <div class="energy"><span>⚡ 에너지 ${energy}/${cap}</span><span class="bar"><i style="width:${Math.round((energy / cap) * 100)}%"></i></span><small class="${powered ? 'ok' : 'bad'}">${powered ? '충전 중 (마력선 연결됨)' : energy >= cap ? '가득 참' : '전력 없음 — 마력선으로 발전기와 이으세요'}</small></div>
          ${message ? `<div class="notice">${message}</div>` : ''}
          <div class="tabs">
@@ -1231,6 +1293,7 @@ export class Screens {
       onClose,
     );
     const again = (t = tab, msg?: string) => this.workbench(f, b, p, onChange, onClose, t, msg);
+    this.bindRotate(s, b, () => again());
     const pay = (c: CraftCost) => {
       if (!can(c)) return false;
       p.takeAll(c.items);
@@ -1304,13 +1367,17 @@ export class Screens {
       'factory-config',
       `<div class="panel wide tall">
          <button class="close">${ICONS.close}</button>
-         <h2>${def.name}</h2>
+         <h2>${def.name} <button class="tool-sm rot" data-rotate>↻ 방향 돌리기</button></h2>
          ${this.levelBlock(b, p)}
          <div class="scroll">${body}</div>
        </div>`,
       onClose,
     );
     this.bindUpgrade(s, b, p, () => {
+      onChange();
+      this.machine(f, b, p, onChange, onClose);
+    });
+    this.bindRotate(s, b, () => {
       onChange();
       this.machine(f, b, p, onChange, onClose);
     });

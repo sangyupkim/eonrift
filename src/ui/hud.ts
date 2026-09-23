@@ -256,12 +256,21 @@ export class Hud {
     this.objectiveEl.classList.toggle('hidden', !text);
   }
 
-  setBoss(name: string | null, ratio = 1): void {
+  /** 레이드 보스 체력: 여러 줄. 지금 줄은 앞에, 다음 줄 색이 뒤에 깔린다 */
+  setBoss(name: string | null, ratio = 1, bars = 1, shielded = false): void {
     this.bossEl.classList.toggle('hidden', !name);
-    if (name) {
-      this.bossName.textContent = name;
-      this.bossFill.style.width = `${Math.max(0, ratio) * 100}%`;
-    }
+    if (!name) return;
+    const COLORS = ['#ff5a4a', '#ff9a3a', '#ffd23a', '#7aff9a', '#5ac8ff', '#a07aff', '#ff6ad0'];
+    const total = Math.max(0, ratio) * bars;
+    const left = Math.ceil(total - 1e-6);
+    const cur = left > 0 ? total - (left - 1) : 0;
+    this.bossName.textContent = name;
+    this.bossFill.style.width = `${cur * 100}%`;
+    this.bossFill.style.background = COLORS[(left - 1 + COLORS.length) % COLORS.length];
+    const track = this.bossFill.parentElement!;
+    track.style.background = left > 1 ? COLORS[(left - 2 + COLORS.length) % COLORS.length] + '66' : 'rgba(0,0,0,0.6)';
+    track.dataset.bars = bars > 1 ? `×${left}` : '';
+    this.bossEl.classList.toggle('shielded', shielded);
   }
 
   setMinimap(canvas: HTMLCanvasElement | null): void {

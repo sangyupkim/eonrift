@@ -42,7 +42,8 @@ export interface MonsterWorld {
   monsters: Monster[];
   hurtPlayer(dmg: number, fromX: number, fromZ: number): void;
   fireEnemyProjectile(spec: ProjectileSpec): void;
-  summon(arch: Archetype, x: number, z: number): void;
+  summon(arch: Archetype, x: number, z: number): Monster;
+  announce(text: string): void;
   burst(x: number, y: number, z: number, color: number, count: number, power?: number): void;
   shake(amount: number): void;
 }
@@ -76,6 +77,14 @@ export class Monster {
   facing = 0;
   state: State = 'idle';
   aggro = false;
+  /** 레이드 보스: 체력 줄 수 (일반 몬스터는 1) */
+  readonly bars: number;
+  /** 보호막 기믹 중에는 피해를 받지 않는다 (수호병을 모두 쓰러뜨리면 풀린다) */
+  shielded = false;
+  private guards: Monster[] = [];
+  /** 남은 줄 수가 이 값이 되면 기믹 발동 */
+  private gimmickAt: number[] = [];
+  private pendingGimmick = 0;
   /** 감속 남은 시간 */
   slow = 0;
   private t = 0;
@@ -110,8 +119,11 @@ export class Monster {
     this.arch = archetype;
     this.def = ARCHETYPES[archetype];
     const scale = tierScale(tier, stage, ngPlus);
-    const mult = kind === 'boss' ? { hp: 14, atk: 1.5, size: 2.1 } : kind === 'midboss' ? { hp: 7, atk: 1.3, size: 1.65 } : kind === 'elite' ? { hp: 3, atk: 1.4, size: 1.35 } : { hp: 1, atk: 1, size: 1 };
+    const mult = kind === 'boss' ? { hp: 26, atk: 1.5, size: 2.1 } : kind === 'midboss' ? { hp: 14, atk: 1.3, size: 1.65 } : kind === 'elite' ? { hp: 3, atk: 1.4, size: 1.35 } : { hp: 1, atk: 1, size: 1 };
     this.maxHp = this.hp = Math.round(this.def.hp * scale.hp * mult.hp);
+    // 중간보스 5줄 (3줄을 깎으면 보호막), 수호자 7줄 (3줄·5줄에서 보호막)
+    this.bars = kind === 'boss' ? 7 : kind === 'midboss' ? 5 : 1;
+    this.gimmickAt = kind === 'boss' ? [4, 2] : kind === 'midboss' ? [2] : [];
     this.atk = this.def.atk * scale.atk * mult.atk;
     this.defense = this.def.def * (1 + (tier - 1) * 0.6);
     this.speed = this.def.speed * (boss ? 0.95 : 1);
@@ -172,10 +184,30 @@ export class Monster {
     this.clearTelegraph(scene);
   }
 
+  /** 남은 체력 줄 수 */
+  get barsLeft(): number {
+    return Math.max(0, Math.ceil((this.hp / this.maxHp) * this.bars - 1e-6));
+  }
+
+  get guardsLeft(): number {
+    return this.guards.filter((g) => g.alive).length;
+  }
+
   /** 피해를 받는다. 죽었으면 true */
   damage(amount: number, fromX: number, fromZ: number, knock: number): boolean {
     if (!this.alive) return false;
+    if (this.shielded) {
+      this.flash = 0.5;
+      return false;
+    }
     this.hp -= amount;
+    // 기믹 줄에 닿으면 그 줄에서 멈추고 기믹을 준비한다
+    const t = this.gimmickAt[0];
+    if (t !== undefined && this.hp <= (this.maxHp * t) / this.bars) {
+      this.hp = (this.maxHp * t) / this.bars;
+      this.gimmickAt.shift();
+      this.pendingGimmick = t;
+    }
     this.flash = 1;
     this.aggro = true;
     const d = Math.hypot(this.x - fromX, this.z - fromZ) || 1;
@@ -221,6 +253,30 @@ export class Monster {
   update(dt: number, world: MonsterWorld, cameraQuat: Quaternion): void {
     this.t += dt;
     this.hpBar.quaternion.copy(cameraQuat);
+
+    // 레이드 기믹: 보호막 + 수호병 소환. 수호병을 모두 쓰러뜨리면 보호막이 깨진다
+    if (this.pendingGimmick && this.alive) {
+      const second = this.kind === 'boss' && this.pendingGimmick === 2;
+      this.pendingGimmick = 0;
+      this.shielded = true;
+      const n = second ? 6 : 4;
+      const kinds: Archetype[] = second ? ['tank', 'ranged', 'charger'] : ['melee', 'ranged'];
+      this.guards = [];
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2;
+        const g = world.summon(kinds[i % kinds.length], this.x + Math.cos(a) * 4, this.z + Math.sin(a) * 4);
+        this.guards.push(g);
+      }
+      world.effects.ring(this.x, this.z, 5, 0x7fd6ff, 0.8);
+      world.shake(0.6);
+      world.announce(`${this.name}이(가) 보호막을 펼쳤다! 수호병 ${n}마리를 쓰러뜨려라`);
+    }
+    if (this.shielded && this.guardsLeft === 0) {
+      this.shielded = false;
+      world.effects.ring(this.x, this.z, 4, 0xffffff, 0.5);
+      world.shake(0.4);
+      world.announce('보호막이 깨졌다!');
+    }
 
     if (this.state === 'dead') {
       this.deathTime += dt;
