@@ -1,4 +1,6 @@
 import { bustUrl, itemIconUrl } from '../ui/itemIcons';
+import { gearLook } from '../models/items';
+import { TOOL_KIND_NAMES, TOOL_TIER_NAMES, toolBonusChance, toolName, toolSpeed, toolWear, type ToolKind } from '../data/tools';
 import { MeshLambertMaterial, OrthographicCamera, PCFShadowMap, Plane, Raycaster, Vector2, Vector3, WebGLRenderer } from 'three';
 import { BAG_SLOTS, CAMERA_OFFSET, PLAYER, TILE, VIEW_HEIGHT } from '../config';
 import { Audio } from '../core/audio';
@@ -265,7 +267,8 @@ export class Game {
     const prev = this.player;
     if (prev) prev.rig.root.parent?.remove(prev.rig.root);
     const cls = CLASSES[this.progress.data.currentClass];
-    this.player = new Player(this.playerMaterial, cls);
+    this.gearKey = JSON.stringify(gearLook(this.progress.cls.equipment, this.progress.data.tools));
+    this.player = new Player(this.playerMaterial, cls, gearLook(this.progress.cls.equipment, this.progress.data.tools));
     this.player.facing = facing;
     this.player.setPosition(x, z);
     const st = this.progress.stats();
@@ -274,8 +277,11 @@ export class Game {
     this.player.hp = keepHp && prev ? Math.min(st.maxHp, Math.max(1, prev.hp)) : st.maxHp;
     this.player.mp = keepHp && prev ? Math.min(st.maxMp, prev.mp) : st.maxMp;
     this.level.scene.add(this.player.rig.root);
+    const game = this;
     this.combat = new Combat({
-      player: this.player,
+      get player() {
+        return game.player;
+      },
       stats: () => this.progress.stats(),
       level: () => this.level,
       dungeon: () => (this.level instanceof DungeonScene && this.run ? this.level : null),
@@ -474,6 +480,27 @@ export class Game {
     this.player.maxMp = st.maxMp;
     this.player.hp = Math.max(1, Math.round(st.maxHp * hpRatio));
     this.player.mp = Math.min(this.player.mp, st.maxMp);
+    this.refreshGear();
+  }
+
+  private gearKey = '';
+  /** 장비가 바뀌면 캐릭터 모델을 새 장비 모습으로 다시 만든다 (위치·HP·방향은 그대로) */
+  private refreshGear(): void {
+    const gear = gearLook(this.progress.cls.equipment, this.progress.data.tools);
+    const key = JSON.stringify(gear);
+    if (key === this.gearKey || !this.player) return;
+    this.gearKey = key;
+    const prev = this.player;
+    const next = new Player(this.playerMaterial, prev.cls, gear);
+    next.facing = prev.facing;
+    next.setPosition(prev.position.x, prev.position.z);
+    next.maxHp = prev.maxHp;
+    next.maxMp = prev.maxMp;
+    next.hp = prev.hp;
+    next.mp = prev.mp;
+    prev.rig.root.parent?.remove(prev.rig.root);
+    this.level.scene.add(next.rig.root);
+    this.player = next;
   }
 
   private openExpand(): void {
@@ -995,9 +1022,14 @@ export class Game {
         this.hud.toast(tool === 'tool_axe' ? '도끼가 있어야 나무를 벨 수 있습니다 (대장장이 고른)' : '곡괭이가 있어야 캘 수 있습니다 (대장장이 고른)', 2500);
         return;
       }
-      const key = tool === 'tool_axe' ? 'axe' : 'pickaxe';
-      if (p.data.tools[key] <= 0) {
-        this.hud.toast(`${key === 'axe' ? '도끼' : '곡괭이'}가 망가졌습니다. 대장장이 고른에게 수리를 맡기세요`, 2500);
+      const key: ToolKind = tool === 'tool_axe' ? 'axe' : 'pickaxe';
+      const t = p.data.tools[key];
+      if (t.dur <= 0) {
+        this.hud.toast(`${toolName(key, t)}이(가) 망가졌습니다. 대장장이 고른에게 수리를 맡기세요`, 2500);
+        return;
+      }
+      if (toolWear(t, n.def.tier) === null) {
+        this.hud.toast(`${n.def.name}은(는) ${TOOL_TIER_NAMES[n.def.tier - 2]} ${TOOL_KIND_NAMES[key]} 이상이 있어야 캘 수 있습니다 (차원집 제작대)`, 3000);
         return;
       }
     }
@@ -1024,7 +1056,7 @@ export class Game {
       {
         pose: chest ? 'thrust' : 'gather',
         tool: n.def.style === 'tree' ? 'axe' : 'pickaxe',
-        duration: chest ? 0.35 : 0.7,
+        duration: chest ? 0.35 : 0.7 / toolSpeed(this.progress.data.tools[n.def.style === 'tree' ? 'axe' : 'pickaxe']),
         hitAt: 0.6,
         moveMult: 0,
         onHit: () => this.gather(n),
@@ -1038,15 +1070,19 @@ export class Game {
     const s = this.toScreen(n.x, 1.6, n.z);
     let line = 0;
     if (n.def.style !== 'chest') {
-      const tools = this.progress.data.tools;
-      const key = n.def.style === 'tree' ? 'axe' : 'pickaxe';
-      tools[key] = Math.max(0, tools[key] - 1);
-      if (tools[key] === 0) {
+      const key: ToolKind = n.def.style === 'tree' ? 'axe' : 'pickaxe';
+      const t = this.progress.data.tools[key];
+      const before = t.dur;
+      t.dur = Math.max(0, t.dur - (toolWear(t, n.def.tier) ?? 1));
+      if (t.dur === 0) {
         this.gathering = null;
-        this.hud.toast(`${key === 'axe' ? '도끼' : '곡괭이'}가 망가졌습니다! (대장장이 고른에게 수리)`, 3000);
-      } else if (tools[key] === 15) this.hud.toast(`${key === 'axe' ? '도끼' : '곡괭이'} 내구도가 얼마 남지 않았습니다`, 2000);
+        this.hud.toast(`${toolName(key, t)}이(가) 망가졌습니다! (대장장이 고른에게 수리)`, 3000);
+      } else if (before > 20 && t.dur <= 20) this.hud.toast(`${toolName(key, t)} 내구도가 얼마 남지 않았습니다`, 2000);
     }
-    for (const drop of this.level.hitNode(n)) {
+    const drops = this.level.hitNode(n);
+    // 강화한 도구는 확률적으로 하나 더 캔다
+    if (n.def.style !== 'chest' && drops.length && Math.random() < toolBonusChance(this.progress.data.tools[n.def.style === 'tree' ? 'axe' : 'pickaxe'])) drops.push({ itemId: drops[0].itemId, count: 1 });
+    for (const drop of drops) {
       const added = this.run.bag.add(drop.itemId, drop.count);
       const item = ITEMS[drop.itemId];
       if (added > 0) {
@@ -1159,6 +1195,10 @@ export class Game {
     if (b.type === 'generator') this.openMenu(() => this.screens.generator(this.factory, b, p, save, () => this.resume()));
     else if (b.type === 'box') this.openMenu(() => this.screens.box(b, p, save, () => this.resume()));
     else if (MACHINE_TYPES.has(b.type)) this.openMenu(() => this.screens.machine(this.factory, b, p, save, () => this.resume()));
+    else if (b.type === 'workbench') this.openMenu(() => this.screens.workbench(this.factory, b, p, () => {
+      this.applyStats();
+      save();
+    }, () => this.resume()));
   }
 
   private buildMode(on: boolean): void {

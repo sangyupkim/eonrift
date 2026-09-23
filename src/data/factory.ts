@@ -1,5 +1,5 @@
 /** 차원집 공장의 건물과 레시피 */
-export type BuildingType = 'generator' | 'wire' | 'belt' | 'splitter' | 'box' | 'smelter' | 'crusher' | 'infuser' | 'assembler' | 'alchemy';
+export type BuildingType = 'generator' | 'wire' | 'belt' | 'splitter' | 'box' | 'smelter' | 'crusher' | 'infuser' | 'assembler' | 'alchemy' | 'workbench';
 
 export interface BuildingDef {
   type: BuildingType;
@@ -24,10 +24,11 @@ export const BUILDINGS: Record<BuildingType, BuildingDef> = {
   infuser: { type: 'infuser', name: '마력 주입기', power: 12, color: 0x8a6aff, cost: { iron_ore: 4, copper_ore: 4 }, description: '주괴에 마력을 불어넣는다.', blueprint: { gold: 800, items: { iron_ingot: 3 } } },
   assembler: { type: 'assembler', name: '조립기', power: 10, color: 0x4a9a8a, cost: { iron_ore: 6, wood: 4 }, description: '고른 설계대로 여러 재료를 조립한다.', blueprint: { gold: 1200, items: { copper_ingot: 5, plank: 5 } } },
   alchemy: { type: 'alchemy', name: '연금 솥', power: 4, color: 0x5a9a4a, cost: { copper_ore: 3, wood: 3 }, description: '하급 마력 정수와 목재로 치유 물약을 만든다.', blueprint: { gold: 500, items: { wood: 10 } } },
+  workbench: { type: 'workbench', name: '제작대', power: 8, color: 0xb07a3a, cost: { copper_ore: 10, wood: 10 }, description: '장비와 채집 도구를 만든다. 마력선으로 발전기와 이으면 에너지가 충전되고, 제작과 레벨업에 에너지를 쓴다.', blueprint: null },
   splitter: { type: 'splitter', name: '분배기', power: 0, color: 0x6a7080, cost: { copper_ore: 1 }, description: '들어온 아이템을 앞·왼쪽·오른쪽으로 번갈아 보낸다.', blueprint: { gold: 400, items: {} } },
 };
 
-export const BUILD_ORDER: BuildingType[] = ['generator', 'wire', 'belt', 'box', 'smelter', 'crusher', 'infuser', 'assembler', 'alchemy', 'splitter'];
+export const BUILD_ORDER: BuildingType[] = ['generator', 'wire', 'belt', 'box', 'workbench', 'smelter', 'crusher', 'infuser', 'assembler', 'alchemy', 'splitter'];
 
 export interface Recipe {
   id: string;

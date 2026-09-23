@@ -93,6 +93,22 @@ export function buildBuildingGeometry(type: BuildingType, connections: boolean[]
         part(new BoxGeometry(0.6, 0.12, 0.12), metal, { pos: [0.1, 1.95, 0] }),
         arrow(0xffffff, 1.15),
       ]);
+    case 'workbench':
+      return merge([
+        part(new BoxGeometry(1.8, 0.16, 1.2), 0xb07a3a, { pos: [0, 0.9, 0] }),
+        part(new BoxGeometry(0.14, 0.9, 0.14), 0x6a4424, { pos: [0.75, 0.45, 0.48] }),
+        part(new BoxGeometry(0.14, 0.9, 0.14), 0x6a4424, { pos: [-0.75, 0.45, 0.48] }),
+        part(new BoxGeometry(0.14, 0.9, 0.14), 0x6a4424, { pos: [0.75, 0.45, -0.48] }),
+        part(new BoxGeometry(0.14, 0.9, 0.14), 0x6a4424, { pos: [-0.75, 0.45, -0.48] }),
+        part(new BoxGeometry(1.6, 0.08, 1.0), 0x7a5234, { pos: [0, 0.3, 0] }),
+        // 모루와 망치
+        part(new BoxGeometry(0.5, 0.2, 0.3), dark, { pos: [0.35, 1.1, 0] }),
+        part(new BoxGeometry(0.3, 0.14, 0.2), metal, { pos: [0.35, 1.26, 0] }),
+        part(new BoxGeometry(0.06, 0.06, 0.5), 0x7a5234, { pos: [-0.4, 1.02, 0.1], rot: [0, 0.5, 0] }),
+        part(new BoxGeometry(0.16, 0.14, 0.12), metal, { pos: [-0.28, 1.04, 0.3], rot: [0, 0.5, 0] }),
+        // 에너지 수정
+        part(new OctahedronGeometry(0.14), 0x5ee0ff, { pos: [-0.6, 1.2, -0.35] }),
+      ]);
     case 'alchemy':
       return merge([
         part(new CylinderGeometry(0.75, 0.6, 0.9, 8), 0x3a3a40, { pos: [0, 0.45, 0] }),

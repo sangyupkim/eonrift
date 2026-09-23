@@ -27,7 +27,7 @@ import { buildNodeGeometry, buildPortalFrame } from '../../models/props';
 import { merge } from '../../models/util';
 import { Level } from './Level';
 
-const POWERED = new Set<BuildingType>(['generator', 'wire', 'smelter', 'crusher', 'infuser', 'assembler', 'alchemy']);
+const POWERED = new Set<BuildingType>(['generator', 'wire', 'smelter', 'crusher', 'infuser', 'assembler', 'alchemy', 'workbench']);
 const MAX_ITEMS = 700;
 
 /** 차원집: 공장 격자 + 아래쪽 입구 */
@@ -190,8 +190,8 @@ export class HomeScene extends Level {
     this.interactables.length = 0;
     this.interactables.push(this.exitInteract, this.storageInteract);
     for (const b of this.factory.state.buildings) {
-      if (b.type !== 'generator' && b.type !== 'box' && !MACHINE_TYPES.has(b.type)) continue;
-      const label = b.type === 'generator' ? '연료' : b.type === 'box' ? '열기' : '보기';
+      if (b.type !== 'generator' && b.type !== 'box' && b.type !== 'workbench' && !MACHINE_TYPES.has(b.type)) continue;
+      const label = b.type === 'generator' ? '연료' : b.type === 'box' ? '열기' : b.type === 'workbench' ? '제작' : '보기';
       this.interactables.push({ id: 'building', x: (b.x + 0.5) * TILE, z: (b.y + 0.5) * TILE, range: 2.1, label, action: () => this.onBuilding(b) });
     }
   }
@@ -289,10 +289,11 @@ export class HomeScene extends Level {
     // 기계 상태등: 초록=가동, 빨강=전력 없음, 노랑=막힘, 회색=대기
     let j = 0;
     for (const b of f.state.buildings) {
-      if (!MACHINE_TYPES.has(b.type) && b.type !== 'generator' && b.type !== 'box') continue;
+      if (!MACHINE_TYPES.has(b.type) && b.type !== 'generator' && b.type !== 'box' && b.type !== 'workbench') continue;
       let c = 0x8a8a9a;
       if (b.type === 'generator') c = (b.fuel ?? 0) > 0 || Object.values(b.buffer ?? {}).some((n) => n > 0) ? 0x5affd0 : 0xff5a5a;
       else if (b.type === 'box') c = b.mode === 'in' ? 0x6ad0ff : 0xffd04a;
+      else if (b.type === 'workbench') c = f.powerOf(b) > 0 ? 0x5ee0ff : 0x8a8a9a;
       else {
         const s = f.status(b);
         c = s === 'working' ? 0x6aff6a : s === 'no-power' ? 0xff4a4a : s === 'blocked' ? 0xffd04a : s === 'no-recipe' ? 0xff9a3a : 0x8a8a9a;

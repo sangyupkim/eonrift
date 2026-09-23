@@ -31,6 +31,9 @@ export interface BuildingState {
   /** 발전기: 지금 타고 있는 연료의 남은 시간(초) */
   fuel?: number;
   rr?: number;
+  /** 제작대: 레벨과 충전된 에너지 */
+  level?: number;
+  energy?: number;
 }
 
 export interface FactoryState {
@@ -50,6 +53,11 @@ export function recipesFor(machine: BuildingType): Recipe[] {
 }
 
 export const RECIPE_BY_ID: Record<string, Recipe> = Object.fromEntries(RECIPES.map((r) => [r.id, r]));
+
+/** 제작대 에너지 최대치 */
+export function workbenchCap(b: BuildingState): number {
+  return 300 * (b.level ?? 1);
+}
 
 export function boxTotal(b: BuildingState): number {
   return Object.values(b.buffer ?? {}).reduce((a, n) => a + n, 0);
@@ -109,6 +117,10 @@ export class Factory {
       b.item = null;
       b.progress = 0;
     }
+    if (type === 'workbench') {
+      b.level = 1;
+      b.energy = 0;
+    }
     if (type === 'box') {
       b.buffer = {};
       b.mode = 'in';
@@ -162,7 +174,7 @@ export class Factory {
       id++;
     }
     for (const m of this.state.buildings) {
-      if (!MACHINE_TYPES.has(m.type)) continue;
+      if (!MACHINE_TYPES.has(m.type) && m.type !== 'workbench') continue;
       for (const [dx, dy] of DIRS) {
         const n = this.at(m.x + dx, m.y + dy);
         if (n && conducts(n)) {
@@ -212,6 +224,8 @@ export class Factory {
     this.netDemand.fill(0);
     for (const b of buildings) {
       if (MACHINE_TYPES.has(b.type) && b.crafting && this.netOf.has(b)) this.netDemand[this.netOf.get(b)!] += BUILDINGS[b.type].power;
+      // 제작대는 에너지가 덜 찼을 때만 전력을 쓴다
+      if (b.type === 'workbench' && (b.energy ?? 0) < workbenchCap(b) && this.netOf.has(b)) this.netDemand[this.netOf.get(b)!] += BUILDINGS.workbench.power;
     }
     for (const b of buildings) {
       if (b.type !== 'generator') continue;
@@ -235,6 +249,13 @@ export class Factory {
       if (b.type !== 'generator' || (b.fuel ?? 0) <= 0) continue;
       const net = this.netOf.get(b)!;
       if (this.netDemand[net] > 0) b.fuel = Math.max(0, b.fuel! - dt * Math.min(1, this.netDemand[net] / this.netSupply[net]));
+    }
+
+    // 제작대 충전: 전력을 받는 만큼 초당 에너지 1
+    for (const b of buildings) {
+      if (b.type !== 'workbench') continue;
+      const r = this.powerOf(b);
+      if (r > 0) b.energy = Math.min(workbenchCap(b), (b.energy ?? 0) + dt * r);
     }
 
     // 2. 투입 보관상자: 앞 칸이 받을 수 있을 때만 하나씩 보낸다

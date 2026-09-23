@@ -32,7 +32,22 @@ export interface HeroLook {
   hat?: 'wizard' | 'none';
   beard?: number;
   apron?: number;
+  /** 착용 장비 모습 (재질 색, 보석 색) */
+  gear?: HeroGear;
 }
+
+export interface HeroGear {
+  weapon?: { metal: number; gem: number };
+  helmet?: { metal: number; gem: number };
+  armor?: { metal: number; gem: number };
+  pants?: number;
+  boots?: number;
+  necklace?: number;
+  pickaxe?: number;
+  axe?: number;
+}
+
+const darken = (c: number, k = 0.65) => (Math.round(((c >> 16) & 255) * k) << 16) | (Math.round(((c >> 8) & 255) * k) << 8) | Math.round((c & 255) * k);
 
 const C = {
   skin: 0xf2c9a0,
@@ -51,6 +66,10 @@ export const HIP_HEIGHT = 0.6;
 export function buildHero(material: Material, look: HeroLook): HeroRig {
   const meshes: Mesh[] = [];
   const skin = look.skin ?? C.skin;
+  const gear = look.gear ?? {};
+  const blade = gear.weapon?.metal ?? C.steel;
+  const bladeDark = gear.weapon ? darken(gear.weapon.metal) : C.steelDark;
+  const bootColor = gear.boots ?? C.boot;
   const mesh = (parts: Parameters<typeof merge>[0]) => {
     const m = new Mesh(merge(parts), material);
     m.castShadow = true;
@@ -70,7 +89,11 @@ export function buildHero(material: Material, look: HeroLook): HeroRig {
     leg.add(
       mesh([
         part(new BoxGeometry(0.17, 0.44, 0.19), look.pants ?? C.pants, { pos: [0, -0.22, 0] }),
-        part(new BoxGeometry(0.19, 0.16, 0.27), C.boot, { pos: [0, -0.52, 0.03] }),
+        part(new BoxGeometry(0.19, 0.16, 0.27), bootColor, { pos: [0, -0.52, 0.03] }),
+        ...(gear.boots !== undefined ? [part(new BoxGeometry(0.2, 0.08, 0.2), darken(gear.boots), { pos: [0, -0.4, 0] })] : []),
+        ...(gear.pants !== undefined
+          ? [part(new BoxGeometry(0.19, 0.22, 0.05), gear.pants, { pos: [0, -0.28, 0.1] }), part(new BoxGeometry(0.19, 0.06, 0.21), darken(gear.pants), { pos: [0, -0.05, 0] })]
+          : []),
       ]),
     );
     body.add(leg);
@@ -91,8 +114,8 @@ export function buildHero(material: Material, look: HeroLook): HeroRig {
   if (look.weapon === 'sword') {
     torsoParts.push(
       part(new BoxGeometry(0.14, 0.14, 0.03), C.gold, { pos: [0, 0.33, 0.165], rot: [0, 0, Math.PI / 4] }),
-      part(new BoxGeometry(0.22, 0.12, 0.26), C.steel, { pos: [0.3, 0.49, 0] }),
-      part(new BoxGeometry(0.22, 0.12, 0.26), C.steel, { pos: [-0.3, 0.49, 0] }),
+      part(new BoxGeometry(0.22, 0.12, 0.26), gear.armor?.metal ?? C.steel, { pos: [0.3, 0.49, 0] }),
+      part(new BoxGeometry(0.22, 0.12, 0.26), gear.armor?.metal ?? C.steel, { pos: [-0.3, 0.49, 0] }),
     );
   } else if (look.weapon === 'staff') {
     // 긴 로브 자락
@@ -104,6 +127,17 @@ export function buildHero(material: Material, look: HeroLook): HeroRig {
     torsoParts.push(part(new CylinderGeometry(0.09, 0.08, 0.5, 6), C.belt, { pos: [0.12, 0.35, -0.22], rot: [0, 0, -0.35] }));
     torsoParts.push(part(new BoxGeometry(0.14, 0.08, 0.1), 0xe8e0d0, { pos: [0.21, 0.62, -0.22], rot: [0, 0, -0.35] }));
   }
+  if (gear.armor) {
+    const a = gear.armor;
+    torsoParts.push(
+      part(new BoxGeometry(0.44, 0.36, 0.05), a.metal, { pos: [0, 0.3, 0.17] }),
+      part(new BoxGeometry(0.44, 0.3, 0.05), darken(a.metal), { pos: [0, 0.3, -0.17] }),
+      part(new BoxGeometry(0.22, 0.12, 0.28), a.metal, { pos: [0.3, 0.5, 0] }),
+      part(new BoxGeometry(0.22, 0.12, 0.28), a.metal, { pos: [-0.3, 0.5, 0] }),
+      part(new OctahedronGeometry(0.05), a.gem, { pos: [0, 0.34, 0.2] }),
+    );
+  }
+  if (gear.necklace !== undefined) torsoParts.push(part(new OctahedronGeometry(0.045), gear.necklace, { pos: [0, 0.44, 0.19] }));
   if (look.apron) torsoParts.push(part(new BoxGeometry(0.44, 0.6, 0.04), look.apron, { pos: [0, 0.12, 0.17] }));
   torso.add(mesh(torsoParts));
 
@@ -122,7 +156,15 @@ export function buildHero(material: Material, look: HeroLook): HeroRig {
     part(new BoxGeometry(0.07, 0.11, 0.02), C.eye, { pos: [0.11, 0.24, 0.235] }),
     part(new BoxGeometry(0.07, 0.11, 0.02), C.eye, { pos: [-0.11, 0.24, 0.235] }),
   ];
-  if (look.hat === 'wizard') {
+  if (gear.helmet) {
+    const h = gear.helmet;
+    headParts.push(
+      part(new BoxGeometry(0.6, 0.2, 0.55), h.metal, { pos: [0, 0.57, -0.01] }),
+      part(new BoxGeometry(0.62, 0.06, 0.57), darken(h.metal), { pos: [0, 0.46, -0.01] }),
+      part(new BoxGeometry(0.07, 0.26, 0.07), darken(h.metal), { pos: [0, 0.3, 0.26] }),
+      part(new ConeGeometry(0.06, 0.18, 5), h.gem, { pos: [0, 0.76, 0] }),
+    );
+  } else if (look.hat === 'wizard') {
     headParts.push(part(new CylinderGeometry(0.46, 0.46, 0.05, 8), look.tunicDark, { pos: [0, 0.6, 0] }));
     headParts.push(part(new ConeGeometry(0.3, 0.6, 8), look.tunic, { pos: [0, 0.9, -0.04], rot: [-0.2, 0, 0] }));
   }
@@ -168,9 +210,10 @@ export function buildHero(material: Material, look: HeroLook): HeroRig {
           part(new BoxGeometry(0.06, 0.18, 0.06), C.belt, { pos: [0, 0.02, 0] }),
           part(new BoxGeometry(0.08, 0.06, 0.08), C.gold, { pos: [0, 0.12, 0] }),
           part(new BoxGeometry(0.3, 0.05, 0.09), C.gold, { pos: [0, -0.09, 0] }),
-          part(new BoxGeometry(0.1, 0.72, 0.035), C.steel, { pos: [0, -0.47, 0] }),
-          part(new BoxGeometry(0.03, 0.72, 0.04), C.steelDark, { pos: [0, -0.47, 0] }),
-          part(new OctahedronGeometry(0.07), C.steel, { pos: [0, -0.84, 0], scale: [0.72, 1.2, 0.25] }),
+          part(new BoxGeometry(0.1, 0.72, 0.035), blade, { pos: [0, -0.47, 0] }),
+          part(new BoxGeometry(0.03, 0.72, 0.04), bladeDark, { pos: [0, -0.47, 0] }),
+          part(new OctahedronGeometry(0.07), blade, { pos: [0, -0.84, 0], scale: [0.72, 1.2, 0.25] }),
+          ...(gear.weapon ? [part(new OctahedronGeometry(0.04), gear.weapon.gem, { pos: [0, -0.09, 0.05] })] : []),
         ]),
       );
       break;
@@ -179,8 +222,8 @@ export function buildHero(material: Material, look: HeroLook): HeroRig {
       weapon.add(
         mesh([
           part(new CylinderGeometry(0.035, 0.04, 1.3, 6), C.wood, { pos: [0, 0.35, 0] }),
-          part(new OctahedronGeometry(0.1), look.tunicDark, { pos: [0, 0.98, 0] }),
-          part(new OctahedronGeometry(0.13), 0x9fe8ff, { pos: [0, 1.12, 0] }),
+          part(new OctahedronGeometry(0.1), gear.weapon?.metal ?? look.tunicDark, { pos: [0, 0.98, 0] }),
+          part(new OctahedronGeometry(0.13), gear.weapon?.gem ?? 0x9fe8ff, { pos: [0, 1.12, 0] }),
         ]),
       );
       break;
@@ -192,6 +235,9 @@ export function buildHero(material: Material, look: HeroLook): HeroRig {
           part(new BoxGeometry(0.04, 0.42, 0.05), C.wood, { pos: [0, 0.28, 0.02], rot: [-0.45, 0, 0] }),
           part(new BoxGeometry(0.04, 0.42, 0.05), C.wood, { pos: [0, -0.28, 0.02], rot: [0.45, 0, 0] }),
           part(new BoxGeometry(0.012, 0.9, 0.012), 0xf0f0e0, { pos: [0, 0, -0.07] }),
+          part(new BoxGeometry(0.06, 0.08, 0.07), blade, { pos: [0, 0.48, -0.05] }),
+          part(new BoxGeometry(0.06, 0.08, 0.07), blade, { pos: [0, -0.48, -0.05] }),
+          ...(gear.weapon ? [part(new OctahedronGeometry(0.04), gear.weapon.gem, { pos: [0, 0, 0.13] })] : []),
         ]),
       );
       break;
@@ -214,9 +260,9 @@ export function buildHero(material: Material, look: HeroLook): HeroRig {
   pickaxe.add(
     mesh([
       part(new CylinderGeometry(0.03, 0.035, 0.75, 6), C.wood, { pos: [0, -0.3, 0] }),
-      part(new BoxGeometry(0.07, 0.08, 0.62), C.steelDark, { pos: [0, -0.66, 0] }),
-      part(new ConeGeometry(0.05, 0.16, 4), C.steel, { pos: [0, -0.66, 0.36], rot: [Math.PI / 2, 0, 0] }),
-      part(new ConeGeometry(0.05, 0.16, 4), C.steel, { pos: [0, -0.66, -0.36], rot: [-Math.PI / 2, 0, 0] }),
+      part(new BoxGeometry(0.07, 0.08, 0.62), gear.pickaxe !== undefined ? darken(gear.pickaxe, 0.8) : C.steelDark, { pos: [0, -0.66, 0] }),
+      part(new ConeGeometry(0.05, 0.16, 4), gear.pickaxe ?? C.steel, { pos: [0, -0.66, 0.36], rot: [Math.PI / 2, 0, 0] }),
+      part(new ConeGeometry(0.05, 0.16, 4), gear.pickaxe ?? C.steel, { pos: [0, -0.66, -0.36], rot: [-Math.PI / 2, 0, 0] }),
     ]),
   );
   const axe = new Group();
@@ -224,7 +270,7 @@ export function buildHero(material: Material, look: HeroLook): HeroRig {
   axe.add(
     mesh([
       part(new CylinderGeometry(0.03, 0.035, 0.75, 6), C.wood, { pos: [0, -0.3, 0] }),
-      part(new BoxGeometry(0.05, 0.26, 0.26), C.steel, { pos: [0, -0.6, 0.14] }),
+      part(new BoxGeometry(0.05, 0.26, 0.26), gear.axe ?? C.steel, { pos: [0, -0.6, 0.14] }),
     ]),
   );
   pickaxe.visible = axe.visible = false;

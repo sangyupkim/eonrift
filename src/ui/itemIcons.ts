@@ -1,8 +1,8 @@
 import { AmbientLight, BufferGeometry, DirectionalLight, Group, Mesh, MeshLambertMaterial, OrthographicCamera, Scene, Sphere, WebGLRenderer } from 'three';
 import { CLASSES, type ClassId } from '../data/classes';
 import type { Equip } from '../data/equipment';
-import { buildHero, type HeroLook } from '../models/hero';
-import { buildEquipGeometry, buildItemGeometry } from '../models/items';
+import { buildHero, type HeroGear, type HeroLook } from '../models/hero';
+import { buildEquipGeometry, buildItemGeometry, buildToolGeometry } from '../models/items';
 
 /**
  * 아이템 모델을 한 번 그려서 이미지로 만들어 두는 아이콘 공장.
@@ -71,6 +71,10 @@ export function itemIconUrl(id: string): string {
   return geoIcon(`i:${id}`, () => buildItemGeometry(id));
 }
 
+export function toolIconUrl(kind: 'pickaxe' | 'axe', tier: number): string {
+  return geoIcon(`t:${kind}:${tier}`, () => buildToolGeometry(kind, tier));
+}
+
 export function equipIconUrl(e: Equip): string {
   return geoIcon(`e:${e.slot}:${e.cls ?? ''}:${e.tier}:${e.grade}`, () => buildEquipGeometry(e));
 }
@@ -89,11 +93,12 @@ export function bustUrl(key: string, look: HeroLook): string {
 }
 
 /** 장비창 왼쪽에 서 있는 캐릭터 */
-export function heroPortraitUrl(cls: ClassId): string {
-  const key = `h:${cls}`;
+export function heroPortraitUrl(cls: ClassId, gear?: HeroGear): string {
+  const key = `h:${cls}:${JSON.stringify(gear ?? {})}`;
   const hit = cache.get(key);
   if (hit !== undefined) return hit;
-  const rig = buildHero(material, CLASSES[cls].look);
+  const look = CLASSES[cls].look;
+  const rig = buildHero(material, { ...look, shield: look.weapon === 'sword', hat: look.weapon === 'staff' ? 'wizard' : 'none', gear });
   rig.root.rotation.y = 0.35;
   const url = snap(rig.root, 180, 260, 1.05, 0.95);
   for (const m of rig.meshes) m.geometry.dispose();

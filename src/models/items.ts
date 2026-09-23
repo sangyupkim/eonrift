@@ -2,6 +2,7 @@ import { BoxGeometry, BufferGeometry, ConeGeometry, CylinderGeometry, Dodecahedr
 import type { Equip } from '../data/equipment';
 import { GRADES } from '../data/equipment';
 import { ITEMS } from '../data/items';
+import type { HeroGear } from './hero';
 import { merge, part } from './util';
 
 /** 아이콘용 아이템 모델. 크기는 대략 지름 1 안쪽에 맞춘다 */
@@ -160,7 +161,7 @@ export function buildItemGeometry(id: string): BufferGeometry {
 }
 
 /** 장비 단계별 재료 색 (구리, 철, 금, 다이아, 티타늄, 오리하르콘, 차원) */
-const TIER_METAL = [0xd98a50, 0xaab2bc, 0xf0c848, 0xbff4ff, 0x9aa8b8, 0xff8a4a, 0x7a6cff];
+export const TIER_METAL = [0xd98a50, 0xaab2bc, 0xf0c848, 0xbff4ff, 0x9aa8b8, 0xff8a4a, 0x7a6cff];
 
 export function buildEquipGeometry(e: Equip): BufferGeometry {
   const metal = TIER_METAL[Math.min(6, e.tier - 1)];
@@ -240,6 +241,39 @@ export function buildEquipGeometry(e: Equip): BufferGeometry {
         part(new TorusGeometry(0.18, 0.03, 4, 10), metal, { pos: [0, -0.34, 0.06] }),
       ];
       break;
+  }
+  return merge(g);
+}
+
+/** 착용 장비 → 캐릭터 모델에 입힐 모습 */
+export function gearLook(eq: Partial<Record<Equip['slot'], Equip>>, tools?: { pickaxe: { tier: number }; axe: { tier: number } }): HeroGear {
+  const metal = (e: Equip) => TIER_METAL[Math.min(6, e.tier - 1)];
+  const gem = (e: Equip) => GRADES[e.grade].color;
+  const g: HeroGear = {};
+  if (eq.weapon) g.weapon = { metal: metal(eq.weapon), gem: gem(eq.weapon) };
+  if (eq.helmet) g.helmet = { metal: metal(eq.helmet), gem: gem(eq.helmet) };
+  if (eq.armor) g.armor = { metal: metal(eq.armor), gem: gem(eq.armor) };
+  if (eq.pants) g.pants = metal(eq.pants);
+  if (eq.boots) g.boots = metal(eq.boots);
+  if (eq.necklace) g.necklace = gem(eq.necklace);
+  if (tools) {
+    g.pickaxe = TIER_METAL[Math.min(6, tools.pickaxe.tier - 1)];
+    g.axe = TIER_METAL[Math.min(6, tools.axe.tier - 1)];
+  }
+  return g;
+}
+
+/** 곡괭이·도끼 아이콘 (날 색이 단계 재질) */
+export function buildToolGeometry(kind: 'pickaxe' | 'axe', tier: number): BufferGeometry {
+  const metal = TIER_METAL[Math.min(6, tier - 1)];
+  const g = [part(new CylinderGeometry(0.04, 0.05, 1, 6), WOOD, { rot: [0, 0, 0.7] })];
+  if (kind === 'pickaxe') {
+    g.push(part(new BoxGeometry(0.1, 0.12, 0.8), metal, { pos: [0.3, 0.36, 0], rot: [0, Math.PI / 2, 0.7] }));
+    g.push(part(new ConeGeometry(0.07, 0.2, 4), shade(metal, 1.15), { pos: [0.6, 0.12, 0], rot: [0, 0, -Math.PI / 2 + 0.7 - 0.9] }));
+    g.push(part(new ConeGeometry(0.07, 0.2, 4), shade(metal, 1.15), { pos: [0.0, 0.62, 0], rot: [0, 0, 0.7 + 0.2] }));
+  } else {
+    g.push(part(new BoxGeometry(0.34, 0.38, 0.07), metal, { pos: [0.38, 0.22, 0], rot: [0, 0, 0.7] }));
+    g.push(part(new BoxGeometry(0.06, 0.4, 0.08), shade(metal, 1.25), { pos: [0.52, 0.08, 0], rot: [0, 0, 0.7] }));
   }
   return merge(g);
 }

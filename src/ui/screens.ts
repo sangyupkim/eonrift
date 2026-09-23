@@ -1,18 +1,21 @@
 import { BUILD_ID, GAME_VERSION } from '../config';
 import { applyUpdate, fetchRemoteVersion, isNewer, type RemoteVersion } from './update';
 import { CLASSES, CLASS_ORDER, expToNext, MAX_LEVEL, MAX_SKILL_LEVEL, SKILL_LEARN, skillUpgradeCost, STAT_INFO, STAT_KEYS, type ClassId, type StatKey } from '../data/classes';
-import { durability, EQUIP_SLOTS, EQUIP_MAX_DUR, enhanceCost, repairCost, toolRepairCost, TOOL_MAX_DUR, type EquipSlot, equipName, equipStats, equipValue, GRADES, slotName, type Equip } from '../data/equipment';
+import { newTool, TOOL_KIND_NAMES, TOOL_TIER_NAMES, toolBonusChance, toolEnhanceCost, toolMaxDur, toolName, toolRepair, toolSpeed, type ToolKind, type ToolState } from '../data/tools';
+import { equipCraftCost, toolCraftCost, workbenchUpgradeCost, type CraftCost } from '../data/crafting';
+import { newUid, durability, EQUIP_SLOTS, EQUIP_MAX_DUR, enhanceCost, repairCost, type EquipSlot, equipName, equipStats, equipValue, GRADES, slotName, type Equip } from '../data/equipment';
 import { BUILDINGS, BUILD_ORDER, FACTORY_SIZES, RECIPES, type BuildingType } from '../data/factory';
 import { ITEMS, ITEM_LIST } from '../data/items';
 import type { QuestDef } from '../data/quests';
 import { THEMES } from '../data/themes';
-import { BOX_CAPACITY, boxTotal, ESSENCES, MACHINE_TYPES, RECIPE_BY_ID, recipesFor, type BuildingState, type Factory } from '../factory/sim';
+import { workbenchCap, BOX_CAPACITY, boxTotal, ESSENCES, MACHINE_TYPES, RECIPE_BY_ID, recipesFor, type BuildingState, type Factory } from '../factory/sim';
 import type { Bag, Slot } from '../game/Bag';
 import { stageIndex, type Progress } from '../game/Progress';
 import { objectiveNeed, objectiveProgress, objectiveText, type Quests } from '../game/Quests';
 import { ICONS } from './icons';
 import { buildingThumb } from './thumbs';
-import { equipIconUrl, heroPortraitUrl, itemIconUrl } from './itemIcons';
+import { gearLook } from '../models/items';
+import { equipIconUrl, heroPortraitUrl, itemIconUrl, toolIconUrl } from './itemIcons';
 import { canInstall, promptInstall } from './install';
 
 export const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
@@ -41,6 +44,10 @@ const itemGem = (id: string) => {
 const equipGem = (e: Equip) => {
   const url = equipIconUrl(e);
   return url ? `<img class="gem ico eq-ico" style="--c:${hex(GRADES[e.grade].color)}" src="${url}" alt="">` : `<span class="gem eq" style="--c:${hex(GRADES[e.grade].color)}"></span>`;
+};
+const toolGem = (k: ToolKind, t: ToolState) => {
+  const url = toolIconUrl(k, t.tier);
+  return url ? `<img class="gem ico" src="${url}" alt="">` : '';
 };
 /** 글 사이에 들어가는 작은 아이콘 */
 const inlineGem = (id: string) => {
@@ -402,7 +409,7 @@ export class Screens {
           return `<li>${equipGem(e)}<div>${equipTitle(e)}<small>${bagEquips.includes(e) ? '<span class="ok">[가방]</span> ' : '<span class="dim">[창고]</span> '}${slotName(e.slot, e.cls)} · ${equipLine(e) || '<span class="bad">망가짐</span>'} · 내구 ${durability(e)}${e.cls && e.cls !== p.data.currentClass ? ` · ${CLASSES[e.cls].name} 전용` : ''}</small></div><button data-eq="${e.uid}" ${ok ? '' : 'disabled'}>장착</button></li>`;
         })
         .join('');
-      const portrait = heroPortraitUrl(p.data.currentClass);
+      const portrait = heroPortraitUrl(p.data.currentClass, gearLook(c.equipment));
       body = `<div class="scroll"><div class="doll">
           <div class="doll-col">${(['helmet', 'armor', 'pants', 'boots'] as EquipSlot[]).map(slotBox).join('')}</div>
           <div class="doll-body">${portrait ? `<img src="${portrait}" alt="">` : ''}<small>${cls.name} Lv.${c.level}</small></div>
@@ -410,6 +417,16 @@ export class Screens {
             <div class="doll-stats"><span>공격 <b>${st.atk}</b></span><span>방어 <b>${st.def}</b></span><span>HP <b>${st.maxHp}</b></span><span>치명 <b>${st.crit}%</b></span></div></div>
         </div>
         <div class="item-info">${info}</div>
+        <h3>채집 도구 <small>강화·수리: 대장장이 고른 · 제작: 차원집 제작대</small></h3>
+        <div class="tool-row">${(['pickaxe', 'axe'] as ToolKind[])
+          .map((k) => {
+            const t = p.data.tools[k];
+            const owned = p.flag(k === 'axe' ? 'tool_axe' : 'tool_pickaxe') > 0;
+            if (!owned) return `<div class="tool-card dim">${k === 'axe' ? '도끼' : '곡괭이'} 없음</div>`;
+            const r = t.dur / toolMaxDur(t);
+            return `<div class="tool-card ${t.dur <= 0 ? 'broken' : ''}">${toolGem(k, t)}<div><b>${toolName(k, t)}</b><small>내구도 <span class="${t.dur <= 0 ? 'bad' : r < 0.2 ? 'warn' : ''}">${t.dur}/${toolMaxDur(t)}</span> · 속도 +${Math.round((toolSpeed(t) - 1) * 100)}%</small><i class="dur" style="width:${Math.round(r * 100)}%"></i></div></div>`;
+          })
+          .join('')}</div>
         <h3>${field?.dungeon ? '가방 속 장비 <small>던전에서는 가방에 든 장비로만 바꿀 수 있습니다</small>' : '가방·창고의 장비'} ${selSlot ? `<small>${slotName(selSlot, p.data.currentClass)}만 · <a data-slot="">전체 보기</a></small>` : ''}</h3><ul class="list">${list || '<li class="empty">장비가 없습니다</li>'}</ul></div>`;
     } else if (tab === 'skills') {
       const quickRow = c.quick
@@ -826,7 +843,7 @@ export class Screens {
     const tools = p.data.tools;
     const toolRows = (['pickaxe', 'axe'] as const)
       .filter((k) => p.flag(k === 'axe' ? 'tool_axe' : 'tool_pickaxe'))
-      .map((k) => `<li class="${selected === `tool:${k}` ? 'sel' : ''}" data-pick="tool:${k}"><span class="key">${k === 'axe' ? '🪓' : '⛏'}</span><div><b>${k === 'axe' ? '도끼' : '곡괭이'}</b><small>내구도 <span class="${tools[k] <= 0 ? 'bad' : ''}">${tools[k]}/${TOOL_MAX_DUR}</span></small></div></li>`)
+      .map((k) => `<li class="${selected === `tool:${k}` ? 'sel' : ''}" data-pick="tool:${k}">${toolGem(k, tools[k])}<div><b>${toolName(k, tools[k])}</b><small>내구도 <span class="${tools[k].dur <= 0 ? 'bad' : ''}">${tools[k].dur}/${toolMaxDur(tools[k])}</span></small></div></li>`)
       .join('');
     const selTool = selected?.startsWith('tool:') ? (selected.slice(5) as 'pickaxe' | 'axe') : null;
     const sel = selTool ? undefined : (all.find((e) => e.uid === selected) ?? all[0]);
@@ -840,12 +857,20 @@ export class Screens {
     };
     let detail = '<p class="hint">장비가 없습니다.</p>';
     if (selTool) {
-      const cost = toolRepairCost(tools[selTool]);
-      detail = `<p><b>${selTool === 'axe' ? '도끼' : '곡괭이'}</b> · 내구도 ${tools[selTool]}/${TOOL_MAX_DUR}</p><p class="hint">한 번 캘 때마다 내구도가 1 줄어듭니다. 0이 되면 채집할 수 없습니다.</p>`;
+      const t = tools[selTool];
+      const cost = toolRepair(t);
+      detail = `<p><b>${toolName(selTool, t)}</b> · 내구도 ${t.dur}/${toolMaxDur(t)}</p>
+        <p class="hint">${TOOL_TIER_NAMES[t.tier - 1]} 단계 자원까지는 내구도 1, 한 단계 위(${TOOL_TIER_NAMES[t.tier] ?? '-'})는 3씩 닳습니다. 그보다 위는 캘 수 없습니다.<br>
+        캐는 속도 +${Math.round((toolSpeed(t) - 1) * 100)}% · 추가 채집 ${Math.round(toolBonusChance(t) * 100)}%</p>`;
       if (cost) {
         const ok = p.count(cost.ore) >= cost.count && p.data.gold >= cost.gold;
-        detail += `<h3>수리</h3>${costLine(cost.ore, cost.count, cost.gold)}<div class="menu"><button class="primary" data-repair-tool="${selTool}" ${ok ? '' : 'disabled'}>수리하기</button></div>`;
-      } else detail += '<p class="ok">수리할 필요가 없습니다.</p>';
+        detail += `<h3>수리</h3>${costLine(cost.ore, cost.count, cost.gold)}<div class="menu"><button data-repair-tool="${selTool}" ${ok ? '' : 'disabled'}>수리하기</button></div>`;
+      }
+      const ec = toolEnhanceCost(t);
+      if (ec) {
+        const ok = p.count(ec.ore) >= ec.count && p.data.gold >= ec.gold;
+        detail += `<h3>강화 → +${t.plus + 1} <small>속도 +6% · 추가 채집 +5%</small></h3>${costLine(ec.ore, ec.count, ec.gold)}<p>성공 확률 <b>${Math.round(ec.rate * 100)}%</b></p><div class="menu"><button class="primary" data-enh-tool="${selTool}" ${ok ? '' : 'disabled'}>강화하기</button></div>`;
+      } else detail += '<p class="hint">최대 강화(+10)입니다.</p>';
     } else if (sel) {
       const cost = enhanceCost(sel);
       detail = `<p>${equipTitle(sel)}</p><p class="hint">${equipLine(sel) || '<span class="bad">망가짐</span>'} · 내구도 ${durability(sel)}/${EQUIP_MAX_DUR}</p>`;
@@ -881,12 +906,26 @@ export class Screens {
     this.on(s, '[data-pick]', (el) => again(el.dataset.pick));
     this.on(s, '[data-repair-tool]', (b) => {
       const k = b.dataset.repairTool as 'pickaxe' | 'axe';
-      const cost = toolRepairCost(tools[k]);
+      const cost = toolRepair(tools[k]);
       if (!cost || p.count(cost.ore) < cost.count || p.data.gold < cost.gold) return;
       p.take(cost.ore, cost.count);
       p.data.gold -= cost.gold;
-      tools[k] = TOOL_MAX_DUR;
+      tools[k].dur = toolMaxDur(tools[k]);
       again(`tool:${k}`, '<b class="ok">수리 완료!</b>');
+    });
+    this.on(s, '[data-enh-tool]', (b) => {
+      const k = b.dataset.enhTool as ToolKind;
+      const t = tools[k];
+      const ec = toolEnhanceCost(t);
+      if (!ec || p.count(ec.ore) < ec.count || p.data.gold < ec.gold) return;
+      p.take(ec.ore, ec.count);
+      p.data.gold -= ec.gold;
+      const ok = Math.random() < ec.rate;
+      if (ok) {
+        t.plus++;
+        t.dur = Math.min(toolMaxDur(t), t.dur + 10);
+      }
+      again(`tool:${k}`, ok ? `<b class="ok">강화 성공! ${toolName(k, t)}</b>` : '<b class="bad">강화 실패…</b>');
     });
     this.on(s, '[data-repair]', () => {
       if (!sel) return;
@@ -1065,6 +1104,100 @@ export class Screens {
   }
 
   // ---------------- 공장: 기계 ----------------
+  // ---------------- 제작대: 채집 도구 · 장비 제작, 레벨업 ----------------
+  workbench(f: Factory, b: BuildingState, p: Progress, onChange: () => void, onClose: () => void, tab: 'tools' | 'equip' | 'level' = 'tools', message?: string): void {
+    const lv = b.level ?? 1;
+    const energy = Math.floor(b.energy ?? 0);
+    const cap = workbenchCap(b);
+    const powered = f.powerOf(b) > 0;
+    const costHtml = (c: CraftCost) =>
+      [
+        ...Object.entries(c.items).map(([id, n]) => `<span class="${p.count(id) >= n ? '' : 'bad'}">${inlineGem(id)}${ITEMS[id].name} ${p.count(id)}/${n}</span>`),
+        `<span class="${energy >= c.energy ? '' : 'bad'}">⚡ ${c.energy}</span>`,
+        `<span class="${p.data.gold >= c.gold ? '' : 'bad'}">${c.gold} G</span>`,
+      ].join(' · ');
+    const can = (c: CraftCost) => energy >= c.energy && p.data.gold >= c.gold && p.hasAll(c.items);
+    let body = '';
+    if (tab === 'tools') {
+      body = (['pickaxe', 'axe'] as ToolKind[])
+        .flatMap((k) => {
+          const cur = p.data.tools[k];
+          const owned = p.flag(k === 'axe' ? 'tool_axe' : 'tool_pickaxe') > 0;
+          return Array.from({ length: lv }, (_, i) => i + 1)
+            .filter((t) => !owned || t > cur.tier)
+            .map((t) => {
+              const c = toolCraftCost(t);
+              return `<li>${toolGem(k, { tier: t, plus: 0, dur: 1 })}<div><b>${TOOL_TIER_NAMES[t - 1]} ${TOOL_KIND_NAMES[k]}</b><small>${TOOL_TIER_NAMES[t - 1]}${t < 7 ? `·${TOOL_TIER_NAMES[t]}` : ''} 자원까지 채집 · 내구도 ${toolMaxDur({ tier: t, plus: 0, dur: 0 })}</small><small>${costHtml(c)}</small></div><button data-tool="${k}:${t}" ${can(c) ? '' : 'disabled'}>제작</button></li>`;
+            });
+        })
+        .join('');
+      body = `<p class="hint">지금: ${toolName('pickaxe', p.data.tools.pickaxe)} · ${toolName('axe', p.data.tools.axe)}. 새 도구를 만들면 지금 도구와 바뀝니다 (강화 단계는 초기화).</p><ul class="list scroll">${body || '<li class="empty">만들 수 있는 더 좋은 도구가 없습니다. 제작대 레벨을 올리세요.</li>'}</ul>`;
+    } else if (tab === 'equip') {
+      const rows: string[] = [];
+      for (let t = lv; t >= 1; t--)
+        for (const slot of EQUIP_SLOTS) {
+          const e: Equip = { uid: '', slot, cls: slot === 'weapon' ? p.data.currentClass : undefined, tier: t, grade: 0, plus: 0 };
+          const c = equipCraftCost(slot, t);
+          rows.push(`<li>${equipGem(e)}<div><b>${equipName(e)}</b><small>${equipLine(e)}</small><small>${costHtml(c)}</small></div><button data-eqc="${slot}:${t}" ${can(c) ? '' : 'disabled'}>제작</button></li>`);
+        }
+      body = `<p class="hint">일반 등급 장비를 만듭니다. 만든 장비는 창고로 들어갑니다. 무기는 지금 직업(${CLASSES[p.data.currentClass].name}) 전용입니다.</p><ul class="list scroll">${rows.join('')}</ul>`;
+    } else {
+      const c = workbenchUpgradeCost(lv);
+      body = c
+        ? `<p>제작대 Lv.${lv} → <b>Lv.${lv + 1}</b></p><p class="hint">${TOOL_TIER_NAMES[lv]} 단계 도구와 장비를 만들 수 있게 되고, 에너지 저장량이 ${cap} → ${cap + 300}이 됩니다.</p>
+          <p>${costHtml(c)}</p><div class="menu"><button class="primary" data-up ${can(c) ? '' : 'disabled'}>레벨 올리기</button></div>`
+        : '<p class="ok">최고 레벨입니다.</p>';
+    }
+    const s = this.open(
+      'workbench',
+      `<div class="panel wide tall">
+         <button class="close">${ICONS.close}</button>
+         <h2>제작대 Lv.${lv} <small class="gold">${p.data.gold} G</small></h2>
+         <div class="energy"><span>⚡ 에너지 ${energy}/${cap}</span><span class="bar"><i style="width:${Math.round((energy / cap) * 100)}%"></i></span><small class="${powered ? 'ok' : 'bad'}">${powered ? '충전 중 (마력선 연결됨)' : energy >= cap ? '가득 참' : '전력 없음 — 마력선으로 발전기와 이으세요'}</small></div>
+         ${message ? `<div class="notice">${message}</div>` : ''}
+         <div class="tabs">
+           <button data-tab="tools" class="${tab === 'tools' ? 'on' : ''}">채집 도구</button>
+           <button data-tab="equip" class="${tab === 'equip' ? 'on' : ''}">장비</button>
+           <button data-tab="level" class="${tab === 'level' ? 'on' : ''}">레벨업</button>
+         </div>
+         ${body}
+       </div>`,
+      onClose,
+    );
+    const again = (t = tab, msg?: string) => this.workbench(f, b, p, onChange, onClose, t, msg);
+    const pay = (c: CraftCost) => {
+      if (!can(c)) return false;
+      p.takeAll(c.items);
+      p.data.gold -= c.gold;
+      b.energy = (b.energy ?? 0) - c.energy;
+      return true;
+    };
+    this.on(s, '[data-tab]', (el) => again(el.dataset.tab as typeof tab));
+    this.on(s, '[data-tool]', (el) => {
+      const [k, t] = el.dataset.tool!.split(':') as [ToolKind, string];
+      if (!pay(toolCraftCost(Number(t)))) return;
+      p.data.tools[k] = newTool(Number(t));
+      p.setFlag(k === 'axe' ? 'tool_axe' : 'tool_pickaxe');
+      onChange();
+      again(tab, `<b class="ok">${toolName(k, p.data.tools[k])} 완성!</b>`);
+    });
+    this.on(s, '[data-eqc]', (el) => {
+      const [slot, t] = el.dataset.eqc!.split(':') as [EquipSlot, string];
+      if (!pay(equipCraftCost(slot, Number(t)))) return;
+      const e: Equip = { uid: newUid(), slot, cls: slot === 'weapon' ? p.data.currentClass : undefined, tier: Number(t), grade: 0, plus: 0 };
+      p.data.equips.push(e);
+      onChange();
+      again(tab, `<b class="ok">${equipName(e)} 완성! (창고)</b>`);
+    });
+    this.on(s, '[data-up]', () => {
+      const c = workbenchUpgradeCost(lv);
+      if (!c || !pay(c)) return;
+      b.level = lv + 1;
+      onChange();
+      again('level', `<b class="ok">제작대 Lv.${lv + 1}!</b>`);
+    });
+  }
+
   machine(f: Factory, b: BuildingState, p: Progress, onChange: () => void, onClose: () => void): void {
     const def = BUILDINGS[b.type];
     let body = `<p class="hint">${def.description}</p>`;

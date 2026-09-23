@@ -13,6 +13,8 @@ export interface NodeDef {
   radius: number;
   baseColor: number;
   accentColor: number;
+  /** 자원 단계 (도구 단계와 비교) */
+  tier: number;
 }
 
 const ORE_NODES: [string, string, number, number][] = [
@@ -35,16 +37,16 @@ const TREE_NODES: [string, string, number, number][] = [
 ];
 
 const defs: NodeDef[] = [
-  ...ORE_NODES.map(([name, itemId, baseColor, accentColor], i): NodeDef => ({ id: `ore_${i + 1}`, name, style: 'ore', itemId, hp: 4 + Math.floor(i / 2), bonus: 2, radius: 0.75, baseColor, accentColor })),
-  ...TREE_NODES.map(([name, itemId, baseColor, accentColor], i): NodeDef => ({ id: `tree_${i + 1}`, name, style: 'tree', itemId, hp: 3 + Math.floor(i / 2), bonus: 2, radius: 0.55, baseColor, accentColor })),
-  { id: 'frost_cluster', name: '서리 결정', style: 'crystal', itemId: 'frost_crystal', hp: 4, bonus: 2, radius: 0.65, baseColor: 0x5f7892, accentColor: 0xa8ecff },
-  { id: 'mana_cluster', name: '마력 수정', style: 'crystal', itemId: 'mana_crystal', hp: 5, bonus: 2, radius: 0.65, baseColor: 0x4a3a6a, accentColor: 0xc28cff },
-  { id: 'gear_pile', name: '톱니 잔해', style: 'scrap', itemId: 'gear_part', hp: 4, bonus: 2, radius: 0.7, baseColor: 0x5d5448, accentColor: 0xd4ac4c },
-  { id: 'alloy_pile', name: '합금 잔해', style: 'scrap', itemId: 'magi_alloy', hp: 5, bonus: 2, radius: 0.7, baseColor: 0x4a5058, accentColor: 0x78aee0 },
-  { id: 'fire_cluster', name: '화염 핵', style: 'crystal', itemId: 'fire_core', hp: 5, bonus: 2, radius: 0.65, baseColor: 0x3a2622, accentColor: 0xff7a30 },
-  { id: 'dimension_cluster', name: '차원 결정', style: 'crystal', itemId: 'dimension_crystal', hp: 6, bonus: 2, radius: 0.65, baseColor: 0x2a2a48, accentColor: 0x6ff4ff },
+  ...ORE_NODES.map(([name, itemId, baseColor, accentColor], i): NodeDef => ({ id: `ore_${i + 1}`, tier: i + 1, name, style: 'ore', itemId, hp: 4 + Math.floor(i / 2), bonus: 2, radius: 0.75, baseColor, accentColor })),
+  ...TREE_NODES.map(([name, itemId, baseColor, accentColor], i): NodeDef => ({ id: `tree_${i + 1}`, tier: i + 1, name, style: 'tree', itemId, hp: 3 + Math.floor(i / 2), bonus: 2, radius: 0.55, baseColor, accentColor })),
+  { id: 'frost_cluster', tier: 3, name: '서리 결정', style: 'crystal', itemId: 'frost_crystal', hp: 4, bonus: 2, radius: 0.65, baseColor: 0x5f7892, accentColor: 0xa8ecff },
+  { id: 'mana_cluster', tier: 4, name: '마력 수정', style: 'crystal', itemId: 'mana_crystal', hp: 5, bonus: 2, radius: 0.65, baseColor: 0x4a3a6a, accentColor: 0xc28cff },
+  { id: 'gear_pile', tier: 5, name: '톱니 잔해', style: 'scrap', itemId: 'gear_part', hp: 4, bonus: 2, radius: 0.7, baseColor: 0x5d5448, accentColor: 0xd4ac4c },
+  { id: 'alloy_pile', tier: 5, name: '합금 잔해', style: 'scrap', itemId: 'magi_alloy', hp: 5, bonus: 2, radius: 0.7, baseColor: 0x4a5058, accentColor: 0x78aee0 },
+  { id: 'fire_cluster', tier: 6, name: '화염 핵', style: 'crystal', itemId: 'fire_core', hp: 5, bonus: 2, radius: 0.65, baseColor: 0x3a2622, accentColor: 0xff7a30 },
+  { id: 'dimension_cluster', tier: 7, name: '차원 결정', style: 'crystal', itemId: 'dimension_crystal', hp: 6, bonus: 2, radius: 0.65, baseColor: 0x2a2a48, accentColor: 0x6ff4ff },
   // 보물 상자: 부수면 그 단계의 자원이 여러 개 나온다 (itemId는 비워 두고 테마 자원에서 고른다)
-  { id: 'chest', name: '보물 상자', style: 'chest', itemId: '', hp: 1, bonus: 5, radius: 0.6, baseColor: 0x7a4a24, accentColor: 0xe8c14a },
+  { id: 'chest', tier: 1, name: '보물 상자', style: 'chest', itemId: '', hp: 1, bonus: 5, radius: 0.6, baseColor: 0x7a4a24, accentColor: 0xe8c14a },
 ];
 
 /**

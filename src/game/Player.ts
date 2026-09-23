@@ -1,7 +1,7 @@
 import { Color, GreaterDepth, Material, Mesh, MeshBasicMaterial, MeshLambertMaterial } from 'three';
 import { PLAYER, SCREEN_RIGHT, SCREEN_UP } from '../config';
 import type { ClassDef } from '../data/classes';
-import { buildHero, type HeroRig } from '../models/hero';
+import { buildHero, type HeroGear, type HeroRig } from '../models/hero';
 
 export type Pose = 'swing' | 'spin' | 'cast' | 'shoot' | 'thrust' | 'gather';
 export type DashPose = 'roll' | 'lunge' | 'leap';
@@ -65,6 +65,7 @@ export class Player {
   constructor(
     material: Material,
     readonly cls: ClassDef,
+    gear?: HeroGear,
   ) {
     this.material = material as MeshLambertMaterial;
     this.rig = buildHero(material, {
@@ -74,6 +75,7 @@ export class Player {
       weapon: cls.look.weapon,
       shield: cls.look.weapon === 'sword',
       hat: cls.look.weapon === 'staff' ? 'wizard' : 'none',
+      gear,
     });
     addSilhouette(this.rig.meshes);
   }

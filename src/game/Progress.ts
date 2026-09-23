@@ -1,5 +1,6 @@
 import { CLASSES, CLASS_ORDER, expToNext, MAX_LEVEL, POINTS_PER_LEVEL, STAT_KEYS, type BaseStats, type ClassId, type StatKey } from '../data/classes';
-import { equipStats, TOOL_MAX_DUR, type Equip, type EquipSlot } from '../data/equipment';
+import { equipStats, type Equip, type EquipSlot } from '../data/equipment';
+import { newTool, type ToolKind, type ToolState } from '../data/tools';
 import { FACTORY_SIZES, RECIPE_RENAMES } from '../data/factory';
 import { ITEM_RENAMES } from '../data/items';
 import type { FactoryState } from '../factory/sim';
@@ -45,7 +46,7 @@ export interface SaveData {
   lastSaved: number;
   settings: { shadows: boolean; sound: boolean };
   /** 곡괭이·도끼 내구도 */
-  tools: { pickaxe: number; axe: number };
+  tools: Record<ToolKind, ToolState>;
 }
 
 const KEY = 'yeongeop-teumsae-save-v1';
@@ -72,7 +73,7 @@ export function newSave(): SaveData {
     factory: { sizeLevel: 0, buildings: [] },
     lastSaved: Date.now(),
     settings: { shadows: true, sound: true },
-    tools: { pickaxe: TOOL_MAX_DUR, axe: TOOL_MAX_DUR },
+    tools: { pickaxe: newTool(), axe: newTool() },
   };
 }
 
@@ -164,7 +165,12 @@ function migrate(d: SaveData & { maxTier?: number }): SaveData {
     if (b.recipe) b.recipe = RECIPE_RENAMES[b.recipe] ?? b.recipe;
     if (b.crafting) b.crafting = RECIPE_RENAMES[b.crafting] ?? b.crafting;
   }
-  d.tools ??= { pickaxe: TOOL_MAX_DUR, axe: TOOL_MAX_DUR };
+  d.tools ??= { pickaxe: newTool(), axe: newTool() };
+  // 예전 저장: 도구 내구도가 숫자 하나였다
+  for (const k of ['pickaxe', 'axe'] as ToolKind[]) {
+    const v = d.tools[k] as unknown;
+    if (typeof v === 'number') d.tools[k] = { tier: 1, plus: 0, dur: Math.min(v, 150) };
+  }
   d.inventory ??= Array.from({ length: BAG_SLOTS }, () => null);
   for (const s of d.inventory) if (s && !s.equip) s.itemId = re(s.itemId);
   return d;
