@@ -8,5 +8,8 @@ export const ICONS = {
   pause: svg('<path d="M9 5v14M15 5v14"/>'),
   lock: svg('<rect x="6" y="11" width="12" height="9" rx="1.5"/><path d="M9 11V8a3 3 0 0 1 6 0v3"/>'),
   portal: svg('<ellipse cx="12" cy="12" rx="6" ry="8.5"/><ellipse cx="12" cy="12" rx="2.5" ry="4.5"/>'),
+  person: svg('<circle cx="12" cy="7.5" r="3.5"/><path d="M5 20c0-4 3-6.5 7-6.5s7 2.5 7 6.5"/>'),
+  hammer: svg('<path d="M13 7l4-4 4 4-4 4z"/><path d="M15 9L5 19"/>'),
+  potion: svg('<path d="M9 3h6M10 3v5l-4.5 8.5A3 3 0 0 0 8.2 21h7.6a3 3 0 0 0 2.7-4.5L14 8V3"/><path d="M7.5 14h9"/>'),
   close: svg('<path d="M6 6l12 12M18 6L6 18"/>'),
 };

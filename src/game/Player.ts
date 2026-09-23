@@ -1,12 +1,34 @@
-import { GreaterDepth, Material, Mesh, MeshBasicMaterial } from 'three';
+import { Color, GreaterDepth, Material, Mesh, MeshBasicMaterial, MeshLambertMaterial } from 'three';
 import { PLAYER, SCREEN_RIGHT, SCREEN_UP } from '../config';
+import type { ClassDef } from '../data/classes';
 import { buildHero, type HeroRig } from '../models/hero';
 
-export type PlayerState = 'idle' | 'move' | 'roll' | 'attack';
+export type Pose = 'swing' | 'spin' | 'cast' | 'shoot' | 'thrust';
+export type DashPose = 'roll' | 'lunge' | 'leap';
+
+export interface ActionSpec {
+  pose: Pose;
+  duration: number;
+  /** 판정 시점 (0~1) */
+  hitAt: number;
+  onHit: () => void;
+  combo?: number;
+  moveMult?: number;
+}
+
+export interface DashSpec {
+  dirX: number;
+  dirZ: number;
+  speed: number;
+  duration: number;
+  pose: DashPose;
+  invuln: boolean;
+  onStep?: () => void;
+  onEnd?: () => void;
+}
 
 export interface MoveContext {
   move: { x: number; y: number };
-  /** 실제 이동을 적용하는 함수 (충돌 처리 포함) */
   applyMove: (dx: number, dz: number) => void;
 }
 
@@ -16,25 +38,41 @@ const lerpAngle = (a: number, b: number, t: number) => {
   return a + d * t;
 };
 
-/** 검사 캐릭터: 이동, 구르기, 휘두르기와 그 애니메이션 */
+const HURT = new Color(0xff3030);
+
+/** 주인공: 이동, 구르기, 행동(공격·스킬) 애니메이션과 HP/MP */
 export class Player {
   readonly rig: HeroRig;
   readonly position = { x: 0, z: 0 };
   facing = 0;
-  state: PlayerState = 'idle';
-
+  state: 'idle' | 'move' | 'action' | 'dash' | 'dead' = 'idle';
+  hp = 100;
+  mp = 50;
+  maxHp = 100;
+  maxMp = 50;
+  invuln = 0;
+  private hurtFlash = 0;
   private speed = 0;
   private walkPhase = 0;
-  private stateTime = 0;
-  private rollDir = { x: 0, z: 1 };
-  private rollCooldown = 0;
-  private hitDone = false;
   private time = 0;
-  /** 공격 판정이 나오는 순간 한 번 호출된다 */
-  onAttackHit: (() => void) | null = null;
+  private action: (ActionSpec & { t: number; done: boolean }) | null = null;
+  private dash: (DashSpec & { t: number }) | null = null;
+  rollCooldown = 0;
+  private material: MeshLambertMaterial;
 
-  constructor(material: Material) {
-    this.rig = buildHero(material);
+  constructor(
+    material: Material,
+    readonly cls: ClassDef,
+  ) {
+    this.material = material as MeshLambertMaterial;
+    this.rig = buildHero(material, {
+      tunic: cls.look.tunic,
+      tunicDark: cls.look.tunicDark,
+      hair: cls.look.hair,
+      weapon: cls.look.weapon,
+      shield: cls.look.weapon === 'sword',
+      hat: cls.look.weapon === 'staff' ? 'wizard' : 'none',
+    });
     addSilhouette(this.rig.meshes);
   }
 
@@ -48,76 +86,108 @@ export class Player {
     return this.state === 'idle' || this.state === 'move';
   }
 
-  get rollReady(): number {
-    return this.rollCooldown;
+  get alive(): boolean {
+    return this.state !== 'dead';
   }
 
-  /** 대상 방향으로 몸을 돌리고 휘두른다 */
-  startAttack(targetAngle: number | null): boolean {
+  /** 화면 기준 입력을 월드 방향으로 */
+  static worldDir(move: { x: number; y: number }): { x: number; z: number; len: number } {
+    const x = SCREEN_RIGHT.x * move.x + SCREEN_UP.x * move.y;
+    const z = SCREEN_RIGHT.z * move.x + SCREEN_UP.z * move.y;
+    return { x, z, len: Math.hypot(x, z) };
+  }
+
+  startAction(spec: ActionSpec, faceAngle: number | null): boolean {
     if (!this.canAct) return false;
-    if (targetAngle !== null) this.facing = targetAngle;
-    this.state = 'attack';
-    this.stateTime = 0;
-    this.hitDone = false;
+    if (faceAngle !== null) this.facing = faceAngle;
+    this.action = { ...spec, t: 0, done: false };
+    this.state = 'action';
     return true;
   }
 
+  startDash(spec: DashSpec): void {
+    if (!this.alive) return;
+    this.action = null;
+    this.dash = { ...spec, t: 0 };
+    this.state = 'dash';
+    if (spec.pose !== 'leap') this.facing = Math.atan2(spec.dirX, spec.dirZ);
+  }
+
   startRoll(move: { x: number; y: number }): boolean {
-    if (this.state === 'roll' || this.rollCooldown > 0) return false;
-    const len = Math.hypot(move.x, move.y);
-    if (len > 0.1) {
-      this.rollDir = {
-        x: (SCREEN_RIGHT.x * move.x + SCREEN_UP.x * move.y) / len,
-        z: (SCREEN_RIGHT.z * move.x + SCREEN_UP.z * move.y) / len,
-      };
-      this.facing = Math.atan2(this.rollDir.x, this.rollDir.z);
-    } else {
-      this.rollDir = { x: Math.sin(this.facing), z: Math.cos(this.facing) };
-    }
-    this.state = 'roll';
-    this.stateTime = 0;
+    if (this.rollCooldown > 0 || this.state === 'dash' || !this.alive) return false;
+    const d = Player.worldDir(move);
+    const dir = d.len > 0.1 ? { x: d.x / d.len, z: d.z / d.len } : { x: Math.sin(this.facing), z: Math.cos(this.facing) };
+    this.startDash({ dirX: dir.x, dirZ: dir.z, speed: PLAYER.rollSpeed, duration: PLAYER.rollTime, pose: 'roll', invuln: true });
     this.rollCooldown = PLAYER.rollCooldown + PLAYER.rollTime;
     return true;
   }
 
+  get isInvulnerable(): boolean {
+    return this.invuln > 0 || (this.dash?.invuln ?? false) || !this.alive;
+  }
+
+  hurt(amount: number): void {
+    this.hp = Math.max(0, this.hp - amount);
+    this.hurtFlash = 1;
+    this.invuln = 0.45;
+    if (this.hp <= 0) {
+      this.state = 'dead';
+      this.action = null;
+      this.dash = null;
+    }
+  }
+
   update(dt: number, ctx: MoveContext): void {
     this.time += dt;
-    this.stateTime += dt;
     this.rollCooldown = Math.max(0, this.rollCooldown - dt);
+    this.invuln = Math.max(0, this.invuln - dt);
+    this.mp = Math.min(this.maxMp, this.mp + dt * (2 + this.maxMp * 0.02));
 
-    const { move } = ctx;
-    const mag = Math.min(1, Math.hypot(move.x, move.y));
-    const dirX = SCREEN_RIGHT.x * move.x + SCREEN_UP.x * move.y;
-    const dirZ = SCREEN_RIGHT.z * move.x + SCREEN_UP.z * move.y;
+    const d = Player.worldDir(ctx.move);
+    const mag = Math.min(1, Math.hypot(ctx.move.x, ctx.move.y));
 
-    if (this.state === 'roll') {
-      const t = this.stateTime / PLAYER.rollTime;
-      const speed = PLAYER.rollSpeed * (1 - t * 0.55);
-      ctx.applyMove(this.rollDir.x * speed * dt, this.rollDir.z * speed * dt);
-      if (t >= 1) this.state = 'idle';
-    } else if (this.state === 'attack') {
-      // 휘두르는 동안 천천히 움직일 수 있다
-      if (mag > 0.1) ctx.applyMove(dirX * PLAYER.walkSpeed * 0.25 * dt, dirZ * PLAYER.walkSpeed * 0.25 * dt);
-      const t = this.stateTime / PLAYER.attackTime;
-      if (!this.hitDone && t >= PLAYER.attackHitAt) {
-        this.hitDone = true;
-        this.onAttackHit?.();
+    if (this.state === 'dead') {
+      // 쓰러지는 동작
+      this.rig.body.rotation.x += (-1.5 - this.rig.body.rotation.x) * Math.min(1, dt * 6);
+      this.rig.body.position.y += (0.25 - this.rig.body.position.y) * Math.min(1, dt * 6);
+      this.syncRoot();
+      return;
+    }
+
+    if (this.state === 'dash' && this.dash) {
+      const ds = this.dash;
+      ds.t += dt;
+      const k = ds.t / ds.duration;
+      const speed = ds.speed * (ds.pose === 'roll' ? 1 - k * 0.55 : 1);
+      ctx.applyMove(ds.dirX * speed * dt, ds.dirZ * speed * dt);
+      ds.onStep?.();
+      if (k >= 1) {
+        this.dash = null;
+        this.state = 'idle';
+        ds.onEnd?.();
       }
-      if (t >= 1) this.state = 'idle';
+    } else if (this.state === 'action' && this.action) {
+      const a = this.action;
+      a.t += dt;
+      const mm = a.moveMult ?? 0.25;
+      if (mag > 0.1 && mm > 0) ctx.applyMove((d.x / d.len) * PLAYER.walkSpeed * mm * mag * dt, (d.z / d.len) * PLAYER.walkSpeed * mm * mag * dt);
+      if (!a.done && a.t >= a.duration * a.hitAt) {
+        a.done = true;
+        a.onHit();
+      }
+      if (a.t >= a.duration) {
+        this.action = null;
+        this.state = 'idle';
+      }
     } else {
-      // 가속·감속을 부드럽게
       const targetSpeed = mag > 0.12 ? PLAYER.walkSpeed * mag : 0;
       this.speed += (targetSpeed - this.speed) * Math.min(1, dt * 14);
       if (mag > 0.12) {
-        const angle = Math.atan2(dirX, dirZ);
-        this.facing = lerpAngle(this.facing, angle, Math.min(1, dt * 16));
-        const len = Math.hypot(dirX, dirZ);
-        ctx.applyMove((dirX / len) * this.speed * dt, (dirZ / len) * this.speed * dt);
+        this.facing = lerpAngle(this.facing, Math.atan2(d.x, d.z), Math.min(1, dt * 16));
+        ctx.applyMove((d.x / d.len) * this.speed * dt, (d.z / d.len) * this.speed * dt);
         this.state = 'move';
       } else {
-        if (this.speed > 0.05) {
-          ctx.applyMove(Math.sin(this.facing) * this.speed * dt, Math.cos(this.facing) * this.speed * dt);
-        }
+        if (this.speed > 0.05) ctx.applyMove(Math.sin(this.facing) * this.speed * dt, Math.cos(this.facing) * this.speed * dt);
         this.state = 'idle';
       }
     }
@@ -135,19 +205,19 @@ export class Player {
     const r = this.rig;
     const k = Math.min(1, dt * 18);
     const ease = (obj: { x: number }, v: number) => (obj.x += (v - obj.x) * k);
+    const weapon = this.cls.look.weapon;
 
-    // 기본 자세 목표값
     let legL = 0;
     let legR = 0;
     let armL = 0.1;
     let armR = -0.35;
-    let swordX = -1.0;
+    let weaponX = weapon === 'sword' ? -1.0 : 0.35;
     let torsoY = 0;
     let torsoX = 0;
     let bodyY = 0.6;
-    let bodyRoll = 0;
+    let spin = 0;
 
-    const moving = this.state === 'move' || (this.state !== 'roll' && this.speed > 0.3);
+    const moving = this.state === 'move' || (this.state === 'idle' && this.speed > 0.3);
     if (moving) {
       this.walkPhase += dt * (6 + this.speed * 1.6);
       const s = Math.sin(this.walkPhase);
@@ -162,42 +232,97 @@ export class Player {
       bodyY = 0.6 + Math.sin(this.time * 2.4) * 0.012;
     }
 
-    if (this.state === 'attack') {
-      // 위에서 아래로 내려치기: 앞 30%는 들어 올리고 나머지는 빠르게 내린다
-      const t = this.stateTime / PLAYER.attackTime;
-      const up = t < 0.3 ? t / 0.3 : 1 - Math.min(1, (t - 0.3) / 0.25);
-      const down = t < 0.3 ? 0 : Math.min(1, (t - 0.3) / 0.25);
-      armR = -0.35 - up * 2.6 - (1 - up) * down * 0.3;
-      swordX = -1.0 + up * 0.4 - down * 0.2;
-      torsoY = up * 0.35 - down * 0.45;
-      torsoX = -up * 0.12 + down * 0.22;
+    if (this.state === 'action' && this.action) {
+      const a = this.action;
+      const t = Math.min(1, a.t / a.duration);
+      const h = a.hitAt;
+      const up = t < h ? t / h : 1 - Math.min(1, (t - h) / 0.3);
+      const down = t < h ? 0 : Math.min(1, (t - h) / 0.25);
       legL = 0.35;
       legR = -0.25;
-      armL = 0.5;
-      // 판정 순간에는 즉시 자세를 맞춘다 (타격감)
-      r.armR.rotation.x = armR;
-      r.torso.rotation.y = torsoY;
+      switch (a.pose) {
+        case 'swing': {
+          const side = a.combo === 1 ? -1 : 1;
+          const big = a.combo === 2 ? 1.25 : 1;
+          armR = -0.35 - up * 2.6 * big - (1 - up) * down * 0.3;
+          weaponX = -1.0 + up * 0.4 - down * 0.2;
+          torsoY = side * (up * 0.45 - down * 0.55) * big;
+          torsoX = -up * 0.12 + down * 0.22;
+          armL = 0.5;
+          if (a.combo === 2) bodyY = 0.6 + Math.sin(t * Math.PI) * 0.25;
+          r.armR.rotation.x = armR;
+          r.torso.rotation.y = torsoY;
+          break;
+        }
+        case 'spin':
+          spin = t * Math.PI * 2;
+          armR = -1.5;
+          armL = -1.2;
+          weaponX = -1.4;
+          break;
+        case 'thrust':
+          armR = -1.5 - up * 0.2;
+          weaponX = -0.1;
+          torsoX = 0.2;
+          break;
+        case 'cast':
+          armR = -0.6 - up * 1.4 + down * 0.6;
+          armL = -0.4 - up * 1.0;
+          weaponX = -armR * 0.7;
+          torsoX = -up * 0.1 + down * 0.15;
+          break;
+        case 'shoot':
+          armR = -1.55;
+          armL = -1.35;
+          weaponX = 1.55;
+          torsoY = 0.35;
+          break;
+      }
     }
 
-    if (this.state === 'roll') {
-      const t = Math.min(1, this.stateTime / PLAYER.rollTime);
-      bodyRoll = t * Math.PI * 2;
-      bodyY = 0.45 + Math.sin(t * Math.PI) * 0.15;
-      legL = legR = -1.2;
-      armL = armR = -1.4;
-      r.body.rotation.x = bodyRoll;
-    } else {
-      r.body.rotation.x = 0;
+    if (this.state === 'dash' && this.dash) {
+      const t = Math.min(1, this.dash.t / this.dash.duration);
+      switch (this.dash.pose) {
+        case 'roll':
+          r.body.rotation.x = t * Math.PI * 2;
+          bodyY = 0.45 + Math.sin(t * Math.PI) * 0.15;
+          legL = legR = -1.2;
+          armL = armR = -1.4;
+          break;
+        case 'lunge':
+          armR = -1.55;
+          weaponX = -0.05;
+          torsoX = 0.35;
+          legL = 0.8;
+          legR = -0.8;
+          break;
+        case 'leap':
+          bodyY = 0.6 + Math.sin(t * Math.PI) * 1.1;
+          legL = legR = -0.6;
+          armR = -1.55;
+          armL = -1.35;
+          weaponX = 1.55;
+          break;
+      }
     }
+    if (!(this.state === 'dash' && this.dash?.pose === 'roll')) r.body.rotation.x = 0;
 
     ease(r.legL.rotation, legL);
     ease(r.legR.rotation, legR);
     ease(r.armL.rotation, armL);
     ease(r.armR.rotation, armR);
-    ease(r.sword.rotation, swordX);
+    ease(r.weapon.rotation, weaponX);
     ease(r.torso.rotation, torsoX);
     r.torso.rotation.y += (torsoY - r.torso.rotation.y) * k;
+    r.body.rotation.y = spin;
     r.body.position.y = bodyY;
+
+    // 맞았을 때 붉게, 무적 시간에는 깜빡인다
+    if (this.hurtFlash > 0) {
+      this.hurtFlash = Math.max(0, this.hurtFlash - dt * 5);
+      this.material.emissive.copy(HURT).multiplyScalar(this.hurtFlash * 0.7);
+    } else this.material.emissive.setHex(0);
+    r.root.visible = this.invuln <= 0 || Math.floor(this.time * 20) % 2 === 0;
   }
 }
 
