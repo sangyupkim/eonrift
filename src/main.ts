@@ -1,5 +1,9 @@
 import './style.css';
 import { Game } from './game/Game';
+import { setupInstall } from './ui/install';
+
+// 설치 제안 이벤트는 페이지가 뜨자마자 오므로 게임보다 먼저 받아 둔다
+setupInstall();
 
 const app = document.getElementById('app')!;
 const game = new Game(app);

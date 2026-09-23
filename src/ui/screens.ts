@@ -9,6 +9,7 @@ import type { Bag, Slot } from '../game/Bag';
 import { stageIndex, type Progress } from '../game/Progress';
 import { objectiveNeed, objectiveProgress, objectiveText, type Quests } from '../game/Quests';
 import { ICONS } from './icons';
+import { canInstall, promptInstall } from './install';
 
 export const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
@@ -131,11 +132,13 @@ export class Screens {
          <div class="title-menu">
            ${hasSave ? '<button class="primary" data-a="continue">이어하기</button>' : ''}
            <button class="${hasSave ? '' : 'primary'}" data-a="new">새로 시작</button>
+           ${canInstall() ? '<button class="install" data-a="install">📲 앱으로 설치</button>' : ''}
          </div>
        </div>
        <div class="version">v1.1 · 모바일 가로 화면 권장</div>`,
     );
     this.on(s, '[data-a="continue"]', onContinue);
+    this.on(s, '[data-a="install"]', () => void promptInstall());
     this.on(s, '[data-a="new"]', () => {
       if (hasSave && !confirm('저장된 진행을 지우고 새로 시작할까요?')) return;
       onNew();

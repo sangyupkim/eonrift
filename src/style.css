@@ -1659,3 +1659,9 @@ button {
 .tool {
   width: 70px;
 }
+
+.title-menu button.install {
+  background: rgba(122, 255, 192, 0.15);
+  border-color: rgba(122, 255, 192, 0.55);
+  font-size: 14px;
+}
