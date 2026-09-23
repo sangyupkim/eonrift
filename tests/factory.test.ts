@@ -91,3 +91,25 @@ describe('건물 레벨', () => {
     expect(make(2)).toBeGreaterThan(0);
   });
 });
+
+describe('판자·마력 가공', () => {
+  const line = (machine: 'crusher' | 'infuser', level: number, input: Record<string, number>) => {
+    const f = new Factory({ sizeLevel: 0, buildings: [] }, 8);
+    f.place('box', 0, 0, 0)!.buffer = input;
+    f.place('belt', 1, 0, 0);
+    const m = f.place(machine, 2, 0, 0)!;
+    m.level = level;
+    const out = f.place('box', 3, 0, 0)!;
+    out.mode = 'out';
+    f.place('wire', 2, 1, 0);
+    f.place('generator', 2, 2, 0)!.buffer = { essence_low: 10 };
+    f.simulate(300);
+    return out.buffer!;
+  };
+  it('벌목소 Lv.2는 적송을 적송 판자로 켠다', () => {
+    expect(line('crusher', 2, { redpine_wood: 2 }).redpine_plank).toBe(4);
+  });
+  it('마력 주입기는 판자와 정수로 마력 판자를 만든다', () => {
+    expect(line('infuser', 1, { plank: 2, essence_low: 2 }).mana_plank_1).toBe(2);
+  });
+});

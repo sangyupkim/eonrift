@@ -152,7 +152,10 @@ export function buildItemGeometry(id: string): BufferGeometry {
   let g: BufferGeometry[];
   if (id.endsWith('_ore')) g = ore(c);
   else if (id === 'wood' || id.endsWith('_wood')) g = log(c);
-  else if (id === 'plank') g = planks(c);
+  else if (id.startsWith('mana_plank_')) g = [...planks(c), part(new OctahedronGeometry(0.12, 0), 0x9a7aff, { pos: [0.1, 0.2, 0.05] })];
+  else if (id === 'plank' || id.endsWith('_plank')) g = planks(c);
+  else if (id.startsWith('mana_') && id.endsWith('_plate')) g = [...plate(c), part(new OctahedronGeometry(0.1, 0), 0x9a7aff, { pos: [0, 0.14, 0] })];
+  else if (id.endsWith('_plate')) g = plate(c);
   else if (id.endsWith('_ingot')) g = ingot(c);
   else if (id.startsWith('mana_') && id !== 'mana_crystal' && id !== 'mana_dust') g = ingot(c, 0x7ff0ff);
   else if (id.endsWith('_dust')) g = pouch(c);

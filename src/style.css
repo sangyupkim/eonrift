@@ -2097,3 +2097,10 @@ textarea.code {
   -webkit-user-select: text;
   touch-action: auto;
 }
+.mana-line {
+  color: #c9b0ff !important;
+}
+.list li button.mana-btn {
+  background: rgba(160, 120, 255, 0.25);
+  border-color: rgba(190, 160, 255, 0.6);
+}

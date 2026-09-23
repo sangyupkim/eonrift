@@ -2,7 +2,7 @@ import { BUILD_ID, GAME_VERSION } from '../config';
 import { applyUpdate, fetchRemoteVersion, isNewer, type RemoteVersion } from './update';
 import { CLASSES, CLASS_ORDER, expToNext, MAX_LEVEL, MAX_SKILL_LEVEL, SKILL_LEARN, skillUpgradeCost, STAT_INFO, STAT_KEYS, type ClassId, type StatKey } from '../data/classes';
 import { newTool, TOOL_KIND_NAMES, TOOL_TIER_NAMES, toolBonusChance, toolEnhanceCost, toolMaxDur, toolName, toolRepair, toolSpeed, type ToolKind, type ToolState } from '../data/tools';
-import { equipCraftCost, plateCraftCost, toolCraftCost, workbenchUpgradeCost, type CraftCost } from '../data/crafting';
+import { equipCraftCost, equipManaCraftCost, MANA_PLATE_OF, manaPlateCraftCost, rollManaGrade, plateCraftCost, toolCraftCost, workbenchUpgradeCost, type CraftCost } from '../data/crafting';
 import { newUid, durability, EQUIP_SLOTS, EQUIP_MAX_DUR, enhanceCost, repairCost, type EquipSlot, equipName, equipStats, equipValue, GRADES, slotName, type Equip } from '../data/equipment';
 import { BUILDINGS, BUILD_ORDER, buildingUpgradeCost, FACTORY_SIZES, generatorPower, levelSpeed, MAX_BUILDING_LEVEL, RECIPES, UPGRADABLE, upgradeBlueprintCost, type BuildingType } from '../data/factory';
 import { ITEMS, ITEM_LIST, TIER_PLATE } from '../data/items';
@@ -1241,10 +1241,14 @@ export class Screens {
           const c = plateCraftCost(t);
           const id = TIER_PLATE[t - 1];
           const c5 = { items: Object.fromEntries(Object.entries(c.items).map(([k, n]) => [k, n * 5])), energy: c.energy * 5, gold: 0 };
-          return `<li>${itemGem(id)}<div><b>${ITEMS[id].name} <small class="dim">보유 ${p.count(id)}</small></b><small>${TOOL_TIER_NAMES[t - 1]} 장비·도구 강화 재료</small><small>${costHtml(c)}</small></div><button data-plate="${t}:1" ${can(c) ? '' : 'disabled'}>합성</button><button data-plate="${t}:5" ${can(c5) ? '' : 'disabled'}>×5</button></li>`;
+          const m = manaPlateCraftCost(t);
+          const mid = MANA_PLATE_OF(t);
+          const m5 = { items: Object.fromEntries(Object.entries(m.items).map(([k, n]) => [k, n * 5])), energy: m.energy * 5, gold: 0 };
+          return `<li>${itemGem(id)}<div><b>${ITEMS[id].name} <small class="dim">보유 ${p.count(id)}</small></b><small>${TOOL_TIER_NAMES[t - 1]} 장비·도구 +1~+5 강화</small><small>${costHtml(c)}</small></div><button data-plate="${t}:1" ${can(c) ? '' : 'disabled'}>합성</button><button data-plate="${t}:5" ${can(c5) ? '' : 'disabled'}>×5</button></li>
+            <li>${itemGem(mid)}<div><b>${ITEMS[mid].name} <small class="dim">보유 ${p.count(mid)}</small></b><small>${TOOL_TIER_NAMES[t - 1]} 장비·도구 +6~+10 강화</small><small>${costHtml(m)}</small></div><button data-mplate="${t}:1" ${can(m) ? '' : 'disabled'}>합성</button><button data-mplate="${t}:5" ${can(m5) ? '' : 'disabled'}>×5</button></li>`;
         })
         .join('');
-      body = `<p class="hint">주괴 2 + 판자 2 → 판 1. 대장간에서 같은 재질 장비·도구를 강화할 때 씁니다 (구리 장비 → 구리판).</p><ul class="list scroll">${rows}</ul>`;
+      body = `<p class="hint">판 = 주괴 2 + 같은 단계 판자 2 (+1~+5 강화) · 마력판 = 마력 금속 2 + 같은 단계 판자 2 (+6~+10 강화). 마력 금속은 마력 주입기에서 만듭니다.</p><ul class="list scroll">${rows}</ul>`;
     } else if (tab === 'tools') {
       body = (['pickaxe', 'axe'] as ToolKind[])
         .flatMap((k) => {
@@ -1265,9 +1269,10 @@ export class Screens {
         for (const slot of EQUIP_SLOTS) {
           const e: Equip = { uid: '', slot, cls: slot === 'weapon' ? p.data.currentClass : undefined, tier: t, grade: 0, plus: 0 };
           const c = equipCraftCost(slot, t);
-          rows.push(`<li>${equipGem(e)}<div><b>${equipName(e)}</b><small>${equipLine(e)}</small><small>${costHtml(c)}</small></div><button data-eqc="${slot}:${t}" ${can(c) ? '' : 'disabled'}>제작</button></li>`);
+          const mc = equipManaCraftCost(slot, t);
+          rows.push(`<li>${equipGem(e)}<div><b>${equipName(e)}</b><small>${equipLine(e)}</small><small>일반: ${costHtml(c)}</small><small class="mana-line">✨ 마력 제작 (고급 이상): ${costHtml(mc)}</small></div><button data-eqc="${slot}:${t}" ${can(c) ? '' : 'disabled'}>제작</button><button class="mana-btn" data-eqm="${slot}:${t}" ${can(mc) ? '' : 'disabled'}>✨ 마력</button></li>`);
         }
-      body = `<p class="hint">일반 등급 장비를 만듭니다. 만든 장비는 창고로 들어갑니다. 무기는 지금 직업(${CLASSES[p.data.currentClass].name}) 전용입니다.</p><ul class="list scroll">${rows.join('')}</ul>`;
+      body = `<p class="hint">일반 제작은 일반 등급, <b>✨ 마력 제작</b>(판자 대신 마력 판자)은 고급 이상 (희귀 30% · 영웅 8% · 전설 2%). 만든 장비는 창고로 들어갑니다. 무기는 지금 직업(${CLASSES[p.data.currentClass].name}) 전용입니다.</p><ul class="list scroll">${rows.join('')}</ul>`;
     } else {
       const c = workbenchUpgradeCost(lv);
       body = c
@@ -1310,6 +1315,23 @@ export class Screens {
       p.add(TIER_PLATE[t - 1], made);
       onChange();
       again(tab, `<b class="ok">${ITEMS[TIER_PLATE[t - 1]].name} ×${made} 완성! (창고)</b>`);
+    });
+    this.on(s, '[data-mplate]', (el) => {
+      const [t, n] = el.dataset.mplate!.split(':').map(Number);
+      let made = 0;
+      for (let i = 0; i < n; i++) if (pay(manaPlateCraftCost(t))) made++;
+      if (!made) return;
+      p.add(MANA_PLATE_OF(t), made);
+      onChange();
+      again(tab, `<b class="ok">${ITEMS[MANA_PLATE_OF(t)].name} ×${made} 완성! (창고)</b>`);
+    });
+    this.on(s, '[data-eqm]', (el) => {
+      const [slot, t] = el.dataset.eqm!.split(':') as [EquipSlot, string];
+      if (!pay(equipManaCraftCost(slot, Number(t)))) return;
+      const e: Equip = { uid: newUid(), slot, cls: slot === 'weapon' ? p.data.currentClass : undefined, tier: Number(t), grade: rollManaGrade(Math.random()), plus: 0 };
+      p.data.equips.push(e);
+      onChange();
+      again(tab, `<b style="color:${hex(GRADES[e.grade].color)}">✨ [${GRADES[e.grade].name}] ${equipName(e)} 완성! (창고)</b>`);
     });
     this.on(s, '[data-tool]', (el) => {
       const [k, t] = el.dataset.tool!.split(':') as [ToolKind, string];

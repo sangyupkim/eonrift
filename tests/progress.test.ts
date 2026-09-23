@@ -66,7 +66,7 @@ describe('Progress', () => {
     expect(enhanceCost(e)?.item).toBe('iron_plate');
     const base = equipStats(e).atk;
     e.plus = 5;
-    expect(enhanceCost(e)?.count).toBe(2);
+    expect(enhanceCost(e)?.item).toBe('mana_iron_plate');
     expect(equipStats(e).atk).toBeGreaterThan(base);
   });
 

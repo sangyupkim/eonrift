@@ -1,5 +1,5 @@
 import type { Rng } from '../core/rng';
-import { TIER_PLATE } from './items';
+import { TIER_MANA_PLATE, TIER_PLATE } from './items';
 import { CLASSES, type ClassId } from './classes';
 
 export type EquipSlot = 'weapon' | 'helmet' | 'armor' | 'pants' | 'boots' | 'ring' | 'necklace';
@@ -108,12 +108,12 @@ export function equipValue(e: Equip): number {
   return Math.round(20 * e.tier * GRADES[e.grade].mult * (1 + e.plus * 0.3));
 }
 
-/** 강화: 장비 재질과 같은 판 (구리 장비 → 구리판, 철 장비 → 철판 …) + 골드 */
+/** 강화: 장비 재질과 같은 판 (구리 장비 → 구리판 …). +6~+10은 마력판 */
 export function enhanceCost(e: Equip): { item: string; count: number; gold: number; rate: number } | null {
   if (e.plus >= 10) return null;
   const p = e.plus;
   const rates = [1, 0.95, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2];
-  return { item: TIER_PLATE[e.tier - 1], count: 1 + Math.floor(p / 3), gold: 50 * (p + 1) * e.tier, rate: rates[p] };
+  return { item: p >= 5 ? TIER_MANA_PLATE[e.tier - 1] : TIER_PLATE[e.tier - 1], count: p >= 5 ? 1 + Math.floor((p - 5) / 2) : 1 + Math.floor(p / 3), gold: 50 * (p + 1) * e.tier, rate: rates[p] };
 }
 
 // ---- 내구도와 수리 ----
