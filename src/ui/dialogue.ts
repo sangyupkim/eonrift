@@ -5,6 +5,8 @@ export interface DialogueHandlers {
   run: (cmd: string) => void;
   shake: () => void;
   click: () => void;
+  /** 말하는 사람 이름 → 초상화 이미지 (없으면 빈 문자열) */
+  portrait?: (speaker: string) => string;
 }
 
 /**
@@ -37,6 +39,7 @@ export class Dialogue {
       <div class="dlg-fade"></div>
       <div class="dlg-card"></div>
       <div class="dlg-box">
+        <img class="dlg-portrait" alt="">
         <div class="dlg-name"></div>
         <div class="dlg-text"></div>
         <div class="dlg-choices"></div>
@@ -83,6 +86,16 @@ export class Dialogue {
       this.box.classList.add('show');
       this.box.classList.toggle('narration', step.s === '');
       this.nameEl.textContent = step.s;
+      const img = this.box.querySelector<HTMLImageElement>('.dlg-portrait')!;
+      const url = step.s ? (this.handlers.portrait?.(step.s) ?? '') : '';
+      if (url) {
+        if (img.dataset.src !== url) {
+          img.dataset.src = url;
+          img.src = url;
+        }
+        img.style.display = '';
+      } else img.style.display = 'none';
+      this.box.classList.toggle('has-portrait', !!url);
       this.choicesEl.innerHTML = '';
       this.fullText = step.t;
       this.shown = 0;

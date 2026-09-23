@@ -1,7 +1,7 @@
 import { AmbientLight, BufferGeometry, DirectionalLight, Group, Mesh, MeshLambertMaterial, OrthographicCamera, Scene, Sphere, WebGLRenderer } from 'three';
 import { CLASSES, type ClassId } from '../data/classes';
 import type { Equip } from '../data/equipment';
-import { buildHero } from '../models/hero';
+import { buildHero, type HeroLook } from '../models/hero';
 import { buildEquipGeometry, buildItemGeometry } from '../models/items';
 
 /**
@@ -73,6 +73,19 @@ export function itemIconUrl(id: string): string {
 
 export function equipIconUrl(e: Equip): string {
   return geoIcon(`e:${e.slot}:${e.cls ?? ''}:${e.tier}:${e.grade}`, () => buildEquipGeometry(e));
+}
+
+/** 대화창 초상화: 허리 위부터 크게 */
+export function bustUrl(key: string, look: HeroLook): string {
+  const k = `b:${key}`;
+  const hit = cache.get(k);
+  if (hit !== undefined) return hit;
+  const rig = buildHero(material, look);
+  rig.root.rotation.y = 0.45;
+  const url = snap(rig.root, 200, 200, 0.62, 1.28);
+  for (const m of rig.meshes) m.geometry.dispose();
+  cache.set(k, url);
+  return url;
 }
 
 /** 장비창 왼쪽에 서 있는 캐릭터 */

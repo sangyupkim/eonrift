@@ -699,10 +699,7 @@ button {
 .hud[data-mode='home'] .act.skill,
 .hud[data-mode='home'] .act.potion,
 .hud[data-mode='home'] .act.dodge,
-.hud[data-mode='village'] .icon-btn:has(.badge):not(.build-btn),
-.hud[data-mode='home'] .icon-btn:has(.badge):not(.build-btn),
-.hud:not([data-mode='home']) .build-btn,
-.hud[data-mode='dungeon'] .menu-col .icon-btn:nth-child(3) {
+.hud:not([data-mode='home']) .build-btn {
   display: none;
 }
 .hud:not([data-mode='dungeon']) .minimap-slot {
@@ -1843,4 +1840,109 @@ img.gem-inline.ico {
 .title-menu button.update {
   font-size: 13px;
   background: rgba(255, 255, 255, 0.06);
+}
+.store-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.inv-grid {
+  grid-template-columns: repeat(5, 1fr);
+}
+.store-grid.drop {
+  outline: 2px dashed #7aff9a;
+  outline-offset: 4px;
+  border-radius: 8px;
+}
+.store-grid {
+  min-height: 60px;
+}
+.prod-bubble img {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+}
+.quick-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.quick-slot {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 12px 6px 8px;
+  border: 1px dashed var(--panel-line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  touch-action: manipulation;
+}
+.quick-slot .key {
+  position: absolute;
+  left: 6px;
+  top: 6px;
+}
+.quick-slot.filled {
+  border-style: solid;
+  background: rgba(94, 224, 255, 0.12);
+}
+.quick-slot:not(.filled) b {
+  color: var(--ink-dim);
+  font-weight: 600;
+}
+.quick-slot.drop {
+  outline: 2px dashed #7aff9a;
+}
+.quick-slot small {
+  color: var(--ink-dim);
+  font-size: 11px;
+}
+.list li.locked {
+  opacity: 0.5;
+}
+.cls-portrait {
+  width: 70px;
+  height: 90px;
+  object-fit: contain;
+}
+/* ---- 대화 초상화 ---- */
+.dlg-portrait {
+  position: absolute;
+  left: 10px;
+  bottom: calc(100% - 34px);
+  width: 128px;
+  height: 128px;
+  object-fit: contain;
+  pointer-events: none;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.6));
+  transform-origin: 50% 100%;
+  animation: npcTalk 2.4s ease-in-out infinite;
+}
+.dlg-box.has-portrait .dlg-name {
+  padding-left: 132px;
+}
+@keyframes npcTalk {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg) scale(1);
+  }
+  25% {
+    transform: translateY(-3px) rotate(-1.5deg) scale(1.01);
+  }
+  50% {
+    transform: translateY(0) rotate(0deg) scale(1.02);
+  }
+  75% {
+    transform: translateY(-2px) rotate(1.5deg) scale(1.01);
+  }
+}
+@media (max-height: 380px) {
+  .dlg-portrait {
+    width: 100px;
+    height: 100px;
+  }
+  .dlg-box.has-portrait .dlg-name {
+    padding-left: 104px;
+  }
 }

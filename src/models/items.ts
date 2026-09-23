@@ -129,6 +129,13 @@ function resonator(color: number): BufferGeometry[] {
   ];
 }
 
+function coins(): BufferGeometry[] {
+  const g: BufferGeometry[] = [];
+  for (let i = 0; i < 4; i++) g.push(part(new CylinderGeometry(0.3, 0.3, 0.08, 12), i % 2 ? 0xf0c040 : 0xe0b030, { pos: [0.1, -0.3 + i * 0.09, 0] }));
+  g.push(part(new CylinderGeometry(0.3, 0.3, 0.08, 12), 0xffd860, { pos: [-0.25, 0.05, 0.1], rot: [1.1, 0, 0.3] }));
+  return g;
+}
+
 export function buildItemGeometry(id: string): BufferGeometry {
   const def = ITEMS[id];
   const c = def?.color ?? 0xffffff;
@@ -146,6 +153,7 @@ export function buildItemGeometry(id: string): BufferGeometry {
   else if (id === 'bag_kit') g = bag(c);
   else if (id === 'resonator') g = resonator(c);
   else if (id === 'gear_part') g = gear(c);
+  else if (id === 'gold') g = coins();
   else if (id === 'magi_alloy') g = ingot(c, 0x5ac8ff);
   else g = crystal(c); // 결정·수정·화염 핵·다이아
   return merge(g);

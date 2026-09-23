@@ -122,7 +122,7 @@ export class Hud {
     this.bagBtn = this.button('icon-btn', ICONS.bag, 'bag');
     this.bagCount = el('span', 'badge');
     this.bagBtn.appendChild(this.bagCount);
-    this.invBtn = this.button('icon-btn', ICONS.person, 'bag');
+    this.invBtn = this.button('icon-btn', ICONS.person, 'char');
     this.buildBtn = this.button('icon-btn build-btn', ICONS.hammer, 'build');
     menuCol.append(this.button('icon-btn', ICONS.pause, 'pause'), this.bagBtn, this.invBtn, this.buildBtn);
     topRight.append(this.minimapSlot, menuCol);
@@ -290,10 +290,10 @@ export class Hud {
   }
 
   /** 생산 중인 기계 위의 아이콘. 누르면 정보 창 */
-  setBubbles(list: { x: number; y: number; color: string; progress: number; onClick: () => void }[]): void {
+  setBubbles(list: { x: number; y: number; icon: string; progress: number; onClick: () => void }[]): void {
     while (this.bubblePool.length < list.length) {
       const b = el('button', 'prod-bubble') as HTMLButtonElement;
-      b.innerHTML = '<i></i><span class="bar"><span></span></span>';
+      b.innerHTML = '<img alt=""><span class="bar"><span></span></span>';
       b.addEventListener('pointerdown', (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -311,7 +311,11 @@ export class Hud {
       b.style.display = '';
       (b as unknown as { cb?: () => void }).cb = d.onClick;
       b.style.transform = `translate(${d.x}px, ${d.y}px) translate(-50%, -100%)`;
-      (b.firstElementChild as HTMLElement).style.background = d.color;
+      const img = b.firstElementChild as HTMLImageElement;
+      if (img.dataset.src !== d.icon) {
+        img.dataset.src = d.icon;
+        img.src = d.icon;
+      }
       (b.querySelector('.bar span') as HTMLElement).style.width = `${Math.round(d.progress * 100)}%`;
     });
   }
@@ -320,11 +324,14 @@ export class Hud {
     this.dodgeShade.style.transform = `scaleY(${ratio})`;
   }
 
-  setSkills(cooldowns: number[], ready: boolean[], learned: boolean[]): void {
+  /** 퀵슬롯 3칸. names[i]가 null이면 빈 칸 */
+  setSkills(cooldowns: number[], ready: boolean[], names: (string | null)[]): void {
     cooldowns.forEach((r, i) => {
       this.skillShades[i].style.transform = `scaleY(${Math.min(1, r)})`;
       this.skillBtns[i].classList.toggle('no-mp', !ready[i]);
-      this.skillBtns[i].classList.toggle('locked', !learned[i]);
+      this.skillBtns[i].classList.toggle('locked', names[i] === null);
+      const label = names[i] ?? '비어 있음';
+      if (this.skillLabels[i].textContent !== label) this.skillLabels[i].textContent = label;
     });
   }
 

@@ -28,14 +28,15 @@ const COLORS: Record<ClassId, number> = { sword: 0xdfefff, mage: 0x9fe8ff, arche
 export class Combat {
   private combo = 0;
   private comboTimer = 0;
-  cooldowns = [0, 0, 0];
+  /** 스킬 번호별 재사용 대기 */
+  cooldowns: number[] = [0, 0, 0];
 
   constructor(private host: CombatHost) {}
 
   update(dt: number): void {
     this.comboTimer = Math.max(0, this.comboTimer - dt);
     if (this.comboTimer === 0) this.combo = 0;
-    for (let i = 0; i < 3; i++) this.cooldowns[i] = Math.max(0, this.cooldowns[i] - dt);
+    for (let i = 0; i < this.cooldowns.length; i++) this.cooldowns[i] = Math.max(0, this.cooldowns[i] - dt);
   }
 
   /** 자동 조준: 사거리 안의 가장 가까운 몬스터 */

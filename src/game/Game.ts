@@ -1,3 +1,4 @@
+import { bustUrl, itemIconUrl } from '../ui/itemIcons';
 import { MeshLambertMaterial, OrthographicCamera, PCFShadowMap, Plane, Raycaster, Vector2, Vector3, WebGLRenderer } from 'three';
 import { BAG_SLOTS, CAMERA_OFFSET, PLAYER, TILE, VIEW_HEIGHT } from '../config';
 import { Audio } from '../core/audio';
@@ -42,6 +43,9 @@ interface Run {
   stagesCleared: number;
   /** 이번 방을 클리어 처리했는지 */
   roomCleared: boolean;
+  /** 던전에 들어갈 때 가방에 있던 것 (결과 화면에서 새로 얻은 것만 보여 준다) */
+  start: Map<string, number>;
+  startEquips: Set<string>;
 }
 
 const ESSENCE = (tier: number) => (tier <= 3 ? 'essence_low' : tier <= 5 ? 'essence_mid' : 'essence_high');
@@ -113,6 +117,10 @@ export class Game {
       run: (cmd) => this.runCommand(cmd),
       shake: () => (this.shakeT = 0.6),
       click,
+      portrait: (speaker) => {
+        const npc = NPCS.find((n) => n.name === speaker || n.name.endsWith(` ${speaker}`));
+        return npc ? bustUrl(npc.id, npc.look) : '';
+      },
     });
     this.fadeEl = document.createElement('div');
     this.fadeEl.className = 'scene-fade';
@@ -331,7 +339,11 @@ export class Game {
       this.run!.roomCleared = false;
     } else {
       const dim = new Bag(this.progress.data.dimBag.length, this.progress.data.dimBag);
-      this.run = { tier, stage, bag: new Bag(BAG_SLOTS), dimBag: dim, gold: 0, exp: 0, time: 0, stagesCleared: 0, roomCleared: false };
+      const bag = this.progress.invBag;
+      const start = new Map<string, number>();
+      for (const b of [bag, dim]) for (const [id, n] of b.totals()) start.set(id, (start.get(id) ?? 0) + n);
+      const startEquips = new Set([...bag.equips(), ...dim.equips()].map((e) => e.uid));
+      this.run = { tier, stage, bag, dimBag: dim, gold: 0, exp: 0, time: 0, stagesCleared: 0, roomCleared: false, start, startEquips };
     }
     this.hud.setLocation(`${tier}-${stage} · ${dungeon.theme.name}`, dungeon.theme.portalColor);
     this.audio.playMusic('dungeon');
@@ -423,23 +435,30 @@ export class Game {
     );
   }
 
-  private openBagOrInventory(): void {
-    if (this.run) {
-      const run = this.run;
-      this.openMenu(() =>
-        this.screens.bag(
-          run.bag,
-          run.dimBag,
-          (from, i) => (from === 'bag' ? run.bag.moveTo(i, run.dimBag) : run.dimBag.moveTo(i, run.bag)) > 0,
-          () => this.resume(),
-          () => this.screens.inventory(this.progress, this.quests, 'equip', () => this.applyStats(), () => this.resume(), undefined, [run.bag, run.dimBag]),
-        ),
-      );
-    } else this.openInventory('equip');
+  /** 지금 들고 있는 일반 가방·차원가방 */
+  private bags(): [Bag, Bag] {
+    return this.run ? [this.run.bag, this.run.dimBag] : [this.progress.invBag, this.progress.dimBagObj];
   }
 
-  private openInventory(tab: 'equip' | 'stats' | 'quest'): void {
-    this.openMenu(() => this.screens.inventory(this.progress, this.quests, tab, () => this.applyStats(), () => this.resume()));
+  private openBagOrInventory(): void {
+    const [bag, dim] = this.bags();
+    this.openMenu(() =>
+      this.screens.bag(
+        bag,
+        dim,
+        (from, i) => (from === 'bag' ? bag.moveTo(i, dim) : dim.moveTo(i, bag)) > 0,
+        () => this.resume(),
+        () => this.showInventory('equip'),
+      ),
+    );
+  }
+
+  private showInventory(tab: 'equip' | 'skills' | 'stats' | 'quest'): void {
+    this.screens.inventory(this.progress, this.quests, tab, () => this.applyStats(), () => this.resume(), undefined, { bags: this.bags(), dungeon: !!this.run });
+  }
+
+  private openInventory(tab: 'equip' | 'skills' | 'stats' | 'quest'): void {
+    this.openMenu(() => this.showInventory(tab));
   }
 
   private openStorage(): void {
@@ -625,6 +644,11 @@ export class Game {
           if (!cost || c.level < cost.level || p.data.gold < cost.gold) return;
           p.data.gold -= cost.gold;
           c.skills[i] = lv + 1;
+          // 새로 배운 스킬은 빈 퀵슬롯에 자동으로 놓는다
+          if (lv === 0 && !c.quick.includes(i)) {
+            const empty = c.quick.indexOf(-1);
+            if (empty >= 0) c.quick[empty] = i;
+          }
           this.audio.play('level');
           const name = CLASSES[p.data.currentClass].skills[i].name;
           this.openSkillShop(lv === 0 ? `${name}을(를) 배웠습니다!` : `${name} Lv.${lv + 1}`);
@@ -1028,13 +1052,15 @@ export class Game {
     const run = this.run;
     if (!run) return;
     const p = this.progress;
+    // 가방의 짐은 그대로 들고 나온다. 창고에 넣는 건 창고에서 직접
     const items = new Map<string, number>();
     for (const bag of [run.bag, run.dimBag]) for (const [id, n] of bag.totals()) items.set(id, (items.get(id) ?? 0) + n);
-    const equips = [...run.bag.equips(), ...run.dimBag.equips()];
-    p.depositSlots(run.bag.slots);
-    p.depositSlots(run.dimBag.slots);
-    run.dimBag.clear();
-    p.data.dimBag = run.dimBag.slots;
+    for (const [id, n] of run.start) {
+      const left = (items.get(id) ?? 0) - n;
+      if (left > 0) items.set(id, left);
+      else items.delete(id);
+    }
+    const equips = [...run.bag.equips(), ...run.dimBag.equips()].filter((e) => !run.startEquips.has(e.uid));
     p.setFlag('returned');
     this.audio.play('portal');
     const explored = this.exploredRatio();
@@ -1062,9 +1088,7 @@ export class Game {
     const lostEquips = run.bag.equips().length;
     const kept = run.dimBag.totals();
     const keptEquips = run.dimBag.equips();
-    p.depositSlots(run.dimBag.slots);
-    run.dimBag.clear();
-    p.data.dimBag = run.dimBag.slots;
+    run.bag.clear();
     p.setFlag('returned');
     const explored = this.exploredRatio();
     this.run = null;
@@ -1342,6 +1366,7 @@ export class Game {
       return this.openPause();
     }
     if (input.consume('bag')) return this.openBagOrInventory();
+    if (input.consume('char')) return this.openInventory('equip');
     if (input.consume('map')) this.setBigMap(!this.bigMap);
     if (input.consume('build')) {
       if (this.level instanceof HomeScene) this.setBuilding(!this.building);
@@ -1375,7 +1400,8 @@ export class Game {
     }
     for (let i = 0; i < 3; i++) {
       if (input.consume(`skill${i + 1}` as 'skill1')) {
-        const msg = this.combat.useSkill(i);
+        const idx = this.progress.cls.quick[i] ?? -1;
+        const msg = idx < 0 ? '스킬 칸이 비어 있습니다 (캐릭터 → 스킬에서 배치)' : this.combat.useSkill(idx);
         if (msg) this.hud.toast(msg);
         else this.gathering = null;
       }
@@ -1462,13 +1488,14 @@ export class Game {
     this.hud.setPotions(p.count('potion'));
     this.hud.setDodgeCooldown(pl.rollCooldown / (PLAYER.rollCooldown + PLAYER.rollTime));
     const skills = pl.cls.skills;
-    const learned = p.cls.skills;
+    const quick = p.cls.quick.map((i) => (i >= 0 && (p.cls.skills[i] ?? 0) > 0 ? i : -1));
     this.hud.setSkills(
-      this.combat.cooldowns.map((cd, i) => cd / skills[i].cooldown),
-      skills.map((s) => pl.mp >= s.mp),
-      skills.map((_, i) => (learned[i] ?? 0) > 0),
+      quick.map((i) => (i >= 0 ? (this.combat.cooldowns[i] ?? 0) / skills[i].cooldown : 0)),
+      quick.map((i) => i < 0 || pl.mp >= skills[i].mp),
+      quick.map((i) => (i >= 0 ? skills[i].name : null)),
     );
-    if (this.run) this.hud.setBagCount(this.run.bag.used, BAG_SLOTS);
+    const inv = this.run ? this.run.bag : this.progress.invBag;
+    this.hud.setBagCount(inv.used, BAG_SLOTS);
   }
 
   /** 이름표와 생산 아이콘 */
@@ -1494,13 +1521,21 @@ export class Game {
         labels.push({ text: `${mark}${it.title}`, x: s.x, y: s.y, accent: !!mark });
       }
     }
+    // 보관상자 위에 투입/출하 표시
+    if (this.level instanceof HomeScene) {
+      for (const b of this.factory.state.buildings) {
+        if (b.type !== 'box') continue;
+        const s = this.toScreen((b.x + 0.5) * TILE, 1.9, (b.y + 0.5) * TILE);
+        labels.push({ text: b.mode === 'in' ? '📥 투입' : '📤 출하', x: s.x, y: s.y, accent: b.mode !== 'in' });
+      }
+    }
     this.hud.setLabels(labels);
     if (this.level instanceof HomeScene) {
       this.hud.setBubbles(
         this.level.producing().map(({ b, x, z }) => {
           const s = this.toScreen(x, 2.6, z);
           const r = RECIPE_BY_ID[b.crafting!];
-          return { x: s.x, y: s.y, color: hex(ITEMS[r.output].color), progress: b.progress ?? 0, onClick: () => this.openBuilding(b) };
+          return { x: s.x, y: s.y, icon: itemIconUrl(r.output), progress: b.progress ?? 0, onClick: () => this.openBuilding(b) };
         }),
       );
     } else this.hud.setBubbles([]);

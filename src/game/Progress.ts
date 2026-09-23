@@ -3,7 +3,8 @@ import { equipStats, TOOL_MAX_DUR, type Equip, type EquipSlot } from '../data/eq
 import { FACTORY_SIZES, RECIPE_RENAMES } from '../data/factory';
 import { ITEM_RENAMES } from '../data/items';
 import type { FactoryState } from '../factory/sim';
-import type { Slot } from './Bag';
+import { Bag, type Slot } from './Bag';
+import { BAG_SLOTS } from '../config';
 import { newQuestState, type QuestState } from './Quests';
 
 export interface ClassState {
@@ -16,6 +17,8 @@ export interface ClassState {
   points: number;
   /** 스킬 레벨 (0 = 배우지 않음) */
   skills: number[];
+  /** 퀵슬롯 3칸에 놓인 스킬 번호 (-1 = 비어 있음) */
+  quick: number[];
 }
 
 export interface SaveData {
@@ -29,6 +32,8 @@ export interface SaveData {
   /** 착용하지 않은 장비 */
   equips: Equip[];
   dimBag: (Slot | null)[];
+  /** 개인 가방 (던전에 들고 가는 일반 가방). 창고와 따로 보관된다 */
+  inventory: (Slot | null)[];
   /** 획득한 차원석 (단계 번호) */
   dimStones: number[];
   /** 클리어한 가장 높은 스테이지 번호 (1-1 = 1, 1-10 = 10, 2-1 = 11 …) */
@@ -48,7 +53,7 @@ export const DIM_BAG_START = 4;
 export const DIM_BAG_MAX = 12;
 
 export function newSave(): SaveData {
-  const cls = (id: ClassId): ClassState => ({ level: 1, exp: 0, equipment: { weapon: starterWeapon(id) }, alloc: zeroStats(), points: 0, skills: [1, 0, 0] });
+  const cls = (id: ClassId): ClassState => ({ level: 1, exp: 0, equipment: { weapon: starterWeapon(id) }, alloc: zeroStats(), points: 0, skills: [1, 0, 0], quick: [0, -1, -1] });
   return {
     version: 1,
     gold: 100,
@@ -58,6 +63,7 @@ export function newSave(): SaveData {
     storage: { potion: 3 },
     equips: [],
     dimBag: Array.from({ length: DIM_BAG_START }, () => null),
+    inventory: Array.from({ length: BAG_SLOTS }, () => null),
     dimStones: [],
     cleared: 0,
     quests: newQuestState(),
@@ -108,6 +114,7 @@ function migrate(d: SaveData & { maxTier?: number }): SaveData {
     c.alloc ??= zeroStats();
     // 스킬 상점 전의 저장은 이미 세 스킬을 다 쓰고 있었으므로 그대로 둔다
     c.skills ??= [1, 1, 1];
+    c.quick ??= [0, 1, 2].map((i) => ((c.skills[i] ?? 0) > 0 ? i : -1));
     c.points ??= (c.level - 1) * POINTS_PER_LEVEL;
     const eq = c.equipment as Record<string, Equip | undefined>;
     if (eq.accessory) {
@@ -157,6 +164,8 @@ function migrate(d: SaveData & { maxTier?: number }): SaveData {
     if (b.crafting) b.crafting = RECIPE_RENAMES[b.crafting] ?? b.crafting;
   }
   d.tools ??= { pickaxe: TOOL_MAX_DUR, axe: TOOL_MAX_DUR };
+  d.inventory ??= Array.from({ length: BAG_SLOTS }, () => null);
+  for (const s of d.inventory) if (s && !s.equip) s.itemId = re(s.itemId);
   return d;
 }
 
@@ -268,18 +277,40 @@ export class Progress {
     return ups;
   }
 
+  get invBag(): Bag {
+    return new Bag(this.data.inventory.length, this.data.inventory);
+  }
+  get dimBagObj(): Bag {
+    return new Bag(this.data.dimBag.length, this.data.dimBag);
+  }
+
   // ---- 공유 창고 ----
-  count(id: string): number {
+  /** 창고에 있는 개수 */
+  stored(id: string): number {
     return this.data.storage[id] ?? 0;
   }
+  /** 창고 + 개인 가방 + 차원가방에 있는 개수 (재료 소모는 이 합계로 한다) */
+  count(id: string): number {
+    let n = this.stored(id);
+    for (const s of this.data.inventory) if (s && !s.equip && s.itemId === id) n += s.count;
+    for (const s of this.data.dimBag) if (s && !s.equip && s.itemId === id) n += s.count;
+    return n;
+  }
+  /** 창고에서 먼저, 모자라면 가방에서 뺀다 */
   take(id: string, n: number): boolean {
     if (this.count(id) < n) return false;
-    this.data.storage[id] -= n;
-    if (this.data.storage[id] === 0) delete this.data.storage[id];
+    const fromStore = Math.min(n, this.stored(id));
+    if (fromStore) {
+      this.data.storage[id] -= fromStore;
+      if (this.data.storage[id] === 0) delete this.data.storage[id];
+    }
+    let left = n - fromStore;
+    if (left) left -= this.invBag.remove(id, left);
+    if (left) this.dimBagObj.remove(id, left);
     return true;
   }
   add(id: string, n: number): void {
-    this.data.storage[id] = this.count(id) + n;
+    this.data.storage[id] = this.stored(id) + n;
   }
   hasAll(items: Record<string, number>): boolean {
     return Object.entries(items).every(([id, n]) => this.count(id) >= n);

@@ -11,6 +11,7 @@ import type { Bag, Slot } from '../game/Bag';
 import { stageIndex, type Progress } from '../game/Progress';
 import { objectiveNeed, objectiveProgress, objectiveText, type Quests } from '../game/Quests';
 import { ICONS } from './icons';
+import { buildingThumb } from './thumbs';
 import { equipIconUrl, heroPortraitUrl, itemIconUrl } from './itemIcons';
 import { canInstall, promptInstall } from './install';
 
@@ -121,8 +122,16 @@ export class Screens {
     if (onClose) {
       this.onCloseCb = onClose;
       s.querySelector('.close')?.addEventListener('click', () => this.close());
+      // 바깥을 눌러 닫기: 열리자마자 들어온 터치(조이스틱·공격 버튼을 누르고 있던 손가락)는 무시하고,
+      // 바깥에서 눌렀다 뗀 경우에만 닫는다. 예/아니오 창은 바깥을 눌러도 닫히지 않는다
+      const openedAt = performance.now();
+      let downOnBg = false;
       s.addEventListener('pointerdown', (e) => {
-        if (e.target === s) this.close();
+        downOnBg = e.target === s && performance.now() - openedAt > 400;
+      });
+      s.addEventListener('pointerup', (e) => {
+        if (downOnBg && e.target === s && className !== 'ask') this.close();
+        downOnBg = false;
       });
     }
     s.addEventListener('click', (e) => {
@@ -361,8 +370,8 @@ export class Screens {
   }
 
   // ---------------- 캐릭터: 장비 · 창고 · 능력치 · 퀘스트 ----------------
-  /** field: 던전 안이면 가방들. 장비는 창고 대신 가방에서 꺼내고 가방으로 넣는다 */
-  inventory(p: Progress, quests: Quests, tab: 'equip' | 'stats' | 'quest', onChange: () => void, onClose: () => void, selSlot?: EquipSlot, field?: Bag[]): void {
+  /** field.bags: 지금 가방들. 던전 안(dungeon)에서는 창고 장비를 쓸 수 없고, 벗은 장비는 가방으로 간다 */
+  inventory(p: Progress, quests: Quests, tab: 'equip' | 'skills' | 'stats' | 'quest', onChange: () => void, onClose: () => void, selSlot?: EquipSlot, field?: { bags: Bag[]; dungeon: boolean }, selSkill?: number): void {
     const cls = CLASSES[p.data.currentClass];
     const st = p.stats();
     const c = p.cls;
@@ -382,14 +391,15 @@ export class Screens {
         : selSlot
           ? `<span class="dim">${slotName(selSlot, p.data.currentClass)} 칸이 비어 있습니다. 아래 목록에서 장착하세요.</span>`
           : '<span class="dim">칸을 누르면 장비 정보가 나옵니다.</span>';
-      const pool = field ? field.flatMap((b) => b.equips()) : p.data.equips;
+      const bagEquips = field ? field.bags.flatMap((b) => b.equips()) : [];
+      const pool = [...bagEquips, ...(field?.dungeon ? [] : p.data.equips)];
       const list = pool
         .filter((e) => !selSlot || e.slot === selSlot)
         .slice()
         .sort((a, b) => b.tier * 10 + b.grade - (a.tier * 10 + a.grade))
         .map((e) => {
           const ok = p.canEquip(e);
-          return `<li>${equipGem(e)}<div>${equipTitle(e)}<small>${slotName(e.slot, e.cls)} · ${equipLine(e) || '<span class="bad">망가짐</span>'} · 내구 ${durability(e)}${e.cls && e.cls !== p.data.currentClass ? ` · ${CLASSES[e.cls].name} 전용` : ''}</small></div><button data-eq="${e.uid}" ${ok ? '' : 'disabled'}>장착</button></li>`;
+          return `<li>${equipGem(e)}<div>${equipTitle(e)}<small>${bagEquips.includes(e) ? '<span class="ok">[가방]</span> ' : '<span class="dim">[창고]</span> '}${slotName(e.slot, e.cls)} · ${equipLine(e) || '<span class="bad">망가짐</span>'} · 내구 ${durability(e)}${e.cls && e.cls !== p.data.currentClass ? ` · ${CLASSES[e.cls].name} 전용` : ''}</small></div><button data-eq="${e.uid}" ${ok ? '' : 'disabled'}>장착</button></li>`;
         })
         .join('');
       const portrait = heroPortraitUrl(p.data.currentClass);
@@ -400,7 +410,25 @@ export class Screens {
             <div class="doll-stats"><span>공격 <b>${st.atk}</b></span><span>방어 <b>${st.def}</b></span><span>HP <b>${st.maxHp}</b></span><span>치명 <b>${st.crit}%</b></span></div></div>
         </div>
         <div class="item-info">${info}</div>
-        <h3>${field ? '가방 속 장비 <small>던전에서는 가방에 든 장비로만 바꿀 수 있습니다</small>' : '보관 중인 장비'} ${selSlot ? `<small>${slotName(selSlot, p.data.currentClass)}만 · <a data-slot="">전체 보기</a></small>` : ''}</h3><ul class="list">${list || '<li class="empty">장비가 없습니다</li>'}</ul></div>`;
+        <h3>${field?.dungeon ? '가방 속 장비 <small>던전에서는 가방에 든 장비로만 바꿀 수 있습니다</small>' : '가방·창고의 장비'} ${selSlot ? `<small>${slotName(selSlot, p.data.currentClass)}만 · <a data-slot="">전체 보기</a></small>` : ''}</h3><ul class="list">${list || '<li class="empty">장비가 없습니다</li>'}</ul></div>`;
+    } else if (tab === 'skills') {
+      const quickRow = c.quick
+        .map((idx, slot) => {
+          const sk = idx >= 0 ? cls.skills[idx] : null;
+          return `<button class="quick-slot ${sk ? 'filled' : ''} ${selSkill === undefined ? '' : 'drop'}" data-quick="${slot}"><span class="key">${slot + 1}</span><b>${sk ? sk.name : '비어 있음'}</b>${sk ? `<small>Lv.${c.skills[idx]}</small>` : ''}</button>`;
+        })
+        .join('');
+      const rows = cls.skills
+        .map((sk, i) => {
+          const lv = c.skills[i] ?? 0;
+          const slot = c.quick.indexOf(i);
+          return `<li class="${selSkill === i ? 'sel' : ''} ${lv ? '' : 'locked'}" ${lv ? `data-skillpick="${i}"` : ''}><span class="key">${slot >= 0 ? slot + 1 : '·'}</span><div><b>${sk.name} ${lv ? `<span class="ok">Lv.${lv}</span>` : '<span class="dim">(미습득 · 교관 카엘)</span>'}</b><small>${sk.description} · MP ${sk.mp} · ${sk.cooldown}초</small></div></li>`;
+        })
+        .join('');
+      body = `<div class="scroll">
+        <h3>퀵슬롯 <small>${selSkill === undefined ? '아래에서 스킬을 누른 뒤 놓을 칸을 누르세요. 칸을 누르면 비웁니다' : `<b class="ok">${cls.skills[selSkill].name}</b>을(를) 놓을 칸을 누르세요`}</small></h3>
+        <div class="quick-row">${quickRow}</div>
+        <h3>배운 스킬</h3><ul class="list">${rows}</ul></div>`;
     } else if (tab === 'stats') {
       const next = expToNext(c.level);
       const statRows = STAT_KEYS.map(
@@ -448,6 +476,7 @@ export class Screens {
          <button class="close">${ICONS.close}</button>
          <div class="tabs">
            <button data-tab="equip" class="${tab === 'equip' ? 'on' : ''}">장비</button>
+           <button data-tab="skills" class="${tab === 'skills' ? 'on' : ''}">스킬</button>
            <button data-tab="stats" class="${tab === 'stats' ? 'on' : ''}">능력치${c.points ? ` <i class="dot">${c.points}</i>` : ''}</button>
            <button data-tab="quest" class="${tab === 'quest' ? 'on' : ''}">퀘스트</button>
          </div>
@@ -455,7 +484,21 @@ export class Screens {
        </div>`,
       onClose,
     );
-    const again = (t = tab, slot = selSlot) => this.inventory(p, quests, t, onChange, onClose, slot, field);
+    const again = (t = tab, slot = selSlot, sk?: number) => this.inventory(p, quests, t, onChange, onClose, slot, field, sk);
+    this.on(s, '[data-skillpick]', (b) => {
+      const i = Number(b.dataset.skillpick);
+      again(tab, selSlot, selSkill === i ? undefined : i);
+    });
+    this.on(s, '[data-quick]', (b) => {
+      const slot = Number(b.dataset.quick);
+      if (selSkill !== undefined) {
+        // 이미 다른 칸에 있으면 그 칸은 비우고 옮긴다
+        c.quick = c.quick.map((x) => (x === selSkill ? -1 : x));
+        c.quick[slot] = selSkill;
+      } else c.quick[slot] = -1;
+      onChange();
+      again(tab, selSlot);
+    });
     this.on(s, '[data-tab]', (b) => again(b.dataset.tab as typeof tab, undefined));
     this.on(s, '[data-slot]', (b) => {
       this.click();
@@ -463,9 +506,9 @@ export class Screens {
       again(tab, slot === selSlot ? undefined : slot);
     });
     this.on(s, '[data-eq]', (b) => {
-      if (field) {
+      if (field && field.bags.some((bg) => bg.equips().some((x) => x.uid === b.dataset.eq))) {
         // 가방 칸의 장비와 끼고 있던 장비를 맞바꾼다
-        for (const bag of field) {
+        for (const bag of field.bags) {
           const i = bag.slots.findIndex((x) => x?.equip?.uid === b.dataset.eq);
           if (i < 0) continue;
           const e = bag.slots[i]!.equip!;
@@ -484,9 +527,9 @@ export class Screens {
     });
     this.on(s, '[data-un]', (b) => {
       const slot = b.dataset.un as EquipSlot;
-      if (field) {
+      if (field?.dungeon) {
         const e = c.equipment[slot];
-        if (e && field.some((bag) => bag.addEquip(e))) delete c.equipment[slot];
+        if (e && field.bags.some((bag) => bag.addEquip(e))) delete c.equipment[slot];
         else if (e) alert('가방에 빈 칸이 없습니다');
         onChange();
         return again();
@@ -507,37 +550,123 @@ export class Screens {
     });
   }
 
-  // ---------------- 창고 (차원집에서만) ----------------
-  storage(p: Progress, onClose: () => void): void {
-    const groups: [string, string[]][] = [
-      ['광석·나무·재료', ['material']],
-      ['마력 정수', ['essence']],
-      ['가공품', ['processed']],
-      ['소모품·중요 물품', ['consumable', 'key']],
-    ];
-    const body = groups
-      .map(([title, kinds]) => {
-        const items = ITEM_LIST.filter((i) => kinds.includes(i.kind) && p.count(i.id) > 0);
-        if (!items.length) return '';
-        return `<h3>${title}</h3><div class="store-grid">${items.map((i) => `<div class="slot filled" data-item="${i.id}">${itemGem(i.id)}<span class="cnt">${p.count(i.id)}</span></div>`).join('')}</div>`;
-      })
-      .join('');
-    const s = this.open(
-      'storage',
-      `<div class="panel wide tall">
-         <button class="close">${ICONS.close}</button>
-         <h2>공유 창고 <small>모든 직업이 함께 씁니다 · 장비 ${p.data.equips.length}개는 캐릭터 → 장비에서</small></h2>
-         <div class="item-info">아이템을 누르면 정보가 나옵니다.</div>
-         <div class="scroll">${body || '<p class="hint">창고가 비어 있습니다.</p>'}</div>
-       </div>`,
-      onClose,
-    );
-    const infoEl = s.querySelector('.item-info')!;
-    this.on(s, '[data-item]', (el) => {
-      s.querySelectorAll('.slot.sel').forEach((x) => x.classList.remove('sel'));
-      el.classList.add('sel');
-      infoEl.innerHTML = slotInfo({ itemId: el.dataset.item!, count: p.count(el.dataset.item!) });
-    });
+  // ---------------- 공유 창고: 가방 ⇄ 창고 ----------------
+  storage(p: Progress, onClose: () => void, message?: string): void {
+    type Sel = { from: 'bag' | 'dim'; i: number } | { from: 'store'; id: string } | { from: 'storeEq'; uid: string } | null;
+    let sel: Sel = null;
+    let info = message ?? '아이템을 누르고 반대쪽(가방 ↔ 창고)을 누르면 옮겨집니다.';
+    const bag = p.invBag;
+    const dim = p.dimBagObj;
+    const render = () => {
+      const cell = (x: Slot | null, from: 'bag' | 'dim', i: number) => {
+        if (!x) return '<div class="slot"></div>';
+        const on = sel && sel.from === from && sel.i === i ? 'sel' : '';
+        return `<div class="slot filled ${on}" data-from="${from}" data-i="${i}">${x.equip ? equipGem(x.equip) : itemGem(x.itemId)}<span class="cnt">${x.equip ? `+${x.equip.plus}` : x.count}</span></div>`;
+      };
+      const storeItems = ITEM_LIST.filter((it) => p.stored(it.id) > 0)
+        .map((it) => `<div class="slot filled ${sel?.from === 'store' && sel.id === it.id ? 'sel' : ''}" data-store="${it.id}">${itemGem(it.id)}<span class="cnt">${p.stored(it.id)}</span></div>`)
+        .join('');
+      const storeEq = p.data.equips
+        .map((e) => `<div class="slot filled ${sel?.from === 'storeEq' && sel.uid === e.uid ? 'sel' : ''}" data-storeeq="${e.uid}">${equipGem(e)}<span class="cnt">+${e.plus}</span></div>`)
+        .join('');
+      const toStore = sel && (sel.from === 'bag' || sel.from === 'dim');
+      const toBag = sel && (sel.from === 'store' || sel.from === 'storeEq');
+      const sc = this.open(
+        'storage',
+        `<div class="panel wide tall">
+           <button class="close">${ICONS.close}</button>
+           <h2>공유 창고 <small>모든 직업이 함께 씁니다</small> <button class="tool-sm" data-a="all">재료 모두 창고로</button></h2>
+           <div class="item-info">${info}</div>
+           <div class="store-split scroll">
+             <div>
+               <h3>가방 <small>${bag.used}/${bag.slots.length}</small></h3>
+               <div class="bag-grid inv-grid ${toBag ? 'drop' : ''}" data-grid="bag">${bag.slots.map((x, i) => cell(x, 'bag', i)).join('')}</div>
+               <h3>차원가방 <small>${dim.used}/${dim.slots.length}</small></h3>
+               <div class="bag-grid inv-grid ${toBag ? 'drop' : ''}" data-grid="dim">${dim.slots.map((x, i) => cell(x, 'dim', i)).join('')}</div>
+             </div>
+             <div>
+               <h3>창고</h3>
+               <div class="store-grid ${toStore ? 'drop' : ''}" data-grid="store">${storeItems}${storeEq}${!storeItems && !storeEq ? '<p class="hint">비어 있음</p>' : ''}</div>
+             </div>
+           </div>
+         </div>`,
+        onClose,
+      );
+      sc.querySelectorAll<HTMLElement>('[data-grid]').forEach((grid) =>
+        grid.addEventListener('click', (ev) => {
+          const el = (ev.target as HTMLElement).closest<HTMLElement>('.slot.filled');
+          const g = grid.dataset.grid as 'bag' | 'dim' | 'store';
+          // 선택한 것이 있고 반대쪽을 누르면 옮긴다
+          if (sel && g === 'store' && (sel.from === 'bag' || sel.from === 'dim')) {
+            const b = sel.from === 'bag' ? bag : dim;
+            const x = b.slots[sel.i];
+            if (x) {
+              if (x.equip) p.data.equips.push(x.equip);
+              else p.add(x.itemId, x.count);
+              b.slots[sel.i] = null;
+              info = `${x.equip ? equipName(x.equip) : `${ITEMS[x.itemId].name} ×${x.count}`} → 창고`;
+            }
+            sel = null;
+            this.click();
+            return render();
+          }
+          if (sel && g !== 'store' && (sel.from === 'store' || sel.from === 'storeEq')) {
+            const b = g === 'bag' ? bag : dim;
+            if (sel.from === 'store') {
+              const id = sel.id;
+              const n = b.add(id, p.stored(id));
+              if (n > 0) {
+                p.data.storage[id] -= n;
+                if (p.data.storage[id] <= 0) delete p.data.storage[id];
+                info = `${ITEMS[id].name} ×${n} → ${g === 'bag' ? '가방' : '차원가방'}`;
+              } else info = '<span class="bad">가방에 빈 칸이 없습니다</span>';
+            } else {
+              const uid = sel.uid;
+              const e = p.data.equips.find((x) => x.uid === uid);
+              if (e && b.addEquip(e)) {
+                p.data.equips = p.data.equips.filter((x) => x.uid !== uid);
+                info = `${equipName(e)} → ${g === 'bag' ? '가방' : '차원가방'}`;
+              } else info = '<span class="bad">가방에 빈 칸이 없습니다</span>';
+            }
+            sel = null;
+            this.click();
+            return render();
+          }
+          if (!el) return;
+          this.click();
+          if (el.dataset.store) {
+            const id = el.dataset.store;
+            sel = sel?.from === 'store' && sel.id === id ? null : { from: 'store', id };
+            info = sel ? `${slotInfo({ itemId: id, count: p.stored(id) })}<br><small class="ok">▶ 가방을 누르면 꺼냅니다</small>` : info;
+          } else if (el.dataset.storeeq) {
+            const e = p.data.equips.find((x) => x.uid === el.dataset.storeeq)!;
+            sel = sel?.from === 'storeEq' && sel.uid === e.uid ? null : { from: 'storeEq', uid: e.uid };
+            info = sel ? `${slotInfo({ itemId: 'equip', count: 1, equip: e })}<br><small class="ok">▶ 가방을 누르면 꺼냅니다</small>` : info;
+          } else {
+            const from = el.dataset.from as 'bag' | 'dim';
+            const i = Number(el.dataset.i);
+            const same = sel && (sel.from === 'bag' || sel.from === 'dim') && sel.from === from && sel.i === i;
+            sel = same ? null : { from, i };
+            info = sel ? `${slotInfo((from === 'bag' ? bag : dim).slots[i]!)}<br><small class="ok">▶ 창고를 누르면 보관합니다</small>` : info;
+          }
+          render();
+        }),
+      );
+      this.on(sc, '[data-a="all"]', () => {
+        let n = 0;
+        for (const b of [bag, dim])
+          b.slots.forEach((x, i) => {
+            if (!x || x.equip) return;
+            p.add(x.itemId, x.count);
+            n += x.count;
+            b.slots[i] = null;
+          });
+        sel = null;
+        info = n ? `재료 ${n}개를 창고에 넣었습니다` : '넣을 재료가 없습니다';
+        render();
+      });
+    };
+    render();
   }
 
   // ---------------- 퀘스트 제안 ----------------
@@ -665,7 +794,8 @@ export class Screens {
         const owned = p.flag(`bp_${t}`) > 0;
         const cost = [`${bp.gold} G`, ...Object.entries(bp.items).map(([id, n]) => `${ITEMS[id].name} ${p.count(id)}/${n}`)].join(' · ');
         const ok = !owned && p.data.gold >= bp.gold && p.hasAll(bp.items);
-        return `<li><span class="gem" style="--c:${hex(d.color)}"></span><div><b>${d.name} 도면</b><small>${d.description}</small><small class="dim">${owned ? '보유 중' : cost}</small></div><button data-bp="${t}" ${ok ? '' : 'disabled'}>${owned ? '보유' : '구입'}</button></li>`;
+        const thumb = buildingThumb(t);
+        return `<li>${thumb ? `<img class="gem ico" src="${thumb}" alt="">` : `<span class="gem" style="--c:${hex(d.color)}"></span>`}<div><b>${d.name} 도면</b><small>${d.description}</small><small class="dim">${owned ? '보유 중' : cost}</small></div><button data-bp="${t}" ${ok ? '' : 'disabled'}>${owned ? '보유' : '구입'}</button></li>`;
       })
       .join('');
     const s = this.open(
@@ -813,7 +943,7 @@ export class Screens {
       const unlocked = p.data.unlockedClasses.includes(id);
       const lv = p.data.classes[id].level;
       return `<button class="class-card ${unlocked ? '' : 'locked'} ${p.data.currentClass === id ? 'on' : ''}" data-cls="${id}" ${unlocked ? '' : 'disabled'} style="--c:${hex(c.look.tunic)}">
-          <span class="badge-cls">${c.short}</span>
+          ${heroPortraitUrl(id) ? `<img class="cls-portrait" src="${heroPortraitUrl(id)}" alt="">` : `<span class="badge-cls">${c.short}</span>`}
           <b>${c.name}</b>
           <small>${unlocked ? `Lv.${lv} · ${c.basic}` : '스토리를 진행하면 해금'}</small>
         </button>`;
@@ -981,7 +1111,7 @@ export class Screens {
       const ok = p.data.gold >= cost.gold && p.hasAll(cost.items);
       body = `<p>공장 넓이 ${p.factorySize}×${p.factorySize} → <b>${next.size}×${next.size}</b></p>
         <ul class="list">${Object.entries(cost.items).map(([id, n]) => `<li>${itemGem(id)}<div><b>${ITEMS[id].name}</b></div><b class="num ${p.count(id) >= n ? '' : 'bad'}">${p.count(id)} / ${n}</b></li>`).join('')}
-        <li><span class="gem" style="--c:#e8c14a"></span><div><b>골드</b></div><b class="num ${p.data.gold >= cost.gold ? '' : 'bad'}">${p.data.gold} / ${cost.gold}</b></li></ul>
+        <li>${itemGem('gold')}<div><b>골드</b></div><b class="num ${p.data.gold >= cost.gold ? '' : 'bad'}">${p.data.gold} / ${cost.gold}</b></li></ul>
         <div class="menu"><button class="primary" data-x ${ok ? '' : 'disabled'}>확장하기</button></div>`;
     }
     const s = this.open('factory-config', `<div class="panel"><button class="close">${ICONS.close}</button><h2>차원집 확장</h2>${body}</div>`, onClose);

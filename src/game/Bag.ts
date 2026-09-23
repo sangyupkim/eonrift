@@ -59,6 +59,20 @@ export class Bag {
     return moved;
   }
 
+  /** 아이템을 n개 뺀다. 뺀 개수를 돌려준다 */
+  remove(itemId: string, n: number): number {
+    let left = n;
+    for (let i = this.slots.length - 1; i >= 0 && left > 0; i--) {
+      const s = this.slots[i];
+      if (!s || s.equip || s.itemId !== itemId) continue;
+      const k = Math.min(left, s.count);
+      s.count -= k;
+      left -= k;
+      if (s.count === 0) this.slots[i] = null;
+    }
+    return n - left;
+  }
+
   get used(): number {
     return this.slots.filter(Boolean).length;
   }

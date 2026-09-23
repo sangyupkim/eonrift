@@ -18,10 +18,10 @@ import {
 import { TILE } from '../../config';
 import { Rng } from '../../core/rng';
 import type { BuildingType } from '../../data/factory';
-import { ITEMS } from '../../data/items';
 import { CELL_FLOOR, type DungeonData } from '../../dungeon/generator';
 import { DIRS, MACHINE_TYPES, type BuildingState, type Factory } from '../../factory/sim';
 import { buildBuildingGeometry } from '../../models/factory';
+import { buildItemGeometry } from '../../models/items';
 import { NODES } from '../../data/nodes';
 import { buildNodeGeometry, buildPortalFrame } from '../../models/props';
 import { merge } from '../../models/util';
@@ -37,7 +37,10 @@ export class HomeScene extends Level {
   readonly playerStart: { x: number; z: number; facing: number };
   private buildingMesh: Mesh | null = null;
   private buildingMat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
-  private items: InstancedMesh;
+  /** 레일 위 아이템: 아이템 종류마다 3D 모델 인스턴스 묶음 */
+  private itemMeshes = new Map<string, InstancedMesh>();
+  private itemMat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
+  private stripes: InstancedMesh;
   private lights: InstancedMesh;
   private cursor: Mesh;
   private gridLines: GridHelper;
@@ -109,11 +112,11 @@ export class HomeScene extends Level {
     this.interactables.push(this.storageInteract);
     this.playerStart = { x: ex, z: ez - 1.6, facing: Math.PI + Math.PI / 4 };
 
-    this.items = new InstancedMesh(new BoxGeometry(0.42, 0.42, 0.42), new MeshLambertMaterial(), MAX_ITEMS);
-    this.items.instanceMatrix.setUsage(DynamicDrawUsage);
-    this.items.frustumCulled = false;
-    this.items.castShadow = true;
-    this.scene.add(this.items);
+    // 레일 위 줄무늬: 레일이 흐르는 방향으로 움직인다
+    this.stripes = new InstancedMesh(new BoxGeometry(1.3, 0.03, 0.16), new MeshBasicMaterial({ color: 0x6a6e7a }), MAX_ITEMS * 3);
+    this.stripes.instanceMatrix.setUsage(DynamicDrawUsage);
+    this.stripes.frustumCulled = false;
+    this.scene.add(this.stripes);
     this.lights = new InstancedMesh(new BoxGeometry(0.28, 0.28, 0.28), new MeshBasicMaterial(), n * n);
     this.lights.frustumCulled = false;
     this.scene.add(this.lights);
@@ -242,24 +245,46 @@ export class HomeScene extends Level {
     this.swirl.rotation.z += dt * 1.4;
     if (this.currentKey() !== this.layoutKey) this.rebuild();
 
-    // 레일 위 아이템
+    // 레일 위 아이템 (3D 아이템 모델)
     const f = this.factory;
-    let i = 0;
     const m = new Matrix4();
+    const counts = new Map<string, number>();
     for (const b of f.state.buildings) {
-      if (!b.item || (b.type !== 'belt' && b.type !== 'splitter') || i >= MAX_ITEMS) continue;
+      if (!b.item || (b.type !== 'belt' && b.type !== 'splitter')) continue;
+      const mesh = this.itemMesh(b.item);
+      const n = counts.get(b.item) ?? 0;
+      if (n >= MAX_ITEMS) continue;
       const [dx, dy] = DIRS[b.dir];
       const k = (b.progress ?? 0) - 0.5;
-      this.dummy.position.set((b.x + 0.5 + dx * k) * TILE, 0.45, (b.y + 0.5 + dy * k) * TILE);
+      this.dummy.position.set((b.x + 0.5 + dx * k) * TILE, 0.55, (b.y + 0.5 + dy * k) * TILE);
       this.dummy.rotation.set(0, (b.x + b.y) * 0.7, 0);
+      this.dummy.scale.setScalar(0.75);
       this.dummy.updateMatrix();
-      this.items.setMatrixAt(i, this.dummy.matrix);
-      this.items.setColorAt(i, this.color.setHex(ITEMS[b.item]?.color ?? 0xffffff));
-      i++;
+      mesh.setMatrixAt(n, this.dummy.matrix);
+      counts.set(b.item, n + 1);
     }
-    this.items.count = i;
-    this.items.instanceMatrix.needsUpdate = true;
-    if (this.items.instanceColor) this.items.instanceColor.needsUpdate = true;
+    for (const [id, mesh] of this.itemMeshes) {
+      mesh.count = counts.get(id) ?? 0;
+      mesh.instanceMatrix.needsUpdate = true;
+    }
+    this.dummy.scale.setScalar(1);
+
+    // 레일 줄무늬 흐름
+    let si = 0;
+    const flow = (this.time * 0.9) % 1;
+    for (const b of f.state.buildings) {
+      if (b.type !== 'belt' || si >= MAX_ITEMS * 3 - 3) continue;
+      const [dx, dy] = DIRS[b.dir];
+      for (let n = 0; n < 3; n++) {
+        const k = ((flow + n / 3) % 1) - 0.5;
+        this.dummy.position.set((b.x + 0.5 + dx * k * 0.95) * TILE, 0.2, (b.y + 0.5 + dy * k * 0.95) * TILE);
+        this.dummy.rotation.set(0, Math.atan2(dx, dy), 0);
+        this.dummy.updateMatrix();
+        this.stripes.setMatrixAt(si++, this.dummy.matrix);
+      }
+    }
+    this.stripes.count = si;
+    this.stripes.instanceMatrix.needsUpdate = true;
 
     // 기계 상태등: 초록=가동, 빨강=전력 없음, 노랑=막힘, 회색=대기
     let j = 0;
@@ -283,8 +308,23 @@ export class HomeScene extends Level {
     if (this.lights.instanceColor) this.lights.instanceColor.needsUpdate = true;
   }
 
+  private itemMesh(id: string): InstancedMesh {
+    let mesh = this.itemMeshes.get(id);
+    if (!mesh) {
+      mesh = new InstancedMesh(buildItemGeometry(id), this.itemMat, MAX_ITEMS);
+      mesh.instanceMatrix.setUsage(DynamicDrawUsage);
+      mesh.frustumCulled = false;
+      mesh.castShadow = true;
+      mesh.count = 0;
+      this.itemMeshes.set(id, mesh);
+      this.scene.add(mesh);
+    }
+    return mesh;
+  }
+
   dispose(): void {
     for (const g of this.geoCache.values()) g.dispose();
+    for (const mesh of this.itemMeshes.values()) mesh.geometry.dispose();
     super.dispose();
   }
 }
