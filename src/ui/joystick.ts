@@ -2,6 +2,8 @@ import type { Input } from '../core/input';
 
 const RADIUS = 56;
 const DEAD_ZONE = 0.12;
+/** 반지름의 이만큼만 밀어도 최고 속도 */
+const FULL_AT = 0.6;
 
 /**
  * 플로팅 가상 조이스틱.
@@ -26,9 +28,10 @@ export class Joystick {
     this.reset();
 
     zone.addEventListener('pointerdown', (e) => this.onDown(e));
-    zone.addEventListener('pointermove', (e) => this.onMove(e));
-    zone.addEventListener('pointerup', (e) => this.onUp(e));
-    zone.addEventListener('pointercancel', (e) => this.onUp(e));
+    // 손가락이 조이스틱 영역 밖으로 나가도 계속 따라가도록 창 전체에서 받는다
+    window.addEventListener('pointermove', (e) => this.onMove(e), { passive: false });
+    window.addEventListener('pointerup', (e) => this.onUp(e));
+    window.addEventListener('pointercancel', (e) => this.onUp(e));
   }
 
   private onDown(e: PointerEvent): void {
@@ -63,10 +66,17 @@ export class Joystick {
   private update(clientX: number, clientY: number): void {
     let dx = clientX - this.origin.x;
     let dy = clientY - this.origin.y;
-    const len = Math.hypot(dx, dy);
+    let len = Math.hypot(dx, dy);
     if (len > RADIUS) {
+      // 범위를 넘어가면 조이스틱 받침이 손가락을 따라온다 (최고 속도 유지, 방향 전환도 바로)
+      const over = len - RADIUS;
+      this.origin.x += (dx / len) * over;
+      this.origin.y += (dy / len) * over;
+      const rect = this.zone.getBoundingClientRect();
+      this.place(this.origin.x - rect.left, this.origin.y - rect.top);
       dx = (dx / len) * RADIUS;
       dy = (dy / len) * RADIUS;
+      len = RADIUS;
     }
     this.knob.style.transform = `translate(${dx}px, ${dy}px)`;
     const mag = Math.min(1, len / RADIUS);
@@ -75,8 +85,8 @@ export class Joystick {
       this.input.stickY = 0;
       return;
     }
-    // 데드존 밖에서 0부터 다시 시작하도록 보정 (화면 y는 아래가 +라서 뒤집는다)
-    const scaled = (mag - DEAD_ZONE) / (1 - DEAD_ZONE);
+    // 데드존을 지나면 빠르게 최고 속도에 닿는다 (화면 y는 아래가 +라서 뒤집는다)
+    const scaled = Math.min(1, (mag - DEAD_ZONE) / (FULL_AT - DEAD_ZONE));
     this.input.stickX = (dx / (len || 1)) * scaled;
     this.input.stickY = (-dy / (len || 1)) * scaled;
   }
