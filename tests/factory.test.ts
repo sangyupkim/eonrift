@@ -5,7 +5,7 @@ import { Factory } from '../src/factory/sim';
 function smeltLine(opts: { wire: boolean; fuel: number }) {
   const f = new Factory({ sizeLevel: 0, buildings: [] }, 8);
   const inBox = f.place('box', 0, 0, 0)!;
-  inBox.buffer = { iron_ore: 5 };
+  inBox.buffer = { copper_ore: 5 };
   f.place('belt', 1, 0, 0);
   f.place('smelter', 2, 0, 0);
   f.place('belt', 3, 0, 0);
@@ -24,32 +24,32 @@ describe('Factory', () => {
   it('마력선으로 이어지면 광석을 주괴로 만들어 출하 상자에 모은다', () => {
     const { f, outBox, gen } = smeltLine({ wire: true, fuel: 3 });
     f.simulate(200);
-    expect(outBox.buffer!.iron_ingot).toBe(5);
+    expect(outBox.buffer!.copper_ingot).toBe(5);
     expect(gen.buffer!.essence_low).toBeLessThan(3);
   });
 
   it('마력선이 없으면 발전기와 떨어진 기계는 멈춘다', () => {
     const { f, outBox } = smeltLine({ wire: false, fuel: 3 });
     f.simulate(200);
-    expect(outBox.buffer!.iron_ingot ?? 0).toBe(0);
+    expect(outBox.buffer!.copper_ingot ?? 0).toBe(0);
   });
 
   it('발전기에 정수가 없으면 멈춘다', () => {
     const { f, outBox } = smeltLine({ wire: true, fuel: 0 });
     f.simulate(200);
-    expect(outBox.buffer!.iron_ingot ?? 0).toBe(0);
+    expect(outBox.buffer!.copper_ingot ?? 0).toBe(0);
   });
 
   it('투입 상자는 기계가 비었을 때만 보낸다', () => {
     const { f, inBox } = smeltLine({ wire: true, fuel: 3 });
     f.simulate(5);
     // 레일 하나, 제련로 하나 분량만 나가고 나머지는 상자에 남는다
-    expect(inBox.buffer!.iron_ore).toBeGreaterThanOrEqual(2);
+    expect(inBox.buffer!.copper_ore).toBeGreaterThanOrEqual(2);
   });
 
   it('조립기는 고른 레시피의 재료만 받는다', () => {
     const f = new Factory({ sizeLevel: 0, buildings: [] }, 8);
-    f.place('box', 0, 0, 0)!.buffer = { copper_ingot: 2, plank: 4 };
+    f.place('box', 0, 0, 0)!.buffer = { mana_copper: 2, plank: 4 };
     f.place('belt', 1, 0, 0);
     const asm = f.place('assembler', 2, 0, 0)!;
     asm.recipe = 'return_stone';
@@ -69,5 +69,25 @@ describe('Factory', () => {
     f.remove(0, 0, (id, n) => (got[id] = (got[id] ?? 0) + n));
     expect(got.wood).toBe(1);
     expect(f.at(0, 0)).toBeUndefined();
+  });
+});
+
+describe('건물 레벨', () => {
+  it('Lv.1 제련로는 철광석을 받지 않고, Lv.2로 올리면 철 주괴를 만든다', () => {
+    const make = (level: number) => {
+      const f = new Factory({ sizeLevel: 0, buildings: [] }, 8);
+      f.place('box', 0, 0, 0)!.buffer = { iron_ore: 3 };
+      f.place('belt', 1, 0, 0);
+      const sm = f.place('smelter', 2, 0, 0)!;
+      sm.level = level;
+      const out = f.place('box', 3, 0, 0)!;
+      out.mode = 'out';
+      f.place('wire', 2, 1, 0);
+      f.place('generator', 2, 2, 0)!.buffer = { essence_low: 5 };
+      f.simulate(200);
+      return out.buffer!.iron_ingot ?? 0;
+    };
+    expect(make(1)).toBe(0);
+    expect(make(2)).toBeGreaterThan(0);
   });
 });

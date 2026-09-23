@@ -4,7 +4,7 @@ import { CLASSES, CLASS_ORDER, expToNext, MAX_LEVEL, MAX_SKILL_LEVEL, SKILL_LEAR
 import { newTool, TOOL_KIND_NAMES, TOOL_TIER_NAMES, toolBonusChance, toolEnhanceCost, toolMaxDur, toolName, toolRepair, toolSpeed, type ToolKind, type ToolState } from '../data/tools';
 import { equipCraftCost, plateCraftCost, toolCraftCost, workbenchUpgradeCost, type CraftCost } from '../data/crafting';
 import { newUid, durability, EQUIP_SLOTS, EQUIP_MAX_DUR, enhanceCost, repairCost, type EquipSlot, equipName, equipStats, equipValue, GRADES, slotName, type Equip } from '../data/equipment';
-import { BUILDINGS, BUILD_ORDER, FACTORY_SIZES, RECIPES, type BuildingType } from '../data/factory';
+import { BUILDINGS, BUILD_ORDER, buildingUpgradeCost, FACTORY_SIZES, generatorPower, levelSpeed, MAX_BUILDING_LEVEL, RECIPES, UPGRADABLE, upgradeBlueprintCost, type BuildingType } from '../data/factory';
 import { ITEMS, ITEM_LIST, TIER_PLATE } from '../data/items';
 import type { QuestDef } from '../data/quests';
 import { THEMES } from '../data/themes';
@@ -809,7 +809,23 @@ export class Screens {
   }
 
   /** 세라의 도면 상점 */
-  blueprints(p: Progress, onBuy: (t: BuildingType) => void, onClose: () => void, message?: string): void {
+  blueprints(p: Progress, onBuy: (t: BuildingType) => void, onClose: () => void, message?: string, onBuyUpgrade?: (t: BuildingType, level: number) => void): void {
+    // 강화 도면: 건물을 가진 뒤, 다음 레벨 도면 하나씩. 그 단계 던전을 열어야 판다
+    const upRows = UPGRADABLE.filter((t) => !BUILDINGS[t].blueprint || p.flag(`bp_${t}`) > 0)
+      .map((t) => {
+        let lv = 2;
+        while (lv <= MAX_BUILDING_LEVEL && p.flag(`bp_${t}_lv${lv}`)) lv++;
+        const d = BUILDINGS[t];
+        const thumb = buildingThumb(t);
+        const icon = thumb ? `<img class="gem ico" src="${thumb}" alt="">` : '';
+        if (lv > MAX_BUILDING_LEVEL) return `<li>${icon}<div><b>${d.name} 강화 도면</b><small class="ok">모든 레벨 도면 보유</small></div></li>`;
+        const cost = upgradeBlueprintCost(t, lv);
+        const opened = p.maxTier >= lv;
+        const ok = opened && p.data.gold >= cost.gold && p.hasAll(cost.items);
+        const costTxt = [`${cost.gold} G`, ...Object.entries(cost.items).map(([id, n]) => `${ITEMS[id].name} ${p.count(id)}/${n}`)].join(' · ');
+        return `<li>${icon}<div><b>${d.name} Lv.${lv} 강화 도면</b><small>${t === 'generator' ? `전력 ${generatorPower(lv)}` : `${TOOL_TIER_NAMES[lv - 1]} 단계 재료를 가공 · 속도 ×${levelSpeed(lv).toFixed(2)}`}</small><small class="dim">${opened ? costTxt : `${lv}단계 차원문을 열면 판매`}</small></div><button data-up="${t}:${lv}" ${ok ? '' : 'disabled'}>구입</button></li>`;
+      })
+      .join('');
     const rows = BUILD_ORDER.filter((t) => BUILDINGS[t].blueprint)
       .map((t) => {
         const d = BUILDINGS[t];
@@ -827,12 +843,20 @@ export class Screens {
          <button class="close">${ICONS.close}</button>
          <h2>세라의 도면 <small class="gold">${p.data.gold} G</small></h2>
          ${message ? `<div class="notice">${message}</div>` : ''}
-         <p class="hint">도면을 사면 차원집 건설 모드에서 그 건물을 지을 수 있습니다.</p>
-         <ul class="list scroll">${rows}</ul>
+         <div class="scroll">
+         <h3>건물 도면 <small>사면 차원집 건설 모드에서 지을 수 있습니다</small></h3>
+         <ul class="list">${rows}</ul>
+         <h3>강화 도면 <small>설치한 건물을 누르고 업그레이드하면 상위 재료를 가공합니다</small></h3>
+         <ul class="list">${upRows}</ul>
+         </div>
        </div>`,
       onClose,
     );
     this.on(s, '[data-bp]', (b) => onBuy(b.dataset.bp as BuildingType));
+    this.on(s, '[data-up]', (b) => {
+      const [t, lv] = b.dataset.up!.split(':');
+      onBuyUpgrade?.(t as BuildingType, Number(lv));
+    });
   }
 
   // ---------------- 대장간 (강화 · 수리) ----------------
@@ -1007,6 +1031,35 @@ export class Screens {
   }
 
   // ---------------- 공장: 발전기 ----------------
+  /** 건물 레벨 표시와 업그레이드 버튼 (세라의 강화 도면이 있어야 한다) */
+  private levelBlock(b: BuildingState, p: Progress): string {
+    if (!UPGRADABLE.includes(b.type)) return '';
+    const lv = b.level ?? 1;
+    const next = lv + 1;
+    const speed = b.type === 'generator' ? `전력 ${generatorPower(lv)}` : `속도 ×${levelSpeed(lv).toFixed(2)} · ${TOOL_TIER_NAMES[lv - 1]} 단계 재료까지`;
+    let html = `<div class="level-box"><b>Lv.${lv}</b> <small>${speed}</small>`;
+    if (next > MAX_BUILDING_LEVEL) html += ' <small class="ok">최고 레벨</small>';
+    else if (!p.flag(`bp_${b.type}_lv${next}`)) html += `<small class="dim">Lv.${next}: 세라에게서 강화 도면(Lv.${next})을 사야 합니다</small>`;
+    else {
+      const cost = buildingUpgradeCost(b.type, next);
+      const ok = p.hasAll(cost);
+      html += `<small>Lv.${next} → ${b.type === 'generator' ? `전력 ${generatorPower(next)}` : `${TOOL_TIER_NAMES[next - 1]} 재료 가공 · 속도 ×${levelSpeed(next).toFixed(2)}`}</small>
+        <small>${Object.entries(cost).map(([id, n]) => `<span class="${p.count(id) >= n ? '' : 'bad'}">${inlineGem(id)}${ITEMS[id].name} ${p.count(id)}/${n}</span>`).join(' · ')}</small>
+        <button class="primary" data-upgrade ${ok ? '' : 'disabled'}>Lv.${next}로 업그레이드</button>`;
+    }
+    return html + '</div>';
+  }
+
+  private bindUpgrade(s: HTMLElement, b: BuildingState, p: Progress, redraw: () => void): void {
+    this.on(s, '[data-upgrade]', () => {
+      const next = (b.level ?? 1) + 1;
+      const cost = buildingUpgradeCost(b.type, next);
+      if (!p.flag(`bp_${b.type}_lv${next}`) || !p.takeAll(cost)) return;
+      b.level = next;
+      redraw();
+    });
+  }
+
   generator(f: Factory, b: BuildingState, p: Progress, onChange: () => void, onClose: () => void): void {
     const net = f.networkInfo(b);
     const rows = ESSENCES.map((id) => {
@@ -1021,6 +1074,7 @@ export class Screens {
       `<div class="panel wide tall">
          <button class="close">${ICONS.close}</button>
          <h2>마력 발전기</h2>
+         ${this.levelBlock(b, p)}
          <p class="hint">여기에 넣은 마력 정수만 탑니다 (하급 2분 · 중급 5분 · 상급 10분). 전력을 쓰는 기계가 있을 때만 연료가 줄어듭니다.</p>
          <p>지금 타는 연료: <b>${Math.ceil(b.fuel ?? 0)}초</b> · 전력망 공급 ${net?.supply ?? 0} / 수요 ${net?.demand ?? 0}</p>
          <ul class="list scroll">${rows}</ul>
@@ -1031,6 +1085,7 @@ export class Screens {
       onChange();
       this.generator(f, b, p, onChange, onClose);
     };
+    this.bindUpgrade(s, b, p, again);
     this.on(s, '[data-put]', (el) => {
       const id = el.dataset.put!;
       const n = el.dataset.n === 'all' ? p.count(id) : Math.min(p.count(id), Number(el.dataset.n));
@@ -1229,13 +1284,14 @@ export class Screens {
       const list = recipesFor('assembler')
         .map((r) => {
           const inputs = Object.entries(r.inputs).map(([id, n]) => `${ITEMS[id].name}×${n}`).join(' + ');
-          return `<li class="${b.recipe === r.id ? 'sel' : ''}" data-recipe="${r.id}">${itemGem(r.output)}<div><b>${ITEMS[r.output].name}</b><small>${inputs} · ${r.time}초</small></div></li>`;
+          const locked = r.tier > (b.level ?? 1);
+          return `<li class="${b.recipe === r.id ? 'sel' : ''} ${locked ? 'locked' : ''}" ${locked ? '' : `data-recipe="${r.id}"`}>${itemGem(r.output)}<div><b>${ITEMS[r.output].name}${locked ? ` <small class="dim">(Lv.${r.tier} 필요)</small>` : ''}</b><small>${inputs} · ${r.time}초</small></div></li>`;
         })
         .join('');
       body += `<h3>조립 설계 <small>누르면 바뀝니다</small></h3><ul class="list pick">${list}</ul>`;
     } else if (MACHINE_TYPES.has(b.type)) {
       const list = RECIPES.filter((r) => r.machine === b.type)
-        .map((r) => `<li>${itemGem(r.output)}<div><b>${ITEMS[r.output].name}${r.count > 1 ? ` ×${r.count}` : ''}</b><small>${Object.entries(r.inputs).map(([id, n]) => `${ITEMS[id].name}×${n}`).join(' + ')} · ${r.time}초</small></div></li>`)
+        .map((r) => `<li class="${r.tier > (b.level ?? 1) ? 'locked' : ''}">${itemGem(r.output)}<div><b>${ITEMS[r.output].name}${r.count > 1 ? ` ×${r.count}` : ''}${r.tier > (b.level ?? 1) ? ` <small class="dim">(Lv.${r.tier} 필요)</small>` : ''}</b><small>${Object.entries(r.inputs).map(([id, n]) => `${ITEMS[id].name}×${n}`).join(' + ')} · ${r.time}초</small></div></li>`)
         .join('');
       body += `<h3>레시피 <small>들어오는 재료에 따라 자동</small></h3><ul class="list">${list}</ul>`;
     }
@@ -1249,10 +1305,15 @@ export class Screens {
       `<div class="panel wide tall">
          <button class="close">${ICONS.close}</button>
          <h2>${def.name}</h2>
+         ${this.levelBlock(b, p)}
          <div class="scroll">${body}</div>
        </div>`,
       onClose,
     );
+    this.bindUpgrade(s, b, p, () => {
+      onChange();
+      this.machine(f, b, p, onChange, onClose);
+    });
     this.on(s, '[data-recipe]', (el) => {
       for (const [id, n] of Object.entries(b.buffer ?? {})) if (n > 0) p.add(id, n);
       b.buffer = {};

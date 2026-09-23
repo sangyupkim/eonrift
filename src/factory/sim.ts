@@ -1,4 +1,4 @@
-import { BUILDINGS, ESSENCE_BURN, RECIPES, type BuildingType, type Recipe } from '../data/factory';
+import { BUILDINGS, ESSENCE_BURN, generatorPower, levelSpeed, RECIPES, type BuildingType, type Recipe } from '../data/factory';
 
 /** 0: +x(동), 1: +z(남), 2: -x(서), 3: -z(북) */
 export type Dir = 0 | 1 | 2 | 3;
@@ -240,7 +240,7 @@ export class Factory {
           }
         }
       }
-      if ((b.fuel ?? 0) > 0) this.netSupply[net] += BUILDINGS.generator.power;
+      if ((b.fuel ?? 0) > 0) this.netSupply[net] += generatorPower(b.level ?? 1);
     }
     for (let i = 0; i < this.netRatio.length; i++) {
       this.netRatio[i] = this.netDemand[i] > 0 ? Math.min(1, this.netSupply[i] / this.netDemand[i]) : 0;
@@ -289,7 +289,7 @@ export class Factory {
       }
       if (b.crafting) {
         const recipe = RECIPE_BY_ID[b.crafting];
-        b.progress! += (dt * this.powerOf(b)) / recipe.time;
+        b.progress! += (dt * this.powerOf(b) * levelSpeed(b.level ?? 1)) / recipe.time;
         if (b.progress! >= 1) {
           for (let i = 0; i < recipe.count; i++) b.out!.push(recipe.output);
           this.onCraft?.(recipe.output, recipe.count);
@@ -322,7 +322,7 @@ export class Factory {
   }
 
   private readyRecipe(b: BuildingState): Recipe | null {
-    const candidates = b.recipe ? [RECIPE_BY_ID[b.recipe]] : recipesFor(b.type);
+    const candidates = (b.recipe ? [RECIPE_BY_ID[b.recipe]] : recipesFor(b.type)).filter((r) => r.tier <= (b.level ?? 1));
     for (const r of candidates) {
       if (Object.entries(r.inputs).every(([id, n]) => (b.buffer![id] ?? 0) >= n)) return r;
     }
@@ -363,7 +363,8 @@ export class Factory {
       case 'assembler':
       case 'alchemy': {
         // 가공할 재료를 한 번 분량만 받는다. 한 재료를 여러 개 쓰는 레시피는 레일이 막히지 않게 두 번 분량까지
-        const recipes = target.recipe ? [RECIPE_BY_ID[target.recipe]] : recipesFor(target.type);
+        // 건물 레벨보다 높은 단계 재료는 받지 않는다
+        const recipes = (target.recipe ? [RECIPE_BY_ID[target.recipe]] : recipesFor(target.type)).filter((r) => r.tier <= (target.level ?? 1));
         const recipe = recipes.find((r) => r.inputs[item] !== undefined);
         if (!recipe) return false;
         if (!target.recipe) {

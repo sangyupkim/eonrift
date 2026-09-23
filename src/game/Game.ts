@@ -8,7 +8,7 @@ import { Input } from '../core/input';
 import { Rng, randomSeed } from '../core/rng';
 import { CLASSES, expToNext, MAX_SKILL_LEVEL, SKILL_LEARN, skillUpgradeCost, type ClassId } from '../data/classes';
 import { durability, equipName, GRADES, rollEquip, type Equip } from '../data/equipment';
-import { BUILDINGS, FACTORY_SIZES, OFFLINE_CAP_HOURS, type BuildingType } from '../data/factory';
+import { BUILDINGS, FACTORY_SIZES, OFFLINE_CAP_HOURS, type BuildingType, upgradeBlueprintCost } from '../data/factory';
 import { ITEMS, TIER_PLATE } from '../data/items';
 import { QUEST_BY_ID, type NpcRef, type QuestDef } from '../data/quests';
 import type { Step } from '../data/story';
@@ -740,6 +740,15 @@ export class Game {
         },
         () => this.resume(),
         message,
+        (t, lv) => {
+          const p = this.progress;
+          const cost = upgradeBlueprintCost(t, lv);
+          if (p.flag(`bp_${t}_lv${lv}`) || p.maxTier < lv || p.data.gold < cost.gold || !p.takeAll(cost.items)) return;
+          p.data.gold -= cost.gold;
+          p.setFlag(`bp_${t}_lv${lv}`);
+          this.audio.play('coin');
+          this.openBlueprints(`${BUILDINGS[t].name} Lv.${lv} 강화 도면을 샀습니다. 차원집에서 건물을 눌러 업그레이드하세요`);
+        },
       ),
     );
   }
@@ -1590,9 +1599,13 @@ export class Game {
     // 보관상자 위에 투입/출하 표시
     if (this.level instanceof HomeScene) {
       for (const b of this.factory.state.buildings) {
-        if (b.type !== 'box') continue;
-        const s = this.toScreen((b.x + 0.5) * TILE, 1.9, (b.y + 0.5) * TILE);
-        labels.push({ text: b.mode === 'in' ? '📥 투입' : '📤 출하', x: s.x, y: s.y, accent: b.mode !== 'in' });
+        if (b.type === 'box') {
+          const s = this.toScreen((b.x + 0.5) * TILE, 1.9, (b.y + 0.5) * TILE);
+          labels.push({ text: b.mode === 'in' ? '📥 투입' : '📤 출하', x: s.x, y: s.y, accent: b.mode !== 'in' });
+        } else if ((b.level ?? 1) > 1) {
+          const s = this.toScreen((b.x + 0.5) * TILE, 0.3, (b.y + 0.5) * TILE);
+          labels.push({ text: `Lv.${b.level}`, x: s.x, y: s.y, accent: true });
+        }
       }
     }
     this.hud.setLabels(labels);

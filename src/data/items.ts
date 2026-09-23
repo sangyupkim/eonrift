@@ -60,6 +60,7 @@ const defs: ItemDef[] = [
   { id: 'mana_dust', name: '마력 가루', color: 0xd4a8ff, kind: 'processed', value: 34, description: '(더 이상 쓰지 않는 재료) 상점에 팔 수 있다.' },
   { id: 'fire_dust', name: '화염 가루', color: 0xff9a5a, kind: 'processed', value: 62, description: '(더 이상 쓰지 않는 재료) 상점에 팔 수 있다.' },
   { id: 'dim_dust', name: '차원 가루', color: 0x8ff6ff, kind: 'processed', value: 75, description: '(더 이상 쓰지 않는 재료) 상점에 팔 수 있다.' },
+  { id: 'mana_copper', name: '마력 구리', color: 0xffa070, kind: 'processed', value: 14, description: '구리 주괴에 마력을 불어넣었다. 마력 주입기 Lv.1.' },
   { id: 'mana_iron', name: '마력 철', color: 0x8fb4ff, kind: 'processed', value: 22, description: '차원가방 확장 키트의 재료.' },
   { id: 'mana_gold', name: '마력 금', color: 0xffe08a, kind: 'processed', value: 45, description: '귀환석의 재료.' },
   { id: 'mana_titanium', name: '마력 티타늄', color: 0x7ff0ff, kind: 'processed', value: 85, description: '공명 장치의 재료.' },

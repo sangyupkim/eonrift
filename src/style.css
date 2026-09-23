@@ -2031,3 +2031,28 @@ img.gem-inline.ico {
   justify-self: start;
   max-width: 100%;
 }
+.level-box {
+  display: grid;
+  gap: 3px;
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 224, 122, 0.08);
+  border: 1px solid rgba(255, 224, 122, 0.3);
+  font-size: 13px;
+}
+.level-box small {
+  font-size: 11px;
+}
+.level-box button {
+  justify-self: start;
+  margin-top: 4px;
+  border: 0;
+  border-radius: 8px;
+  padding: 7px 14px;
+  font-weight: 800;
+  background: linear-gradient(#3a8ef0, #2862c4);
+}
+.level-box button:disabled {
+  opacity: 0.4;
+}
