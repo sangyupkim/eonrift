@@ -1,6 +1,6 @@
 import { Rng } from '../core/rng';
 import { BUILDINGS } from '../data/factory';
-import { ITEMS, ORE_TIERS, WOOD_TIERS } from '../data/items';
+import { ITEMS, ORE_TIERS, TIER_PLATE, WOOD_TIERS } from '../data/items';
 import { ALL_QUESTS, QUEST_BY_ID, type NpcRef, type Objective, type QuestDef, type Reward } from '../data/quests';
 
 export interface DailyQuest {
@@ -168,7 +168,7 @@ export class Quests {
     const t = Math.max(1, maxTier);
     const pool: (() => DailyQuest)[] = [
       () => ({ id: 'kill', title: '틈새 정화', objective: { type: 'kill', count: 80 + t * 20 }, reward: { gold: 150 * t, exp: 80 * t * t }, progress: 0, claimed: false }),
-      () => ({ id: 'elite', title: '정예 사냥', objective: { type: 'elite', count: 2 }, reward: { gold: 250 * t, exp: 120 * t * t, items: { stone_low: 1 } }, progress: 0, claimed: false }),
+      () => ({ id: 'elite', title: '정예 사냥', objective: { type: 'elite', count: 2 }, reward: { gold: 250 * t, exp: 120 * t * t, items: { [TIER_PLATE[t - 1]]: 1 } }, progress: 0, claimed: false }),
       () => ({ id: 'stages', title: '차원문 순찰', objective: { type: 'stages', count: 3 }, reward: { gold: 200 * t, exp: 100 * t * t, items: { potion: 2 } }, progress: 0, claimed: false }),
       () => {
         const rt = rng.int(1, t) - 1;

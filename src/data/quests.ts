@@ -164,9 +164,9 @@ export const SUB_QUESTS: QuestDef[] = [
     title: '정예의 증표',
     after: ['m2_tools'],
     offer: [say('고른', '금빛으로 빛나는 정예 몬스터를 본 적 있나? 다섯 마리를 쓰러뜨리고 오게. 좋은 걸 주지.')],
-    complete: [say('고른', '실력이 늘었군. 이 강화석을 가져가게.')],
+    complete: [say('고른', '실력이 늘었군. 이 구리판을 가져가게. 장비를 강화할 때 쓰는 거다.')],
     objectives: [{ type: 'elite', count: 5 }],
-    rewards: { gold: 300, exp: 250, items: { stone_low: 4 } },
+    rewards: { gold: 300, exp: 250, items: { copper_plate: 3 } },
   },
   {
     id: 's_engineer_ingot',
@@ -196,10 +196,10 @@ export const SUB_QUESTS: QuestDef[] = [
     kind: 'sub',
     title: '탈출파의 부탁',
     requireStones: 3,
-    offer: [say('리아', '탈출파 사람들이 차원 결정을 연구하고 싶대. 서리 결정 10개를 모아 줄 수 있어?')],
+    offer: [say('리아', '탈출파 사람들이 차원문 장치를 연구하고 싶대. 금광석 20개를 모아 줄 수 있어?')],
     complete: [say('리아', '다들 기뻐할 거야. 정말… 나갈 수 있을지도 몰라.')],
-    objectives: [{ type: 'deliver', item: 'frost_crystal', count: 10 }],
-    rewards: { gold: 1500, exp: 800, items: { stone_mid: 2 } },
+    objectives: [{ type: 'deliver', item: 'gold_ore', count: 20 }],
+    rewards: { gold: 1500, exp: 800, items: { gold_plate: 2 } },
   },
 ];
 

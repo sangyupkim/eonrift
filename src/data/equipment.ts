@@ -1,4 +1,5 @@
 import type { Rng } from '../core/rng';
+import { TIER_PLATE } from './items';
 import { CLASSES, type ClassId } from './classes';
 
 export type EquipSlot = 'weapon' | 'helmet' | 'armor' | 'pants' | 'boots' | 'ring' | 'necklace';
@@ -107,13 +108,12 @@ export function equipValue(e: Equip): number {
   return Math.round(20 * e.tier * GRADES[e.grade].mult * (1 + e.plus * 0.3));
 }
 
-/** 강화: 성공 확률, 필요 강화석, 골드 */
-export function enhanceCost(e: Equip): { stone: string; count: number; gold: number; rate: number } | null {
+/** 강화: 장비 재질과 같은 판 (구리 장비 → 구리판, 철 장비 → 철판 …) + 골드 */
+export function enhanceCost(e: Equip): { item: string; count: number; gold: number; rate: number } | null {
   if (e.plus >= 10) return null;
   const p = e.plus;
-  const stone = p < 3 ? 'stone_low' : p < 6 ? 'stone_mid' : 'stone_high';
   const rates = [1, 0.95, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2];
-  return { stone, count: 1 + Math.floor((p % 3) / 1.5), gold: 50 * (p + 1) * e.tier, rate: rates[p] };
+  return { item: TIER_PLATE[e.tier - 1], count: 1 + Math.floor(p / 3), gold: 50 * (p + 1) * e.tier, rate: rates[p] };
 }
 
 // ---- 내구도와 수리 ----

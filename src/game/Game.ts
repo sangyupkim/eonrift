@@ -2,14 +2,14 @@ import { bustUrl, itemIconUrl } from '../ui/itemIcons';
 import { gearLook } from '../models/items';
 import { TOOL_KIND_NAMES, TOOL_TIER_NAMES, toolBonusChance, toolName, toolSpeed, toolWear, type ToolKind } from '../data/tools';
 import { MeshLambertMaterial, OrthographicCamera, PCFShadowMap, Plane, Raycaster, Vector2, Vector3, WebGLRenderer } from 'three';
-import { BAG_SLOTS, CAMERA_OFFSET, PLAYER, TILE, VIEW_HEIGHT } from '../config';
+import { BAG_SLOTS, CAMERA_OFFSET, PLAYER, SCREEN_UP, TILE, VIEW_HEIGHT } from '../config';
 import { Audio } from '../core/audio';
 import { Input } from '../core/input';
 import { Rng, randomSeed } from '../core/rng';
 import { CLASSES, expToNext, MAX_SKILL_LEVEL, SKILL_LEARN, skillUpgradeCost, type ClassId } from '../data/classes';
 import { durability, equipName, GRADES, rollEquip, type Equip } from '../data/equipment';
 import { BUILDINGS, FACTORY_SIZES, OFFLINE_CAP_HOURS, type BuildingType } from '../data/factory';
-import { ITEMS } from '../data/items';
+import { ITEMS, TIER_PLATE } from '../data/items';
 import { QUEST_BY_ID, type NpcRef, type QuestDef } from '../data/quests';
 import type { Step } from '../data/story';
 import { moveWithCollision } from '../dungeon/collision';
@@ -921,8 +921,8 @@ export class Game {
       else this.hud.toast('가방이 가득 차서 장비를 줍지 못했습니다');
     }
     if (m.kind === 'midboss') {
-      const stone = tier <= 2 ? 'stone_low' : tier <= 5 ? 'stone_mid' : 'stone_high';
-      if (run.bag.add(stone, 2)) loot(`+2 ${ITEMS[stone].name}`, hex(ITEMS[stone].color));
+      const plate = TIER_PLATE[tier - 1];
+      if (run.bag.add(plate, 2)) loot(`+2 ${ITEMS[plate].name}`, hex(ITEMS[plate].color));
       run.bag.add('potion', 2);
     }
 
@@ -1225,7 +1225,9 @@ export class Game {
     const L = this.factory.size * TILE;
     const viewH = this.camera.top - this.camera.bottom;
     const viewW = this.camera.right - this.camera.left;
-    this.camera.zoom = Math.min(1, viewW / (L * 1.55), viewH / (L * 1.25));
+    // 건설 도구줄이 차지하는 높이를 빼고 공장이 다 보이게
+    const free = Math.max(0.4, 1 - (this.buildBar.root.offsetHeight + 12) / Math.max(1, this.container.clientHeight));
+    this.camera.zoom = Math.min(1, viewW / (L * 1.55), (viewH * free) / (L * 1.25));
     this.camera.updateProjectionMatrix();
   }
 
@@ -1519,10 +1521,17 @@ export class Game {
   private drinkPotion(): void {
     if (!(this.level instanceof DungeonScene)) return this.hud.toast('물약은 던전에서 마실 수 있습니다');
     if (this.potionCd > 0) return;
-    if (!this.progress.take('potion', 1)) return this.hud.toast('물약이 없습니다 (상점·연금 솥에서 구하기)');
+    // 가장 좋은 물약부터 마신다
+    const kinds: [string, number][] = [
+      ['potion_high', 1],
+      ['potion_mid', 0.7],
+      ['potion', 0.4],
+    ];
+    const pick = kinds.find(([id]) => this.progress.count(id) > 0);
+    if (!pick || !this.progress.take(pick[0], 1)) return this.hud.toast('물약이 없습니다 (상점·연금 솥에서 구하기)');
     const pl = this.player;
-    pl.hp = Math.min(pl.maxHp, pl.hp + pl.maxHp * 0.5);
-    pl.mp = Math.min(pl.maxMp, pl.mp + pl.maxMp * 0.5);
+    pl.hp = Math.min(pl.maxHp, pl.hp + pl.maxHp * pick[1]);
+    pl.mp = Math.min(pl.maxMp, pl.mp + pl.maxMp * pick[1]);
     this.potionCd = 1;
     this.level.effects.ring(pl.position.x, pl.position.z, 2, 0xff7a9a, 0.4);
     this.audio.play('pickup');
@@ -1541,7 +1550,7 @@ export class Game {
       const head = left > 0 ? `남은 몬스터 ${left}${boss} (M: 지도)` : '워프 게이트로 가자 (다음 방 / 마을)';
       this.hud.setObjective([head, ...questLines(p, this.quests)].join('\n'));
     } else this.hud.setObjective(objective(p, this.quests));
-    this.hud.setPotions(p.count('potion'));
+    this.hud.setPotions(p.count('potion') + p.count('potion_mid') + p.count('potion_high'));
     this.hud.setDodgeCooldown(pl.rollCooldown / (PLAYER.rollCooldown + PLAYER.rollTime));
     const skills = pl.cls.skills;
     const quick = p.cls.quick.map((i) => (i >= 0 && (p.cls.skills[i] ?? 0) > 0 ? i : -1));
@@ -1604,7 +1613,16 @@ export class Game {
   }
 
   private updateCamera(dt: number): void {
-    const target = this.building && this.level instanceof HomeScene ? this.level.center : this.player.position;
+    let target: { x: number; z: number } = this.building && this.level instanceof HomeScene ? this.level.center : this.player.position;
+    if (this.building && this.level instanceof HomeScene) {
+      // 아래쪽 건설 도구줄에 가리지 않게 공장을 도구줄 높이의 절반만큼 위로 올려 보여 준다
+      const barPx = this.buildBar.root.offsetHeight + 12;
+      const a = this.toScreen(target.x, 0, target.z);
+      const b = this.toScreen(target.x + SCREEN_UP.x, 0, target.z + SCREEN_UP.z);
+      const pxPerUnit = Math.abs(a.y - b.y) || 1;
+      const d = barPx / 2 / pxPerUnit;
+      target = { x: target.x - SCREEN_UP.x * d, z: target.z - SCREEN_UP.z * d };
+    }
     const k = 1 - Math.exp(-dt * 7);
     this.camTarget.x += (target.x - this.camTarget.x) * k;
     this.camTarget.z += (target.z - this.camTarget.z) * k;

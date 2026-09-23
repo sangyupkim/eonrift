@@ -66,7 +66,7 @@ export const THEMES: DungeonTheme[] = [
     wallTop: 0xe8f4fb,
     ambient: 0xd4ecff,
     sun: 0xe6f4ff,
-    special: ['frost_cluster'],
+    special: [],
     decor: [
       { kind: 'shard', color: 0x9fe3ff },
       { kind: 'rock', color: 0x8fa9bf },
@@ -83,7 +83,7 @@ export const THEMES: DungeonTheme[] = [
     wallTop: 0x6d5b99,
     ambient: 0xd8c8ff,
     sun: 0xf0e0ff,
-    special: ['mana_cluster'],
+    special: [],
     decor: [
       { kind: 'shard', color: 0xc28cff },
       { kind: 'shard', color: 0x7fe0d0 },
@@ -118,7 +118,7 @@ export const THEMES: DungeonTheme[] = [
     wallTop: 0x6a2a1a,
     ambient: 0xffc0a0,
     sun: 0xffb080,
-    special: ['fire_cluster'],
+    special: [],
     decor: [
       { kind: 'shard', color: 0xff6a2a },
       { kind: 'rock', color: 0x2e2228 },
@@ -136,7 +136,7 @@ export const THEMES: DungeonTheme[] = [
     wallTop: 0x4a3f8a,
     ambient: 0xc0c8ff,
     sun: 0xd8e8ff,
-    special: ['dimension_cluster'],
+    special: [],
     decor: [
       { kind: 'shard', color: 0x5ef0ff },
       { kind: 'shard', color: 0x7a5cff },

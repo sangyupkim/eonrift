@@ -63,10 +63,10 @@ describe('Progress', () => {
       expect(Object.values(s).some((v) => v > 0)).toBe(true);
     }
     const e = { uid: 'w', slot: 'weapon' as const, cls: 'sword' as const, tier: 2, grade: 1, plus: 0 };
-    expect(enhanceCost(e)?.stone).toBe('stone_low');
+    expect(enhanceCost(e)?.item).toBe('iron_plate');
     const base = equipStats(e).atk;
     e.plus = 5;
-    expect(enhanceCost(e)?.stone).toBe('stone_mid');
+    expect(enhanceCost(e)?.count).toBe(2);
     expect(equipStats(e).atk).toBeGreaterThan(base);
   });
 

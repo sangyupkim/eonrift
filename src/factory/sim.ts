@@ -111,7 +111,7 @@ export class Factory {
       b.out = [];
       b.progress = 0;
       b.crafting = null;
-      if (type === 'alchemy') b.recipe = 'potion';
+      if (type === 'alchemy') b.recipe = null;
     }
     if (type === 'belt' || type === 'splitter') {
       b.item = null;

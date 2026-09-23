@@ -130,6 +130,15 @@ function resonator(color: number): BufferGeometry[] {
   ];
 }
 
+function plate(color: number): BufferGeometry[] {
+  const g = [
+    part(new BoxGeometry(0.8, 0.1, 0.6), color, { rot: [0.15, 0.3, 0] }),
+    part(new BoxGeometry(0.76, 0.1, 0.56), shade(color, 0.8), { pos: [0.04, -0.12, 0.03], rot: [0.15, 0.3, 0] }),
+  ];
+  for (const [x, z] of [[0.3, 0.2], [-0.3, 0.2], [0.3, -0.2], [-0.3, -0.2]]) g.push(part(new CylinderGeometry(0.035, 0.035, 0.04, 6), shade(color, 0.6), { pos: [x, 0.07, z], rot: [0.15, 0.3, 0] }));
+  return g;
+}
+
 function coins(): BufferGeometry[] {
   const g: BufferGeometry[] = [];
   for (let i = 0; i < 4; i++) g.push(part(new CylinderGeometry(0.3, 0.3, 0.08, 12), i % 2 ? 0xf0c040 : 0xe0b030, { pos: [0.1, -0.3 + i * 0.09, 0] }));
@@ -149,7 +158,8 @@ export function buildItemGeometry(id: string): BufferGeometry {
   else if (id.endsWith('_dust')) g = pouch(c);
   else if (id.startsWith('essence')) g = orb(c);
   else if (id.startsWith('stone_')) g = enhanceStone(c);
-  else if (id === 'potion') g = potion(c);
+  else if (id.startsWith('potion')) g = potion(c);
+  else if (id.endsWith('_plate')) g = plate(c);
   else if (id === 'return_stone') g = returnStone(c);
   else if (id === 'bag_kit') g = bag(c);
   else if (id === 'resonator') g = resonator(c);

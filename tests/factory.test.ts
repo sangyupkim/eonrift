@@ -49,16 +49,16 @@ describe('Factory', () => {
 
   it('조립기는 고른 레시피의 재료만 받는다', () => {
     const f = new Factory({ sizeLevel: 0, buildings: [] }, 8);
-    f.place('box', 0, 0, 0)!.buffer = { mana_iron: 2, plank: 4 };
+    f.place('box', 0, 0, 0)!.buffer = { copper_ingot: 2, plank: 4 };
     f.place('belt', 1, 0, 0);
     const asm = f.place('assembler', 2, 0, 0)!;
-    asm.recipe = 'stone_low';
+    asm.recipe = 'return_stone';
     const out = f.place('box', 3, 0, 0)!;
     out.mode = 'out';
     f.place('wire', 2, 1, 0);
     f.place('generator', 2, 2, 0)!.buffer = { essence_low: 5 };
     f.simulate(400);
-    expect(out.buffer!.stone_low).toBe(2);
+    expect(out.buffer!.return_stone).toBe(2);
   });
 
   it('철거하면 안에 든 아이템을 돌려준다', () => {

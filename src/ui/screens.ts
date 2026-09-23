@@ -2,10 +2,10 @@ import { BUILD_ID, GAME_VERSION } from '../config';
 import { applyUpdate, fetchRemoteVersion, isNewer, type RemoteVersion } from './update';
 import { CLASSES, CLASS_ORDER, expToNext, MAX_LEVEL, MAX_SKILL_LEVEL, SKILL_LEARN, skillUpgradeCost, STAT_INFO, STAT_KEYS, type ClassId, type StatKey } from '../data/classes';
 import { newTool, TOOL_KIND_NAMES, TOOL_TIER_NAMES, toolBonusChance, toolEnhanceCost, toolMaxDur, toolName, toolRepair, toolSpeed, type ToolKind, type ToolState } from '../data/tools';
-import { equipCraftCost, toolCraftCost, workbenchUpgradeCost, type CraftCost } from '../data/crafting';
+import { equipCraftCost, plateCraftCost, toolCraftCost, workbenchUpgradeCost, type CraftCost } from '../data/crafting';
 import { newUid, durability, EQUIP_SLOTS, EQUIP_MAX_DUR, enhanceCost, repairCost, type EquipSlot, equipName, equipStats, equipValue, GRADES, slotName, type Equip } from '../data/equipment';
 import { BUILDINGS, BUILD_ORDER, FACTORY_SIZES, RECIPES, type BuildingType } from '../data/factory';
-import { ITEMS, ITEM_LIST } from '../data/items';
+import { ITEMS, ITEM_LIST, TIER_PLATE } from '../data/items';
 import type { QuestDef } from '../data/quests';
 import { THEMES } from '../data/themes';
 import { workbenchCap, BOX_CAPACITY, boxTotal, ESSENCES, MACHINE_TYPES, RECIPE_BY_ID, recipesFor, type BuildingState, type Factory } from '../factory/sim';
@@ -882,11 +882,11 @@ export class Screens {
       if (!cost) detail += '<p class="hint">이미 최대 강화(+10)입니다.</p>';
       else {
         const next = { ...sel, plus: sel.plus + 1 };
-        const have = p.count(cost.stone);
+        const have = p.count(cost.item);
         const ok = have >= cost.count && p.data.gold >= cost.gold;
         detail += `<h3>강화 → +${next.plus}</h3>
           <p class="hint">→ ${equipLine({ ...next, dur: EQUIP_MAX_DUR })}${durability(sel) <= 0 ? " (수리 후)" : ""}</p>
-          <p>${inlineGem(cost.stone)}${ITEMS[cost.stone].name} ${cost.count}개 <span class="${have >= cost.count ? 'dim' : 'bad'}">(보유 ${have})</span></p>
+          <p>${inlineGem(cost.item)}${ITEMS[cost.item].name} ${cost.count}개 <span class="${have >= cost.count ? 'dim' : 'bad'}">(보유 ${have})</span></p>
           <p>${cost.gold} G · 성공 확률 <b>${Math.round(cost.rate * 100)}%</b></p>
           <p class="hint">실패해도 단계가 내려가지 않지만 재료는 사라집니다.</p>
           <div class="menu"><button class="primary" data-enh ${ok ? '' : 'disabled'}>강화하기</button></div>`;
@@ -940,8 +940,8 @@ export class Screens {
     this.on(s, '[data-enh]', () => {
       if (!sel) return;
       const cost = enhanceCost(sel)!;
-      if (p.count(cost.stone) < cost.count || p.data.gold < cost.gold) return;
-      p.take(cost.stone, cost.count);
+      if (p.count(cost.item) < cost.count || p.data.gold < cost.gold) return;
+      p.take(cost.item, cost.count);
       p.data.gold -= cost.gold;
       const success = Math.random() < cost.rate;
       if (success) sel.plus++;
@@ -1105,7 +1105,7 @@ export class Screens {
 
   // ---------------- 공장: 기계 ----------------
   // ---------------- 제작대: 채집 도구 · 장비 제작, 레벨업 ----------------
-  workbench(f: Factory, b: BuildingState, p: Progress, onChange: () => void, onClose: () => void, tab: 'tools' | 'equip' | 'level' = 'tools', message?: string): void {
+  workbench(f: Factory, b: BuildingState, p: Progress, onChange: () => void, onClose: () => void, tab: 'plates' | 'tools' | 'equip' | 'level' = 'plates', message?: string): void {
     const lv = b.level ?? 1;
     const energy = Math.floor(b.energy ?? 0);
     const cap = workbenchCap(b);
@@ -1118,7 +1118,17 @@ export class Screens {
       ].join(' · ');
     const can = (c: CraftCost) => energy >= c.energy && p.data.gold >= c.gold && p.hasAll(c.items);
     let body = '';
-    if (tab === 'tools') {
+    if (tab === 'plates') {
+      const rows = Array.from({ length: lv }, (_, i) => i + 1)
+        .map((t) => {
+          const c = plateCraftCost(t);
+          const id = TIER_PLATE[t - 1];
+          const c5 = { items: Object.fromEntries(Object.entries(c.items).map(([k, n]) => [k, n * 5])), energy: c.energy * 5, gold: 0 };
+          return `<li>${itemGem(id)}<div><b>${ITEMS[id].name} <small class="dim">보유 ${p.count(id)}</small></b><small>${TOOL_TIER_NAMES[t - 1]} 장비·도구 강화 재료</small><small>${costHtml(c)}</small></div><button data-plate="${t}:1" ${can(c) ? '' : 'disabled'}>합성</button><button data-plate="${t}:5" ${can(c5) ? '' : 'disabled'}>×5</button></li>`;
+        })
+        .join('');
+      body = `<p class="hint">주괴 2 + 판자 2 → 판 1. 대장간에서 같은 재질 장비·도구를 강화할 때 씁니다 (구리 장비 → 구리판).</p><ul class="list scroll">${rows}</ul>`;
+    } else if (tab === 'tools') {
       body = (['pickaxe', 'axe'] as ToolKind[])
         .flatMap((k) => {
           const cur = p.data.tools[k];
@@ -1156,6 +1166,7 @@ export class Screens {
          <div class="energy"><span>⚡ 에너지 ${energy}/${cap}</span><span class="bar"><i style="width:${Math.round((energy / cap) * 100)}%"></i></span><small class="${powered ? 'ok' : 'bad'}">${powered ? '충전 중 (마력선 연결됨)' : energy >= cap ? '가득 참' : '전력 없음 — 마력선으로 발전기와 이으세요'}</small></div>
          ${message ? `<div class="notice">${message}</div>` : ''}
          <div class="tabs">
+           <button data-tab="plates" class="${tab === 'plates' ? 'on' : ''}">판 합성</button>
            <button data-tab="tools" class="${tab === 'tools' ? 'on' : ''}">채집 도구</button>
            <button data-tab="equip" class="${tab === 'equip' ? 'on' : ''}">장비</button>
            <button data-tab="level" class="${tab === 'level' ? 'on' : ''}">레벨업</button>
@@ -1173,6 +1184,15 @@ export class Screens {
       return true;
     };
     this.on(s, '[data-tab]', (el) => again(el.dataset.tab as typeof tab));
+    this.on(s, '[data-plate]', (el) => {
+      const [t, n] = el.dataset.plate!.split(':').map(Number);
+      let made = 0;
+      for (let i = 0; i < n; i++) if (pay(plateCraftCost(t))) made++;
+      if (!made) return;
+      p.add(TIER_PLATE[t - 1], made);
+      onChange();
+      again(tab, `<b class="ok">${ITEMS[TIER_PLATE[t - 1]].name} ×${made} 완성! (창고)</b>`);
+    });
     this.on(s, '[data-tool]', (el) => {
       const [k, t] = el.dataset.tool!.split(':') as [ToolKind, string];
       if (!pay(toolCraftCost(Number(t)))) return;

@@ -32,3 +32,8 @@ export function equipCraftCost(slot: EquipSlot, tier: number): CraftCost {
   else items[tier < 4 ? 'essence_low' : tier < 6 ? 'essence_mid' : 'essence_high'] = 2;
   return { items, energy: 15 * tier, gold: 40 * tier };
 }
+
+/** 판 합성: 주괴 + 판자 → 재질판 (강화 재료) */
+export function plateCraftCost(tier: number): CraftCost {
+  return { items: { [TIER_INGOT[tier - 1]]: 2, plank: 2 }, energy: 8 * tier, gold: 0 };
+}

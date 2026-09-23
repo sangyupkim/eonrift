@@ -1,3 +1,5 @@
+import { TIER_PLATE } from './items';
+
 /** 채집 도구 (곡괭이·도끼): 단계, 강화, 내구도 */
 export type ToolKind = 'pickaxe' | 'axe';
 
@@ -43,10 +45,10 @@ export function toolBonusChance(t: ToolState): number {
 
 const RATES = [1, 0.95, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2];
 
-/** 도구 강화 (대장간): 도구 단계의 광석 + 골드 */
+/** 도구 강화 (대장간): 도구 재질의 판 + 골드 */
 export function toolEnhanceCost(t: ToolState): { ore: string; count: number; gold: number; rate: number } | null {
   if (t.plus >= TOOL_MAX_PLUS) return null;
-  return { ore: TIER_ORE[t.tier - 1], count: 5 + t.plus * 3, gold: 80 * (t.plus + 1) * t.tier, rate: RATES[t.plus] };
+  return { ore: TIER_PLATE[t.tier - 1], count: 1 + Math.floor(t.plus / 3), gold: 80 * (t.plus + 1) * t.tier, rate: RATES[t.plus] };
 }
 
 /** 수리: 도구 단계의 광석 */

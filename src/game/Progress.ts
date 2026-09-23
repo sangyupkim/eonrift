@@ -1,7 +1,7 @@
 import { CLASSES, CLASS_ORDER, expToNext, MAX_LEVEL, POINTS_PER_LEVEL, STAT_KEYS, type BaseStats, type ClassId, type StatKey } from '../data/classes';
 import { equipStats, type Equip, type EquipSlot } from '../data/equipment';
 import { newTool, type ToolKind, type ToolState } from '../data/tools';
-import { FACTORY_SIZES, RECIPE_RENAMES } from '../data/factory';
+import { FACTORY_SIZES, RECIPES, RECIPE_RENAMES } from '../data/factory';
 import { ITEM_RENAMES } from '../data/items';
 import type { FactoryState } from '../factory/sim';
 import { Bag, type Slot } from './Bag';
@@ -164,6 +164,13 @@ function migrate(d: SaveData & { maxTier?: number }): SaveData {
     if (b.out) b.out = b.out.map(re);
     if (b.recipe) b.recipe = RECIPE_RENAMES[b.recipe] ?? b.recipe;
     if (b.crafting) b.crafting = RECIPE_RENAMES[b.crafting] ?? b.crafting;
+    // 없어진 레시피(강화석·가루·기본 물약 등)는 비운다. 넣어 둔 재료는 버퍼에 남는다
+    const known = new Set(RECIPES.map((r) => r.id));
+    if (b.recipe && !known.has(b.recipe)) b.recipe = null;
+    if (b.crafting && !known.has(b.crafting)) {
+      b.crafting = null;
+      b.progress = 0;
+    }
   }
   d.tools ??= { pickaxe: newTool(), axe: newTool() };
   // 예전 저장: 도구 내구도가 숫자 하나였다
