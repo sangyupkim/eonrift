@@ -26,7 +26,7 @@ import { Bag } from './Bag';
 import { Combat } from './Combat';
 import type { Monster } from './Monster';
 import { Player } from './Player';
-import { DIM_BAG_MAX, deleteSave, hasSave, loadSave, newSave, Progress, stageIndex, stageOf, type SaveData, type Stats } from './Progress';
+import { DIM_BAG_MAX, deleteSave, hasSave, loadSave, newSave, Progress, stageIndex, stageOf, type SaveData, type Stats, type RunCheckpoint } from './Progress';
 import { objectiveNeed, objectiveProgress, Quests } from './Quests';
 import { hasStory, objective, questLines, resetForNewCycle, scriptFor } from './Story';
 import { DungeonScene, type NodeInstance } from './scenes/DungeonScene';
@@ -215,12 +215,27 @@ export class Game {
     this.audio.unlock();
     if (isNew) deleteSave();
     this.setProgress(new Progress(data));
+    this.freshLoad = !isNew;
     this.audio.setEnabled(data.settings.sound);
     this.audio.setMusicVolume(data.settings.music ?? 0.7);
     this.audio.setSfxVolume(data.settings.sfx ?? 0.8);
     this.screens.close();
     const offline = isNew ? 0 : Math.min(OFFLINE_CAP_HOURS * 3600, (Date.now() - data.lastSaved) / 1000);
     this.mode = 'play';
+    const cp = data.run;
+    if (!isNew && cp) {
+      // 던전 도중에 꺼졌다: 그 방으로 돌아간다
+      this.resumeFrom = cp;
+      this.enterDungeon(cp.tier, cp.stage);
+      if (cp.roomCleared && this.level instanceof DungeonScene) {
+        // 이미 정리한 방이면 몬스터 없이 워프 게이트가 열린 상태로
+        for (const m of this.level.monsters) if (m.alive) m.damage(m.hp + 1, m.x, m.z, 0);
+        this.run!.roomCleared = true;
+      }
+      this.hud.toast(`${cp.tier}-${cp.stage} 던전으로 돌아왔습니다 (마지막 저장 지점)`, 3500);
+      this.saveNow();
+      return;
+    }
     this.enterVillage('start');
     if (isNew) {
       this.saveNow();
@@ -255,6 +270,23 @@ export class Game {
   private saveNow(): void {
     if (this.mode === 'title') return;
     if (this.player) this.progress.data.hp = Math.max(1, Math.round(this.player.hp));
+    // 던전 안이면 체크포인트를 함께 저장한다 (꺼졌다 켜면 이 방으로 돌아온다)
+    const r = this.run;
+    this.progress.data.run =
+      r && this.mode !== 'dead'
+        ? {
+            tier: r.tier,
+            stage: r.stage,
+            gold: r.gold,
+            exp: r.exp,
+            time: r.time,
+            stagesCleared: r.stagesCleared,
+            roomCleared: r.roomCleared,
+            start: [...r.start],
+            startEquips: [...r.startEquips],
+            pouch: [...r.pouch],
+          }
+        : undefined;
     this.progress.save();
   }
 
@@ -310,7 +342,9 @@ export class Game {
     const st = this.progress.stats();
     this.player.maxHp = st.maxHp;
     this.player.maxMp = st.maxMp;
-    const carried = prev ? prev.hp : (this.progress.data.hp ?? st.maxHp);
+    // 게임을 막 불러왔으면 저장된 HP, 아니면 직전 장면의 HP를 이어받는다
+    const carried = prev && !this.freshLoad ? prev.hp : (this.progress.data.hp ?? st.maxHp);
+    this.freshLoad = false;
     this.player.hp = fullHeal ? st.maxHp : Math.min(st.maxHp, Math.max(1, carried));
     this.player.mp = keepHp && prev ? Math.min(st.maxMp, prev.mp) : st.maxMp;
     this.level.scene.add(this.player.rig.root);
@@ -404,6 +438,20 @@ export class Game {
       for (const b of [bag, dim]) for (const [id, n] of b.totals()) start.set(id, (start.get(id) ?? 0) + n);
       const startEquips = new Set([...bag.equips(), ...dim.equips()].map((e) => e.uid));
       this.run = { tier, stage, bag, dimBag: dim, gold: 0, exp: 0, time: 0, stagesCleared: 0, roomCleared: false, start, startEquips, pouch: [] };
+      // 저장된 체크포인트에서 이어 하기
+      const cp = this.resumeFrom;
+      if (cp) {
+        this.resumeFrom = null;
+        Object.assign(this.run, {
+          gold: cp.gold,
+          exp: cp.exp,
+          time: cp.time,
+          stagesCleared: cp.stagesCleared,
+          start: new Map(cp.start),
+          startEquips: new Set(cp.startEquips),
+          pouch: [...cp.pouch],
+        });
+      }
     }
     this.fillPouch();
     this.hud.setLocation(`${tier}-${stage} · ${dungeon.theme.name}`, dungeon.theme.portalColor);
@@ -414,6 +462,8 @@ export class Game {
     const note = stage === 10 ? ' — 차원석을 지닌 수호자가 기다립니다' : stage === 5 ? ' — 파수꾼이 지키고 있습니다' : '';
     this.hud.toast(`${tier}-${stage} · ${dungeon.theme.name}${note}`, 3000);
     this.refreshHud();
+    // 방에 들어올 때마다 체크포인트 저장
+    this.saveNow();
   }
 
   private enterHome(): void {
@@ -573,6 +623,9 @@ export class Game {
   }
 
   private gearKey = '';
+  /** 이어 하기: 다음 enterDungeon이 이 체크포인트로 run을 만든다 */
+  private resumeFrom: RunCheckpoint | null = null;
+  private freshLoad = false;
   private healFx = 0;
   /** 이번 방 보스와 싸운 시간 */
   private bossTime = 0;

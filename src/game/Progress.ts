@@ -22,6 +22,19 @@ export interface ClassState {
   quick: number[];
 }
 
+export interface RunCheckpoint {
+  tier: number;
+  stage: number;
+  gold: number;
+  exp: number;
+  time: number;
+  stagesCleared: number;
+  roomCleared: boolean;
+  start: [string, number][];
+  startEquips: string[];
+  pouch: string[];
+}
+
 export interface SaveData {
   version: number;
   gold: number;
@@ -46,6 +59,8 @@ export interface SaveData {
   lastSaved: number;
   /** 지금 HP (마을·차원집에 가도 회복되지 않는다). 없으면 가득 */
   hp?: number;
+  /** 던전 진행 중 체크포인트 (게임이 꺼지면 이 방으로 돌아온다) */
+  run?: RunCheckpoint;
   settings: { shadows: boolean; sound: boolean; music?: number; sfx?: number };
   /** 곡괭이·도끼 내구도 */
   tools: Record<ToolKind, ToolState>;
