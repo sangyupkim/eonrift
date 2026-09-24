@@ -156,13 +156,13 @@ describe('촌장 일일 의뢰', () => {
     expect(list).toHaveLength(3);
     for (let i = 0; i < 300; i++) {
       q.event({ type: 'kill', tier: 1, elite: true });
-      q.event({ type: 'stage' });
+      q.event({ type: 'stage', tier: 1 });
     }
     expect(list.every((d) => d.progress === 0)).toBe(true);
     for (const d of list) d.accepted = true;
     for (let i = 0; i < 300; i++) {
       q.event({ type: 'kill', tier: 1, elite: true });
-      q.event({ type: 'stage' });
+      q.event({ type: 'stage', tier: 1 });
     }
     const killOrStage = list.filter((d) => d.objective.type === 'kill' || d.objective.type === 'elite' || d.objective.type === 'stages');
     expect(killOrStage.every((d) => d.progress > 0)).toBe(true);

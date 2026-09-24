@@ -1,16 +1,18 @@
 import { SCRIPTS, type Step } from './story';
+import { ITEMS, ORE_TIERS, TIER_MANA_METAL, TIER_PLANK, TIER_PLATE, WOOD_TIERS } from './items';
+import { TIER_INGOT } from './tools';
 
 export type NpcRef = 'chief' | 'guide' | 'smith' | 'engineer' | 'merchant' | 'stranger' | 'trainer';
 
 export type Objective =
   | { type: 'kill'; count: number; minTier?: number; label?: string }
-  | { type: 'elite'; count: number }
+  | { type: 'elite'; count: number; minTier?: number }
   | { type: 'gather'; item: string; count: number }
   | { type: 'deliver'; item: string; count: number }
   | { type: 'build'; building: string; count: number }
   | { type: 'craft'; item: string; count: number }
   | { type: 'clear'; stage: number; label: string }
-  | { type: 'stages'; count: number };
+  | { type: 'stages'; count: number; minTier?: number };
 
 export interface Reward {
   gold?: number;
@@ -40,6 +42,8 @@ export interface QuestDef {
   after?: string[];
   requireFlags?: string[];
   requireStones?: number;
+  /** 이만큼 스테이지를 깨야 받을 수 있다 (단계별 서브 퀘스트) */
+  requireCleared?: number;
 }
 
 const say = (s: string, t: string): Step => ({ s, t });
@@ -219,5 +223,203 @@ export const SUB_QUESTS: QuestDef[] = [
   },
 ];
 
-export const ALL_QUESTS: QuestDef[] = [...MAIN_QUESTS, ...SUB_QUESTS];
+/**
+ * 단계별 서브 퀘스트: NPC 7명 × 단계 1~7 × 2개.
+ * 단계 t의 퀘스트는 그 단계 차원문이 열리면 받을 수 있고, 두 번째는 첫 번째를 끝내야 열린다.
+ */
+const PLACE = ['이끼 낀 숲 유적', '붉은 협곡', '얼어붙은 동굴', '수정 광맥', '마공학 공장 폐허', '용암 심연', '부서진 차원'];
+const ITEM_NAME = (id: string) => ITEMS[id]?.name ?? id;
+const ESS = (t: number) => (t <= 3 ? 'essence_low' : t <= 5 ? 'essence_mid' : 'essence_high');
+const ESS_NAME = (t: number) => (t <= 3 ? '하급' : t <= 5 ? '중급' : '상급');
+
+interface SubTemplate {
+  npc: NpcRef;
+  name: string;
+  /** 이 NPC의 퀘스트를 받으려면 먼저 끝내야 하는 메인 퀘스트 */
+  after: string;
+  make: (t: number) => [Omit<QuestDef, 'id' | 'npc' | 'kind' | 'after' | 'requireCleared'>, Omit<QuestDef, 'id' | 'npc' | 'kind' | 'after' | 'requireCleared'>];
+}
+
+const gold = (t: number, k: number) => Math.round((150 + 200 * t) * k);
+const exp = (t: number, k: number) => Math.round((60 + 90 * t * t) * k);
+
+const TEMPLATES: SubTemplate[] = [
+  {
+    npc: 'chief',
+    name: '에단',
+    after: 'm1_hunt',
+    make: (t) => [
+      {
+        title: `${PLACE[t - 1]} 경계`,
+        offer: [say('에단', `${PLACE[t - 1]}에서 넘어오는 몬스터가 늘었다는구나. ${t}단계 이상 몬스터를 ${60 + 20 * t}마리 정리해 주겠느냐?`)],
+        pending: [say('에단', `${t}단계 이상의 몬스터여야 한다. 조심하거라.`)],
+        complete: [say('에단', '마을이 한결 조용해졌구나. 고맙다.')],
+        objectives: [{ type: 'kill', count: 60 + 20 * t, minTier: t }],
+        rewards: { gold: gold(t, 1), exp: exp(t, 1), items: { potion: 2 } },
+      },
+      {
+        title: `${PLACE[t - 1]}의 정예`,
+        offer: [say('에단', `${PLACE[t - 1]}의 정예들이 무리를 이끌고 있다. ${2 + t}마리만 쓰러뜨려 다오.`)],
+        pending: [say('에단', '금빛으로 번쩍이는 놈들이 정예다.')],
+        complete: [say('에단', '역시 믿을 만하구나. 이것을 받아라.')],
+        objectives: [{ type: 'elite', count: 2 + t, minTier: t }],
+        rewards: { gold: gold(t, 1.4), exp: exp(t, 1.3), items: { [TIER_PLATE[t - 1]]: 1 } },
+      },
+    ],
+  },
+  {
+    npc: 'guide',
+    name: '리아',
+    after: 'm2_tools',
+    make: (t) => [
+      {
+        title: `${PLACE[t - 1]} 탐사`,
+        offer: [say('리아', `${PLACE[t - 1]} 지도를 그리는 중이야. ${t}단계 방을 4개만 더 돌파해 줄래?`)],
+        pending: [say('리아', `${t}단계 이상의 방이면 돼. 워프 게이트까지 가야 한 방이야!`)],
+        complete: [say('리아', '덕분에 지도가 훨씬 자세해졌어!')],
+        objectives: [{ type: 'stages', count: 4, minTier: t }],
+        rewards: { gold: gold(t, 1), exp: exp(t, 1.1), items: { return_stone: 1 } },
+      },
+      {
+        title: `${PLACE[t - 1]}의 목재`,
+        offer: [say('리아', `모닥불 광장을 넓히려고 해. ${ITEM_NAME(WOOD_TIERS[t - 1])}을(를) ${20 + 5 * t}개 베어 올 수 있어? 벌목지에 가면 금방일 거야.`)],
+        pending: [say('리아', '이번에 새로 베는 나무만 세어 줄게!')],
+        complete: [say('리아', '불이 훨씬 따뜻해지겠다. 고마워!')],
+        objectives: [{ type: 'gather', item: WOOD_TIERS[t - 1], count: 20 + 5 * t }],
+        rewards: { gold: gold(t, 1.2), exp: exp(t, 1.1), items: { potion: 3 } },
+      },
+    ],
+  },
+  {
+    npc: 'smith',
+    name: '고른',
+    after: 'm2_tools',
+    make: (t) => [
+      {
+        title: `${ITEM_NAME(TIER_INGOT[t - 1])} 납품`,
+        offer: [say('고른', `새 모루를 만들려는데 ${ITEM_NAME(TIER_INGOT[t - 1])}이(가) ${6 + 2 * t}개 필요하네. 구해 오겠나?`)],
+        pending: [say('고른', '주괴는 제련로에서 광석을 녹이면 나오지.')],
+        complete: [say('고른', '좋은 쇳물이군. 수고했네.')],
+        objectives: [{ type: 'deliver', item: TIER_INGOT[t - 1], count: 6 + 2 * t }],
+        rewards: { gold: gold(t, 1.2), exp: exp(t, 1), items: { [TIER_PLATE[t - 1]]: 1 } },
+      },
+      {
+        title: `${ITEM_NAME(TIER_PLATE[t - 1])} 견본`,
+        offer: [say('고른', `견습생들에게 보여 줄 ${ITEM_NAME(TIER_PLATE[t - 1])} 견본이 ${2 + t}장 필요하네. 제작대에서 만들어 오게.`)],
+        pending: [say('고른', '판은 주괴 2개와 같은 단계 판자 2개로 만들지.')],
+        complete: [say('고른', '반듯하게 잘 만들었군. 자네도 대장장이 소질이 있어.')],
+        objectives: [{ type: 'deliver', item: TIER_PLATE[t - 1], count: 2 + t }],
+        rewards: { gold: gold(t, 1.6), exp: exp(t, 1.3) },
+      },
+    ],
+  },
+  {
+    npc: 'engineer',
+    name: '세라',
+    after: 'm4_factory',
+    make: (t) => [
+      {
+        title: `${t}단계 공장 시험 가동`,
+        offer: [say('세라', `공장 설비 점검 중이야. 공장에서 ${ITEM_NAME(TIER_INGOT[t - 1])}을(를) ${10 + 5 * t}개 새로 생산해 줘.`)],
+        pending: [say('세라', '출하 상자에 새로 들어온 것만 셀게!')],
+        complete: [say('세라', '가동률 좋아! 데이터 고마워.')],
+        objectives: [{ type: 'craft', item: TIER_INGOT[t - 1], count: 10 + 5 * t }],
+        rewards: { gold: gold(t, 1.1), exp: exp(t, 1), items: { [ESS(t)]: 3 + t } },
+      },
+      {
+        title: `${ITEM_NAME(TIER_MANA_METAL[t - 1])} 연구`,
+        offer: [say('세라', `마력 금속의 성질을 연구하고 있어. ${ITEM_NAME(TIER_MANA_METAL[t - 1])} ${2 + t}개를 가져다줄래? 마력 주입기에서 만들 수 있어.`)],
+        pending: [say('세라', '마력 주입기에 주괴와 마력 정수를 함께 넣으면 돼.')],
+        complete: [say('세라', '이걸로 새 논문을 쓸 수 있겠어!')],
+        objectives: [{ type: 'deliver', item: TIER_MANA_METAL[t - 1], count: 2 + t }],
+        rewards: { gold: gold(t, 1.8), exp: exp(t, 1.4), items: { [ESS(t)]: 4 + t } },
+      },
+    ],
+  },
+  {
+    npc: 'merchant',
+    name: '무트',
+    after: 'm2_tools',
+    make: (t) => [
+      {
+        title: `${ITEM_NAME(ORE_TIERS[t - 1])} 거래`,
+        offer: [say('무트', `${ITEM_NAME(ORE_TIERS[t - 1])} 시세가 좋아! ${15 + 5 * t}개만 넘겨주면 두둑이 쳐 줄게.`)],
+        pending: [say('무트', '광맥지에 가면 한 번에 많이 캘 수 있다던데?')],
+        complete: [say('무트', '거래 성사! 역시 자네와는 말이 통해.')],
+        objectives: [{ type: 'deliver', item: ORE_TIERS[t - 1], count: 15 + 5 * t }],
+        rewards: { gold: gold(t, 1.6), exp: exp(t, 0.8) },
+      },
+      {
+        title: `${ITEM_NAME(TIER_PLANK[t - 1])} 주문`,
+        offer: [say('무트', `가게 선반을 새로 짜려는데 ${ITEM_NAME(TIER_PLANK[t - 1])} ${10 + 4 * t}개가 필요해. 벌목소에서 켜 올 수 있지?`)],
+        pending: [say('무트', '판자는 벌목소에서 나무를 켜면 나온다네.')],
+        complete: [say('무트', '튼튼한 판자군! 여기, 약속한 돈이야.')],
+        objectives: [{ type: 'deliver', item: TIER_PLANK[t - 1], count: 10 + 4 * t }],
+        rewards: { gold: gold(t, 1.8), exp: exp(t, 0.9), items: { potion: 2 } },
+      },
+    ],
+  },
+  {
+    npc: 'trainer',
+    name: '카엘',
+    after: 'm1_hunt',
+    make: (t) => [
+      {
+        title: `${t}단계 실전 훈련`,
+        offer: [say('카엘', `훈련장에서 배운 걸 실전에서 써 봐라. ${t}단계 이상 몬스터 ${80 + 30 * t}마리.`)],
+        pending: [say('카엘', '숫자를 세는 건 내 일이다. 넌 싸우기만 해.')],
+        complete: [say('카엘', '움직임이 좋아졌군. 계속 정진해라.')],
+        objectives: [{ type: 'kill', count: 80 + 30 * t, minTier: t }],
+        rewards: { gold: gold(t, 1), exp: exp(t, 1.5) },
+      },
+      {
+        title: `${t}단계 연속 돌파`,
+        offer: [say('카엘', `쉬지 않고 밀고 나가는 법을 익혀라. ${t}단계 이상의 방을 6개 돌파해.`)],
+        pending: [say('카엘', '물약은 아껴 쓰되, 아끼다 쓰러지진 마라.')],
+        complete: [say('카엘', '끈기가 있군. 이건 상이다.')],
+        objectives: [{ type: 'stages', count: 6, minTier: t }],
+        rewards: { gold: gold(t, 1.3), exp: exp(t, 1.8), items: { [TIER_PLATE[t - 1]]: 1 } },
+      },
+    ],
+  },
+  {
+    npc: 'stranger',
+    name: '???',
+    after: 'm1_hunt',
+    make: (t) => [
+      {
+        title: `${ESS_NAME(t)} 정수의 속삭임`,
+        offer: [say('???', `…${ESS_NAME(t)} 마력 정수 ${5 + 2 * t}개. 그것이면 틈새의 목소리를 조금 더 들을 수 있다.`)],
+        pending: [say('???', '…정수를. 서두를 필요는 없다.')],
+        complete: [say('???', '…고맙다. 틈새가 너를 기억할 것이다.')],
+        objectives: [{ type: 'deliver', item: ESS(t), count: 5 + 2 * t }],
+        rewards: { gold: gold(t, 1.2), exp: exp(t, 1.2), items: { [TIER_PLATE[t - 1]]: 1 } },
+      },
+      {
+        title: `${PLACE[t - 1]}의 광맥`,
+        offer: [say('???', `${PLACE[t - 1]}의 돌에는 기억이 스며 있다. ${ITEM_NAME(ORE_TIERS[t - 1])}을(를) ${20 + 5 * t}개 캐 와라.`)],
+        pending: [say('???', '…새로 캐낸 것이어야 한다.')],
+        complete: [say('???', '…그래, 이 돌이다. 대가를 주지.')],
+        objectives: [{ type: 'gather', item: ORE_TIERS[t - 1], count: 20 + 5 * t }],
+        rewards: { gold: gold(t, 1.4), exp: exp(t, 1.2), items: { return_stone: 1 } },
+      },
+    ],
+  },
+];
+
+export const TIER_SUB_QUESTS: QuestDef[] = TEMPLATES.flatMap((tpl) =>
+  Array.from({ length: 7 }, (_, i) => i + 1).flatMap((t) => {
+    const [a, b] = tpl.make(t);
+    const idA = `t_${tpl.npc}_${t}a`;
+    const idB = `t_${tpl.npc}_${t}b`;
+    // 단계 t의 차원문이 열려야 받을 수 있다 (1단계는 처음부터)
+    const requireCleared = (t - 1) * 10;
+    return [
+      { ...a, id: idA, npc: tpl.npc, kind: 'sub', after: [tpl.after], requireCleared },
+      { ...b, id: idB, npc: tpl.npc, kind: 'sub', after: [tpl.after, idA], requireCleared },
+    ] as QuestDef[];
+  }),
+);
+
+export const ALL_QUESTS: QuestDef[] = [...MAIN_QUESTS, ...SUB_QUESTS, ...TIER_SUB_QUESTS];
 export const QUEST_BY_ID: Record<string, QuestDef> = Object.fromEntries(ALL_QUESTS.map((q) => [q.id, q]));

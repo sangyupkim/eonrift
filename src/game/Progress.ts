@@ -452,6 +452,11 @@ export class Progress {
     (this.data.bossReadyAt ??= {})[`${tier}-${stage}`] = now + respawnMs;
   }
 
+  /** 그 단계의 채집 특화 맵이 열렸는지: 그 단계 파수꾼(5번째 방)을 깨야 열린다 */
+  farmUnlocked(tier: number): boolean {
+    return this.data.cleared >= stageIndex(tier, 5);
+  }
+
   /** 채집 특화 맵에 다시 들어갈 수 있을 때까지 남은 시간(ms) */
   farmWait(kind: 'wood' | 'ore', now = Date.now()): number {
     return Math.max(0, (this.data.farmReadyAt?.[kind] ?? 0) - now);

@@ -255,8 +255,10 @@ export class Screens {
       const wait = p.farmWait(kind);
       const hasTool = p.flag(kind === 'wood' ? 'tool_axe' : 'tool_pickaxe') > 0;
       const icon = kind === 'wood' ? itemGem(WOOD_TIERS[tier - 1]) : itemGem(ORE_TIERS[tier - 1]);
-      const sub = !hasTool ? (kind === 'wood' ? '도끼 필요' : '곡괭이 필요') : wait > 0 ? `${formatWait(wait)} 뒤` : '입장 가능';
-      return `<button class="farm-btn ${wait > 0 || !hasTool ? 'waiting' : ''}" data-farm="${kind}" ${wait > 0 || !hasTool ? 'disabled' : ''}>${icon}<span><b>${tier}단계 ${kind === 'wood' ? '벌목지' : '광맥지'}</b><small>${sub}</small></span></button>`;
+      const unlocked = p.farmUnlocked(tier);
+      const sub = !unlocked ? `${tier}-5 파수꾼 처치 후 열림` : !hasTool ? (kind === 'wood' ? '도끼 필요' : '곡괭이 필요') : wait > 0 ? `${formatWait(wait)} 뒤` : '입장 가능';
+      const off = !unlocked || wait > 0 || !hasTool;
+      return `<button class="farm-btn ${off ? 'waiting' : ''}" data-farm="${kind}" ${off ? 'disabled' : ''}>${icon}<span><b>${tier}단계 ${kind === 'wood' ? '벌목지' : '광맥지'}</b><small>${sub}</small></span></button>`;
     };
     const farmRow = onFarm ? `<h3>채집 특화 맵 <small>각각 30분에 한 번 (어느 단계든 한 곳)</small></h3><div class="farm-row">${farmBtn('wood')}${farmBtn('ore')}</div>` : '';
     const s = this.open(

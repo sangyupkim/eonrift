@@ -789,7 +789,7 @@ export class Game {
         },
         () => this.resume(),
         (t, kind) => {
-          if (this.progress.farmWait(kind) > 0) return;
+          if (this.progress.farmWait(kind) > 0 || !this.progress.farmUnlocked(t)) return;
           this.afterMenu = () => this.enterDungeon(t, 1, false, kind);
           this.screens.close();
         },
@@ -813,7 +813,9 @@ export class Game {
       return this.playScript(script, () => this.npcService(npc));
     }
 
-    const offer = q.available(ref)[0];
+    // 메인 퀘스트는 언제나, 서브 퀘스트는 그 NPC의 서브를 진행 중이 아닐 때 하나씩 권한다
+    const busySub = q.activeFor(ref).some((x) => x.kind === 'sub');
+    const offer = q.available(ref).find((x) => x.kind === 'main' || !busySub);
     if (offer) return this.playSteps(offer.offer, () => this.offerQuest(offer, () => this.npcService(npc)));
 
     const pending = q.activeFor(ref)[0];
@@ -1229,7 +1231,7 @@ export class Game {
     // 채집 특화 맵은 스테이지 진행으로 치지 않는다
     if (!run.farm) {
       p.data.cleared = Math.max(p.data.cleared, g);
-      this.quests.event({ type: 'stage' });
+      this.quests.event({ type: 'stage', tier: run.tier });
     }
     this.audio.play('portal');
     this.saveNow();
@@ -2032,7 +2034,8 @@ export class Game {
       return u ? `<img class="mico-inline" src="${u}" alt="">` : '';
     };
     const chips: string[] = [];
-    for (const kind of ['wood', 'ore'] as const) {
+    // 채집 특화 맵은 1-5 파수꾼을 깨야 열린다
+    for (const kind of p.farmUnlocked(1) ? (['wood', 'ore'] as const) : []) {
       const w = p.farmWait(kind);
       chips.push(`${img(kind === 'wood' ? 'wood' : 'copper_ore')}${FARM_NAMES[kind]} ${w > 0 ? `<b>${formatWait(w)}</b>` : '<b class="ok">입장 가능</b>'}`);
     }

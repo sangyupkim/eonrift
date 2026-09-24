@@ -58,7 +58,7 @@ export function objectiveText(o: Objective): string {
     case 'kill':
       return o.label ?? `몬스터 처치${o.minTier ? ` (${o.minTier}단계 이상)` : ''}`;
     case 'elite':
-      return '정예 몬스터 처치';
+      return `정예 몬스터 처치${o.minTier ? ` (${o.minTier}단계 이상)` : ''}`;
     case 'gather':
       return `${ITEMS[o.item].name} 채집`;
     case 'deliver':
@@ -70,7 +70,7 @@ export function objectiveText(o: Objective): string {
     case 'clear':
       return o.label;
     case 'stages':
-      return '스테이지 클리어';
+      return `스테이지 클리어${o.minTier ? ` (${o.minTier}단계 이상)` : ''}`;
   }
 }
 
@@ -97,7 +97,8 @@ export class Quests {
         !this.isActive(q.id) &&
         (q.after ?? []).every((a) => this.isDone(a)) &&
         (q.requireFlags ?? []).every((f) => this.ctx.flag(f) > 0) &&
-        this.ctx.stones >= (q.requireStones ?? 0),
+        this.ctx.stones >= (q.requireStones ?? 0) &&
+        this.ctx.cleared >= (q.requireCleared ?? 0),
     );
   }
 
@@ -133,13 +134,13 @@ export class Quests {
   }
 
   /** 게임 이벤트를 진행 중인 퀘스트와 일일 퀘스트에 반영한다 */
-  event(e: { type: 'kill'; tier: number; elite: boolean } | { type: 'gather'; item: string; count: number } | { type: 'build'; building: string } | { type: 'craft'; item: string; count: number } | { type: 'stage' }): void {
+  event(e: { type: 'kill'; tier: number; elite: boolean } | { type: 'gather'; item: string; count: number } | { type: 'build'; building: string } | { type: 'craft'; item: string; count: number } | { type: 'stage'; tier: number }): void {
     const apply = (o: Objective, cur: number): number => {
       switch (o.type) {
         case 'kill':
           return e.type === 'kill' && e.tier >= (o.minTier ?? 0) ? cur + 1 : cur;
         case 'elite':
-          return e.type === 'kill' && e.elite ? cur + 1 : cur;
+          return e.type === 'kill' && e.elite && e.tier >= (o.minTier ?? 0) ? cur + 1 : cur;
         case 'gather':
           return e.type === 'gather' && e.item === o.item ? cur + e.count : cur;
         case 'build':
@@ -147,7 +148,7 @@ export class Quests {
         case 'craft':
           return e.type === 'craft' && e.item === o.item ? cur + e.count : cur;
         case 'stages':
-          return e.type === 'stage' ? cur + 1 : cur;
+          return e.type === 'stage' && e.tier >= (o.minTier ?? 0) ? cur + 1 : cur;
         default:
           return cur;
       }
