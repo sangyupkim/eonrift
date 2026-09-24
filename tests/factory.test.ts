@@ -113,3 +113,16 @@ describe('판자·마력 가공', () => {
     expect(line('infuser', 1, { plank: 2, essence_low: 2 }).mana_plank_1).toBe(2);
   });
 });
+
+describe('부족한 재료 안내', () => {
+  it('마력 주입기에 주괴만 들어오면 하급 마력 정수가 필요하다고 알려 준다', () => {
+    const f = new Factory({ sizeLevel: 0, buildings: [] }, 8);
+    f.place('box', 0, 0, 0)!.buffer = { copper_ingot: 5 };
+    f.place('belt', 1, 0, 0);
+    const m = f.place('infuser', 2, 0, 0)!;
+    f.place('wire', 2, 1, 0);
+    f.place('generator', 2, 2, 0)!.buffer = { essence_low: 10 };
+    f.simulate(60);
+    expect(f.missingInputs(m)?.missing).toEqual({ essence_low: 1 });
+  });
+});

@@ -321,6 +321,19 @@ export class Factory {
     }
   }
 
+  /** 재료가 일부만 들어와 멈춘 기계: 맞춰 가던 레시피와 모자란 재료 */
+  missingInputs(b: BuildingState): { recipe: Recipe; missing: Record<string, number> } | null {
+    if (!MACHINE_TYPES.has(b.type) || b.crafting) return null;
+    const have = Object.entries(b.buffer ?? {}).filter(([, n]) => n > 0);
+    if (!have.length) return null;
+    const candidates = (b.recipe ? [RECIPE_BY_ID[b.recipe]] : recipesFor(b.type)).filter((r) => r.tier <= (b.level ?? 1));
+    const recipe = candidates.find((r) => have.every(([id]) => r.inputs[id] !== undefined));
+    if (!recipe) return null;
+    const missing: Record<string, number> = {};
+    for (const [id, n] of Object.entries(recipe.inputs)) if ((b.buffer![id] ?? 0) < n) missing[id] = n - (b.buffer![id] ?? 0);
+    return Object.keys(missing).length ? { recipe, missing } : null;
+  }
+
   private readyRecipe(b: BuildingState): Recipe | null {
     const candidates = (b.recipe ? [RECIPE_BY_ID[b.recipe]] : recipesFor(b.type)).filter((r) => r.tier <= (b.level ?? 1));
     for (const r of candidates) {

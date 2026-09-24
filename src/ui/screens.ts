@@ -1421,6 +1421,11 @@ export class Screens {
     body += `<p class="hint">${f.connected(b) ? `전력망: 공급 ${net?.supply ?? 0} / 수요 ${net?.demand ?? 0}` : '<span class="bad">마력선에 연결되어 있지 않습니다</span>'} · 상태: <b>${statusText}</b></p>`;
     const buf = Object.entries(b.buffer ?? {}).filter(([, n]) => n > 0);
     if (buf.length) body += `<p class="hint">대기 중인 재료: ${buf.map(([id, n]) => `${ITEMS[id].name} ${n}`).join(', ')}</p>`;
+    const miss = f.missingInputs(b);
+    if (miss)
+      body = `<div class="notice warn-box">⚠ <b>${ITEMS[miss.recipe.output].name}</b>을(를) 만들려면 ${Object.entries(miss.missing)
+        .map(([id, n]) => `${inlineGem(id)}<b>${ITEMS[id].name} ${n}개</b>`)
+        .join(', ')}가 더 필요합니다. 투입 상자에 함께 넣어 주세요.</div>` + body;
     const s = this.open(
       'factory-config',
       `<div class="panel wide tall">

@@ -7,6 +7,14 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '2.5',
+    date: '2026-09-24',
+    items: [
+      '기계에 재료가 일부만 들어와 멈추면 "⚠ ○○ 필요" 표시 (기계 위 · 기계 창)',
+      '참고: 마력 주입기는 주괴(또는 판자)와 마력 정수를 함께 넣어야 합니다 (예: 마력 구리 = 구리 주괴 + 하급 마력 정수)',
+    ],
+  },
+  {
     version: '2.4',
     date: '2026-09-24',
     items: ['타이틀 화면 오른쪽 위에 패치노트 버튼 추가'],

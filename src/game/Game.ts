@@ -1668,6 +1668,10 @@ export class Game {
         if (b.type === 'box') {
           const s = this.toScreen((b.x + 0.5) * TILE, 1.9, (b.y + 0.5) * TILE);
           labels.push({ text: b.mode === 'in' ? '📥 투입' : '📤 출하', x: s.x, y: s.y, accent: b.mode !== 'in' });
+        } else if (this.factory.missingInputs(b)) {
+          const s = this.toScreen((b.x + 0.5) * TILE, 2.4, (b.y + 0.5) * TILE);
+          const m = this.factory.missingInputs(b)!;
+          labels.push({ text: `⚠ ${Object.keys(m.missing).map((id) => ITEMS[id].name).join('·')} 필요`, x: s.x, y: s.y, accent: true });
         } else if ((b.level ?? 1) > 1) {
           const s = this.toScreen((b.x + 0.5) * TILE, 0.3, (b.y + 0.5) * TILE);
           labels.push({ text: `Lv.${b.level}`, x: s.x, y: s.y, accent: true });
