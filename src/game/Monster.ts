@@ -11,7 +11,7 @@ import {
   Scene,
 } from 'three';
 import { ARCHETYPES, tierScale, type Archetype, type ArchetypeDef } from '../data/monsters';
-import { BOSS_SPECIES, MIDBOSS_SPECIES, type SpeciesDef } from '../data/species';
+import { BOSS_SPECIES, MIDBOSS_SPECIES, type DebuffSpec, type SpeciesDef } from '../data/species';
 import { moveWithCollision, type CircleObstacle } from '../dungeon/collision';
 import { TILE } from '../config';
 import { isFloor, type DungeonData } from '../dungeon/generator';
@@ -20,7 +20,8 @@ import { Telegraph, type Effects, type TelegraphShape } from './Effects';
 
 export type MonsterKind = 'normal' | 'elite' | 'midboss' | 'boss';
 
-type State = 'idle' | 'chase' | 'windup' | 'dash' | 'recover' | 'dead';
+/** down: 해골이 무너져 뼈 무더기가 된 상태 (잠시 뒤 다시 일어난다) */
+type State = 'idle' | 'chase' | 'windup' | 'dash' | 'recover' | 'down' | 'dead';
 
 /** 보스 패턴 + 일반 몬스터가 쓰는 공격 이름 */
 type BossPattern = 'slam' | 'cone' | 'volley' | 'charge' | 'summon' | 'rain' | 'cross' | 'nova' | 'barrage' | 'doom' | 'spin' | 'bolt' | 'aoe' | 'thrust';
@@ -34,6 +35,8 @@ export interface ProjectileSpec {
   color: number;
   radius?: number;
   kind?: 'orb' | 'arrow' | 'shard' | 'wave';
+  /** 맞으면 거는 약화 효과 */
+  debuff?: DebuffSpec;
 }
 
 export interface MonsterWorld {
@@ -43,12 +46,13 @@ export interface MonsterWorld {
   effects: Effects;
   player: { x: number; z: number };
   monsters: Monster[];
-  hurtPlayer(dmg: number, fromX: number, fromZ: number): void;
+  /** 플레이어에게 피해. 실제로 들어간 피해를 돌려준다 (막거나 피하면 0) */
+  hurtPlayer(dmg: number, fromX: number, fromZ: number, debuff?: DebuffSpec): number;
   fireEnemyProjectile(spec: ProjectileSpec): void;
   /** 종족 id나 행동 유형으로 몬스터를 불러낸다 */
   summon(what: string, x: number, z: number): Monster;
   /** 바닥에 한동안 남아 밟으면 피해를 주는 장판 (독 웅덩이 등) */
-  hazard(x: number, z: number, r: number, duration: number, dps: number, color: number): void;
+  hazard(x: number, z: number, r: number, duration: number, dps: number, color: number, debuff?: DebuffSpec): void;
   announce(text: string): void;
   /** 피할 수 없는 즉사 */
   killPlayer(): void;
@@ -127,6 +131,15 @@ export class Monster {
   private enraged = false;
   /** 방패로 막았을 때 불꽃 */
   private blockFx = 0;
+  /** 해골: 이미 한 번 되살아났는지 */
+  private revived = false;
+  /** 슬라임: 쓰러질 때 나뉠 차례 */
+  private pendingSplit = false;
+  /** 마지막으로 맞은 뒤 지난 시간 (트롤 재생) */
+  private sinceHit = 99;
+  /** 겁쟁이: 도망치는 남은 시간 */
+  private fleeT = 0;
+  private fled = false;
 
   constructor(
     species: SpeciesDef,
@@ -223,6 +236,8 @@ export class Monster {
   /** 피해를 받는다. 죽었으면 true */
   damage(amount: number, fromX: number, fromZ: number, knock: number): boolean {
     if (!this.alive) return false;
+    if (this.state === 'down') return false;
+    this.sinceHit = 0;
     if (this.shielded || this.dooming) {
       this.flash = 0.5;
       return false;
@@ -254,6 +269,16 @@ export class Monster {
     this.hpBar.visible = !this.isBoss;
     this.hpFill.scale.x = Math.max(0.001, this.hp / this.maxHp);
     if (this.hp <= 0) {
+      // 해골: 한 번은 뼈 무더기로 무너졌다가 다시 일어난다
+      if (this.species.trait === 'revive' && !this.revived && !this.isBoss) {
+        this.revived = true;
+        this.hp = 0;
+        this.clearTelegraphLater = true;
+        this.setState('down');
+        this.hpBar.visible = false;
+        return false;
+      }
+      if (this.species.trait === 'split' && !this.isBoss) this.pendingSplit = true;
       this.state = 'dead';
       this.deathTime = 0;
       this.hpBar.visible = false;
@@ -261,6 +286,26 @@ export class Monster {
     }
     return false;
   }
+
+  /** 플레이어를 때린다: 약화 효과를 걸고, 흡혈 종족은 체력을 빨아들인다 */
+  private hitPlayer(world: MonsterWorld, dmg: number, x: number, z: number): void {
+    const dealt = world.hurtPlayer(dmg, x, z, this.isBoss ? undefined : this.species.debuff);
+    if (dealt > 0 && this.species.trait === 'lifesteal') {
+      this.hp = Math.min(this.maxHp, this.hp + dealt * 0.5);
+      this.hpFill.scale.x = Math.max(0.001, this.hp / this.maxHp);
+      world.effects.sparks(this.x, 1, this.z, 0xff3a4a, 6, { up: true, spread: 0.3 });
+    }
+  }
+
+  private animateDown(): void {
+    this.rig.root.position.set(this.x, 0, this.z);
+  }
+
+  /** 무너져 있는지 (공격이 통하지 않는다) */
+  get isDown(): boolean {
+    return this.state === 'down';
+  }
+  private clearTelegraphLater = false;
 
   private setState(s: State): void {
     this.state = s;
@@ -328,6 +373,38 @@ export class Monster {
       world.announce('보호막이 깨졌다!');
     }
 
+    if (this.clearTelegraphLater) {
+      this.clearTelegraphLater = false;
+      this.clearTelegraph(world.scene);
+      world.effects.sparks(this.x, 0.6, this.z, 0xe6dcc0, 12, { speed: 3 });
+    }
+    if (this.state === 'dead' && this.pendingSplit) {
+      // 슬라임: 작은 슬라임 둘로 나뉜다
+      this.pendingSplit = false;
+      for (const side of [1, -1]) {
+        const a = this.facing + (side * Math.PI) / 2;
+        world.summon('slime_small', this.x + Math.sin(a) * 0.9, this.z + Math.cos(a) * 0.9);
+      }
+      world.effects.sparks(this.x, 0.4, this.z, this.species.colors?.main ?? 0x6ad86a, 14, { speed: 4 });
+    }
+    if (this.state === 'down') {
+      // 뼈 무더기: 2.5초 뒤 다시 일어난다 (체력 절반)
+      const k = Math.min(1, this.t / 0.3);
+      this.rig.body.rotation.z = k * 1.5;
+      this.rig.body.position.y = -0.3 * k;
+      if (this.t > 2.2) this.rig.body.rotation.z = 1.5 * (1 - (this.t - 2.2) / 0.3);
+      if (this.t >= 2.5) {
+        this.hp = this.maxHp * 0.5;
+        this.hpFill.scale.x = 0.5;
+        this.rig.body.rotation.z = 0;
+        this.rig.body.position.y = 0;
+        world.effects.ring(this.x, this.z, 1.8, this.species.glow ?? 0x6affd0, 0.4);
+        world.effects.sparks(this.x, 1, this.z, this.species.glow ?? 0x6affd0, 14, { up: true, spread: 0.4 });
+        this.setState('chase');
+      }
+      this.animateDown();
+      return;
+    }
     if (this.state === 'dead') {
       this.deathTime += dt;
       const k = Math.min(1, this.deathTime / 0.45);
@@ -359,6 +436,18 @@ export class Monster {
     }
 
     this.skillT += dt;
+    this.sinceHit += dt;
+    // 트롤: 3초 동안 맞지 않으면 체력이 빠르게 찬다
+    if (this.species.trait === 'regen' && this.sinceHit > 3 && this.hp < this.maxHp) {
+      this.hp = Math.min(this.maxHp, this.hp + this.maxHp * 0.06 * dt);
+      this.hpFill.scale.x = Math.max(0.001, this.hp / this.maxHp);
+      if (Math.random() < dt * 4) world.effects.sparks(this.x, 1.2, this.z, 0x7aff6a, 2, { up: true, spread: 0.5 });
+    }
+    // 겁쟁이 (고블린): 체력이 30% 아래면 한 번 도망쳤다가 돌아온다
+    if (this.species.trait === 'coward' && !this.fled && this.hp < this.maxHp * 0.3 && this.state === 'chase') {
+      this.fled = true;
+      this.fleeT = 2.5;
+    }
     if (this.blockFx > 0) {
       if (this.blockFx >= 0.25) world.effects.sparks(this.x + Math.sin(this.facing) * 0.6, 1.1, this.z + Math.cos(this.facing) * 0.6, 0xffe08a, 6, { speed: 4 });
       this.blockFx = Math.max(0, this.blockFx - dt);
@@ -385,6 +474,13 @@ export class Monster {
         }
         break;
       case 'chase': {
+        if (this.fleeT > 0) {
+          this.fleeT -= dt;
+          turn(toPlayer + Math.PI, 10);
+          move(Math.sin(this.facing) * this.speed * 1.2 * dt, Math.cos(this.facing) * this.speed * 1.2 * dt);
+          moving = true;
+          break;
+        }
         turn(toPlayer, 8);
         const wantDist = this.isBoss ? 0 : KEEP_DIST[this.arch] ?? 0;
         if (!this.isBoss && this.special(world, dist, toPlayer)) break;
@@ -431,7 +527,7 @@ export class Monster {
         this.dashLeft -= sp;
         if (!this.dashHit && Math.hypot(p.x - this.x, p.z - this.z) < this.radius + 0.6) {
           this.dashHit = true;
-          world.hurtPlayer(this.atk * 1.2, this.x, this.z);
+          this.hitPlayer(world, this.atk * 1.2, this.x, this.z);
         }
         if (this.dashLeft <= 0 || moved < sp * 0.3) {
           if (moved < sp * 0.3) {
@@ -681,7 +777,7 @@ export class Monster {
     const tel = this.telegraph;
     const p = world.player;
     const hitIf = (t: Telegraph | null, mult: number) => {
-      if (t && t.contains(p.x, p.z, 0.35)) world.hurtPlayer(this.atk * mult, this.x, this.z);
+      if (t && t.contains(p.x, p.z, 0.35)) this.hitPlayer(world, this.atk * mult, this.x, this.z);
     };
 
     if (this.isBoss) {
@@ -761,7 +857,7 @@ export class Monster {
         world.effects.slash(this.x, this.z, this.facing, 2.4, 0xffffff, 1.8, 0.7);
         break;
       case 'ranged':
-        world.fireEnemyProjectile({ x: this.x, z: this.z, angle: this.facing, speed: 10, damage: this.atk, color: MONSTER_COLORS[this.tier - 1].accent });
+        world.fireEnemyProjectile({ x: this.x, z: this.z, angle: this.facing, speed: 10, damage: this.atk, color: MONSTER_COLORS[this.tier - 1].accent, debuff: this.species.debuff });
         break;
       case 'charger':
         if (this.pattern === 'charge') {
@@ -812,7 +908,7 @@ export class Monster {
         break;
       case 'archer': {
         const c = this.species.glow ?? 0xffe08a;
-        for (const off of [-0.18, 0, 0.18]) world.fireEnemyProjectile({ x: this.x, z: this.z, angle: this.facing + off, speed: 14, damage: this.atk * 0.8, color: c, kind: 'arrow', radius: 0.3 });
+        for (const off of [-0.18, 0, 0.18]) world.fireEnemyProjectile({ x: this.x, z: this.z, angle: this.facing + off, speed: 14, damage: this.atk * 0.8, color: c, kind: 'arrow', radius: 0.3, debuff: this.species.debuff });
         break;
       }
       case 'assassin':
@@ -830,7 +926,7 @@ export class Monster {
             world.effects.pillar(m.x, m.z, c, 2.5);
           }
           world.effects.glyph(this.x, this.z, 1.8, c, 0.8);
-        } else world.fireEnemyProjectile({ x: this.x, z: this.z, angle: this.facing, speed: 9, damage: this.atk * 1.1, color: c, radius: 0.4 });
+        } else world.fireEnemyProjectile({ x: this.x, z: this.z, angle: this.facing, speed: 9, damage: this.atk * 1.1, color: c, radius: 0.4, debuff: this.species.debuff });
         break;
       }
       case 'shaman':
@@ -841,7 +937,7 @@ export class Monster {
         hitIf(tel, 0.6);
         if (tel) {
           const c = this.species.colors?.accent ?? 0x9aff4a;
-          world.hazard(tel.x, tel.z, 1.8, 3.5, this.atk * 0.45, c);
+          world.hazard(tel.x, tel.z, 1.8, 3.5, this.atk * 0.45, c, this.species.debuff);
           world.effects.sparks(tel.x, 0.3, tel.z, c, 12, { speed: 3 });
         }
         break;
@@ -849,7 +945,7 @@ export class Monster {
         const c = this.species.glow ?? 0xff5aff;
         for (const r of this.rainSpots) {
           if (r.contains(p.x, p.z, 0.35)) {
-            world.hurtPlayer(this.atk * 0.9, r.x, r.z);
+            this.hitPlayer(world, this.atk * 0.9, r.x, r.z);
             break;
           }
         }

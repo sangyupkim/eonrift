@@ -52,6 +52,8 @@ export function scriptFor(npc: NpcId, p: Progress): string {
       return 'merchant_idle';
     case 'trainer':
       return 'trainer_idle';
+    case 'researcher':
+      return 'researcher_idle';
   }
 }
 
@@ -80,7 +82,7 @@ export function questLines(p: Progress, quests: Quests): string[] {
   for (const d of quests.state.daily.list) {
     if (d.claimed || !d.accepted) continue;
     const need = objectiveNeed(d.objective);
-    const cur = Math.min(need, objectiveProgress(d.objective, d.progress, { count: (id) => p.count(id), stones: p.stoneCount, cleared: p.data.cleared, flag: (f) => p.flag(f) }));
+    const cur = Math.min(need, objectiveProgress(d.objective, d.progress, { count: (id) => p.count(id), stones: p.stoneCount, cleared: p.data.cleared, flag: (f) => p.flag(f), discovered: p.discovered }));
     if (cur < need) lines.push(`[일일] ${objectiveText(d.objective)} ${cur}/${need}`);
   }
   return lines.slice(0, 3);

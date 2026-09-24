@@ -4,6 +4,7 @@ import { newTool, type ToolKind, type ToolState } from '../data/tools';
 import { FACTORY_SIZES, RECIPES, RECIPE_RENAMES } from '../data/factory';
 import { ITEM_RENAMES } from '../data/items';
 import type { BuildingState, FactoryState } from '../factory/sim';
+import { BESTIARY, bestiaryId, COLLECTION_MILESTONES, killMilestones, RESEARCH_BONUS } from '../data/bestiary';
 import { Bag, type Slot } from './Bag';
 import { BAG_SLOTS } from '../config';
 import { newQuestState, type QuestState } from './Quests';
@@ -67,6 +68,12 @@ export interface SaveData {
   bossReadyAt?: Record<string, number>;
   /** 채집 특화 맵에 다시 들어갈 수 있는 시각 */
   farmReadyAt?: { wood?: number; ore?: number };
+  /** 몬스터 도감: 종족별 처치 수 */
+  bestiary?: Record<string, number>;
+  /** 도감: 종족별로 받은 처치 보상 수 */
+  bestiaryClaim?: Record<string, number>;
+  /** 도감: 받은 수집 보상 수 (= 연구 보너스 단계) */
+  research?: number;
   settings: { shadows: boolean; sound: boolean; music?: number; sfx?: number; autoAim?: boolean; timersOpen?: boolean };
   /** 곡괭이·도끼 내구도 */
   tools: Record<ToolKind, ToolState>;
@@ -326,9 +333,42 @@ export class Progress {
       s.maxMp += st.mp;
       s.crit += st.crit;
     }
+    // 몬스터 도감 연구 보너스
+    const rb = 1 + (this.data.research ?? 0) * RESEARCH_BONUS;
+    s.atk *= rb;
+    s.maxHp = Math.round(s.maxHp * rb);
     s.atk = Math.round(s.atk);
     s.crit = Math.round(s.crit * 10) / 10;
     return s;
+  }
+
+  /** 도감: 처치 기록. 처음 잡은 종족이면 true */
+  recordKill(speciesId: string): boolean {
+    const id = bestiaryId(speciesId);
+    if (!id) return false;
+    const b = (this.data.bestiary ??= {});
+    b[id] = (b[id] ?? 0) + 1;
+    return b[id] === 1;
+  }
+
+  kills(id: string): number {
+    return this.data.bestiary?.[id] ?? 0;
+  }
+
+  get discovered(): number {
+    return Object.values(this.data.bestiary ?? {}).filter((n) => n > 0).length;
+  }
+
+  /** 도감에서 받을 수 있는 보상이 있는지 (연구자 머리 위 표시) */
+  get bestiaryClaimable(): number {
+    let n = 0;
+    for (const e of BESTIARY) {
+      const got = this.data.bestiaryClaim?.[e.species.id] ?? 0;
+      n += killMilestones(e).filter((m, i) => i >= got && this.kills(e.species.id) >= m).length;
+    }
+    const col = this.data.research ?? 0;
+    n += COLLECTION_MILESTONES.filter((m, i) => i >= col && this.discovered >= m.count).length;
+    return n;
   }
 
   allocate(key: StatKey, n = 1): boolean {

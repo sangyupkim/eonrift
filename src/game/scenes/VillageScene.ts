@@ -27,7 +27,7 @@ import {
 } from '../../models/village';
 import { Level } from './Level';
 
-export type NpcId = 'chief' | 'guide' | 'smith' | 'engineer' | 'merchant' | 'stranger' | 'trainer';
+export type NpcId = 'chief' | 'guide' | 'smith' | 'engineer' | 'merchant' | 'stranger' | 'trainer' | 'researcher';
 
 export interface NpcDef {
   id: NpcId;
@@ -44,6 +44,7 @@ export const NPCS: NpcDef[] = [
   { id: 'engineer', name: '마공학자 세라', faction: '탈출파', tile: [21, 13], look: { tunic: 0x4a6a9a, tunicDark: 0x344c70, hair: 0xb04a4a, apron: 0x6a5a40, weapon: 'none' } },
   { id: 'merchant', name: '상인 무트', faction: '안주파', tile: [7, 13], look: { tunic: 0xc9a040, tunicDark: 0x9a7a2a, hair: 0x6a4a2a, weapon: 'none' } },
   { id: 'trainer', name: '교관 카엘', faction: '중립', tile: [18, 6], look: { tunic: 0x9a3a3a, tunicDark: 0x6a2626, hair: 0x2a2a2a, weapon: 'sword', shield: true } },
+  { id: 'researcher', name: '몬스터 연구자 노아', faction: '중립', tile: [22, 16], look: { tunic: 0x5a7a4a, tunicDark: 0x3e5a34, hair: 0x8a6a4a, apron: 0x8a7a5a, weapon: 'none' } },
   { id: 'stranger', name: '???', faction: '???', tile: [4, 18], look: { tunic: 0x2a2a3a, tunicDark: 0x1a1a26, hair: 0x1a1a26, hat: 'wizard', weapon: 'none', skin: 0xc8c0d8 } },
 ];
 

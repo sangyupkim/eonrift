@@ -16,7 +16,28 @@ import { objectiveNeed, objectiveProgress, objectiveText, type Quests } from '..
 import { ICONS, mico } from './icons';
 import { buildingThumb } from './thumbs';
 import { gearLook } from '../models/items';
-import { equipIconUrl, heroPortraitUrl, itemIconUrl, skillIconUrl, toolIconUrl } from './itemIcons';
+import { equipIconUrl, heroPortraitUrl, itemIconUrl, monsterIconUrl, skillIconUrl, toolIconUrl } from './itemIcons';
+import { BESTIARY, BESTIARY_BY_ID, COLLECTION_MILESTONES, killMilestones, milestoneReward, RESEARCH_BONUS, type BestiaryReward } from '../data/bestiary';
+import { DEBUFF_INFO, TRAIT_TEXT, type Faction } from '../data/species';
+import type { Archetype } from '../data/monsters';
+
+const FACTION_NAME: Record<Faction, string> = { beast: '야수', undead: '언데드', orc: '오크족', elf: '다크엘프', construct: '구조물', elemental: '정령', void: '공허', demon: '악마' };
+const ARCH_NAME: Record<Archetype, string> = {
+  melee: '근접',
+  ranged: '원거리 마법',
+  charger: '돌진',
+  bomber: '자폭',
+  tank: '거대',
+  brute: '광전사',
+  archer: '궁수',
+  assassin: '암살자',
+  necro: '소환술사',
+  shaman: '치유사',
+  caster: '마법사',
+  swarm: '떼',
+  spitter: '독 뱉기',
+  knight: '방패병',
+};
 import { canInstall, promptInstall } from './install';
 
 export const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
@@ -316,6 +337,7 @@ export class Screens {
     onSfxVolume: (v: number) => void;
     onTitle: () => void;
     onSaveCode: () => void;
+    onBestiary?: () => void;
     onClose: () => void;
   }): void {
     const s = this.open(
@@ -334,6 +356,7 @@ export class Screens {
            <label class="toggle"><input type="checkbox" data-t="sound" ${opts.sound ? 'checked' : ''}/> 소리 켜기</label>
            <label class="volume">${SPK('music', '🎵')} 배경음 <input type="range" min="0" max="100" step="5" value="${Math.round(opts.music * 100)}" data-v="music"/><b data-vl="music">${Math.round(opts.music * 100)}</b></label>
            <label class="volume">${SPK('speaker', '🔊')} 효과음 <input type="range" min="0" max="100" step="5" value="${Math.round(opts.sfx * 100)}" data-v="sfx"/><b data-vl="sfx">${Math.round(opts.sfx * 100)}</b></label>
+           ${opts.onBestiary ? `<button data-a="bestiary">${SPK('book', '📖')} 몬스터 도감</button>` : ''}
            <button data-a="savecode">${SPK('disk', '💾')} 저장 코드 만들기</button>
            <button data-a="title">타이틀로 (자동 저장)</button>
          </div>
@@ -344,6 +367,7 @@ export class Screens {
       opts.onClose,
     );
     this.on(s, '[data-a="resume"]', () => this.close());
+    this.on(s, '[data-a="bestiary"]', () => opts.onBestiary?.());
     this.on(s, '[data-a="stone"]', opts.onReturnStone);
     this.on(s, '[data-a="giveup"]', () => {
       if (confirm('포기하면 일반 가방의 아이템을 모두 잃습니다. 계속할까요?')) opts.onGiveUp();
@@ -689,7 +713,7 @@ export class Screens {
         .filter((d) => d.accepted)
         .map((d) => {
           const need = objectiveNeed(d.objective);
-          const cur = objectiveProgress(d.objective, d.progress, { count: (id) => p.count(id), stones: p.stoneCount, cleared: p.data.cleared, flag: (f) => p.flag(f) });
+          const cur = objectiveProgress(d.objective, d.progress, { count: (id) => p.count(id), stones: p.stoneCount, cleared: p.data.cleared, flag: (f) => p.flag(f), discovered: p.discovered });
           return `<li class="quest daily ${d.claimed ? 'claimed' : ''}"><div><b>[일일] ${d.title}</b><small>${objectiveText(d.objective)} ${Math.min(cur, need)}/${need}</small><small class="${d.claimed ? 'dim' : cur >= need ? 'ok' : 'dim'}">${d.claimed ? '보상 받음' : cur >= need ? '✔ 촌장 에단에게 보고하기' : '촌장 에단의 일일 의뢰'}</small></div></li>`;
         })
         .join('');
@@ -915,7 +939,7 @@ export class Screens {
 
   /** 촌장의 일일 의뢰 게시판 */
   dailyBoard(p: Progress, quests: Quests, onClaim: (i: number) => void, onAccept: (i: number) => void, onClose: () => void): void {
-    const ctx = { count: (id: string) => p.count(id), stones: p.stoneCount, cleared: p.data.cleared, flag: (f: string) => p.flag(f) };
+    const ctx = { count: (id: string) => p.count(id), stones: p.stoneCount, cleared: p.data.cleared, flag: (f: string) => p.flag(f), discovered: p.discovered };
     const rows = quests.state.daily.list
       .map((d, i) => {
         const need = objectiveNeed(d.objective);
@@ -977,6 +1001,100 @@ export class Screens {
     pop.addEventListener('pointerdown', (e) => e.stopPropagation());
     pop.addEventListener('pointerup', (e) => e.stopPropagation());
     show();
+  }
+
+  // ---------------- 몬스터 도감 ----------------
+  /** canClaim: 연구자 노아 앞에서만 보상을 받을 수 있다 (다른 곳에서는 보기만) */
+  bestiary(p: Progress, canClaim: boolean, onChange: () => void, onClose: () => void, tier = 1, message?: string): void {
+    const found = p.discovered;
+    const research = p.data.research ?? 0;
+    const claimed = (id: string) => p.data.bestiaryClaim?.[id] ?? 0;
+    const giveText = (r: BestiaryReward) => [r.gold ? `${r.gold} G` : '', ...Object.entries(r.items).map(([id, n]) => `${ITEMS[id].name}×${n}`)].filter(Boolean).join(' · ');
+    const tabs = THEMES.map((t) => {
+      const list = BESTIARY.filter((e) => e.tier === t.tier);
+      const got = list.filter((e) => p.kills(e.species.id) > 0).length;
+      const ready = list.some((e) => killMilestones(e).some((m, i) => i >= claimed(e.species.id) && p.kills(e.species.id) >= m));
+      return `<button class="tier-tab ${t.tier === tier ? 'on' : ''}" data-tier="${t.tier}" style="--c:${hex(t.portalColor)}"><b>${t.tier}</b><small>${got}/${list.length}</small>${ready && canClaim ? '<i class="dot"></i>' : ''}</button>`;
+    }).join('');
+    const cards = BESTIARY.filter((e) => e.tier === tier)
+      .map((e) => {
+        const sp = e.species;
+        const n = p.kills(sp.id);
+        const known = n > 0;
+        const url = monsterIconUrl(sp, e.tier, e.rank !== 'normal');
+        const ms = killMilestones(e);
+        const c = claimed(sp.id);
+        const chips = ms
+          .map((m, i) => {
+            const r = milestoneReward(e, i);
+            const done = i < c;
+            const ready = !done && n >= m;
+            return `<div class="bm ${done ? 'done' : ready ? 'ready' : ''}"><span>${m}${e.rank === 'normal' ? '마리' : '번'}</span><small>${giveText(r)}</small>${ready ? `<button data-claim="${sp.id}" ${canClaim ? '' : 'disabled'}>${canClaim ? '받기' : '노아에게'}</button>` : done ? '<b class="ok">받음</b>' : ''}</div>`;
+          })
+          .join('');
+        const tags = [
+          e.rank === 'boss' ? '<b class="bad">수호자</b>' : e.rank === 'midboss' ? '<b class="gold">파수꾼</b>' : '',
+          known ? FACTION_NAME[sp.faction] : '',
+          known ? ARCH_NAME[sp.arch] : '',
+        ].filter(Boolean).join(' · ');
+        const notes = known
+          ? [sp.trait ? `<small class="trait">특성: ${TRAIT_TEXT[sp.trait]}</small>` : '', sp.debuff ? `<small class="debuff">약화: ${DEBUFF_INFO[sp.debuff.id].name} (${DEBUFF_INFO[sp.debuff.id].text})</small>` : '', sp.pack ? `<small class="dim">무리 지어 다님 (${sp.pack}마리)</small>` : ''].join('')
+          : '<small class="dim">아직 쓰러뜨린 적 없음</small>';
+        return `<li class="beast ${known ? '' : 'unknown'}">
+            <img class="beast-img" src="${url}" alt="">
+            <div class="beast-info"><b>${known ? sp.name : '???'}</b> <small class="dim">처치 ${n}</small><small>${tags}</small>${notes}<div class="bms">${chips}</div></div>
+          </li>`;
+      })
+      .join('');
+    const cols = COLLECTION_MILESTONES.map((m, i) => {
+      const done = i < research;
+      const ready = !done && found >= m.count;
+      return `<div class="bm ${done ? 'done' : ready ? 'ready' : ''}"><span>${m.count}종</span><small>${giveText(m.reward)} · 연구 +${Math.round(RESEARCH_BONUS * 100)}%</small>${ready ? `<button data-col="${i}" ${canClaim && i === research ? '' : 'disabled'}>${canClaim ? '받기' : '노아에게'}</button>` : done ? '<b class="ok">받음</b>' : ''}</div>`;
+    }).join('');
+    const s = this.open(
+      'bestiary',
+      `<div class="panel wide tall">
+         <button class="close">${ICONS.close}</button>
+         <h2>몬스터 도감 <small>발견 ${found}/${BESTIARY.length} · 연구 보너스 공격력·체력 +${Math.round(research * RESEARCH_BONUS * 100)}%</small></h2>
+         ${message ? `<div class="notice">${message}</div>` : ''}
+         ${canClaim ? '' : '<p class="hint">보상은 마을의 몬스터 연구자 노아에게서 받을 수 있습니다.</p>'}
+         <div class="scroll">
+           <h3>수집 보상 <small>서로 다른 몬스터를 발견할수록</small></h3>
+           <div class="bms wide">${cols}</div>
+           <div class="tier-tabs">${tabs}</div>
+           <ul class="list beasts">${cards}</ul>
+         </div>
+       </div>`,
+      onClose,
+    );
+    const again = (t = tier, msg?: string) => this.bestiary(p, canClaim, onChange, onClose, t, msg);
+    this.on(s, '[data-tier]', (b) => again(Number(b.dataset.tier)));
+    const give = (r: BestiaryReward) => {
+      p.data.gold += r.gold;
+      for (const [id, n] of Object.entries(r.items)) p.add(id, n);
+    };
+    this.on(s, '[data-claim]', (b) => {
+      if (!canClaim) return;
+      const id = b.dataset.claim!;
+      const e = BESTIARY_BY_ID[id];
+      const i = claimed(id);
+      if (!e || p.kills(id) < killMilestones(e)[i]) return;
+      const r = milestoneReward(e, i);
+      give(r);
+      (p.data.bestiaryClaim ??= {})[id] = i + 1;
+      onChange();
+      again(tier, `<b class="ok">${e.species.name} 연구 보상: ${giveText(r)}</b>`);
+    });
+    this.on(s, '[data-col]', (b) => {
+      if (!canClaim) return;
+      const i = Number(b.dataset.col);
+      const m = COLLECTION_MILESTONES[i];
+      if (i !== research || !m || found < m.count) return;
+      give(m.reward);
+      p.data.research = research + 1;
+      onChange();
+      again(tier, `<b class="ok">수집 보상 ${m.count}종: ${giveText(m.reward)} · 연구 보너스 +${Math.round((research + 1) * RESEARCH_BONUS * 100)}%</b>`);
+    });
   }
 
   // ---------------- 상점 ----------------
@@ -1748,5 +1866,5 @@ export class Screens {
   }
 }
 
-const NPC_NAMES: Record<string, string> = { trainer: '교관 카엘', chief: '촌장 에단', guide: '안내인 리아', smith: '대장장이 고른', engineer: '마공학자 세라', merchant: '상인 무트', stranger: '???' };
+const NPC_NAMES: Record<string, string> = { trainer: '교관 카엘', chief: '촌장 에단', guide: '안내인 리아', smith: '대장장이 고른', engineer: '마공학자 세라', merchant: '상인 무트', stranger: '???', researcher: '몬스터 연구자 노아' };
 export const npcName = (id: string) => NPC_NAMES[id] ?? id;

@@ -172,6 +172,7 @@ export class Combat {
     const lv = this.host.skillLevel(index);
     if (lv <= 0) return `${skill.name}: 아직 배우지 않았습니다 (마을의 교관 카엘)`;
     if (!d) return '스킬은 던전에서만 쓸 수 있습니다';
+    if (player.buff('silence')) return '침묵 상태라 스킬을 쓸 수 없습니다';
     // 스킬 레벨마다 위력 +15%, 재사용 대기 -6%
     const k = 1 + (lv - 1) * 0.15;
     const dmg = (m: Monster, mult: number, knock: number, fx: number, fz: number) => this.host.damageMonster(m, mult * k, knock, fx, fz);

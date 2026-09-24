@@ -2,6 +2,7 @@ import { bustUrl, itemIconUrl, skillIconUrl } from '../ui/itemIcons';
 import { decodeSave, encodeSave } from './saveCode';
 import { gearLook } from '../models/items';
 import { BOSS_RESPAWN_MS, BOSS_TIME_LIMIT, FARM_COOLDOWN_MS, FARM_NAMES } from '../data/monsters';
+import { DEBUFF_INFO, type DebuffId, type DebuffSpec } from '../data/species';
 import { newTool, TOOL_KIND_NAMES, TOOL_TIER_NAMES, toolBonusChance, toolName, toolSpeed, toolWear, type ToolKind } from '../data/tools';
 import { MeshLambertMaterial, OrthographicCamera, PCFShadowMap, Plane, Raycaster, Vector2, Vector3, WebGLRenderer } from 'three';
 import { BAG_SLOTS, CAMERA_OFFSET, PLAYER, SCREEN_UP, TILE, VIEW_HEIGHT } from '../config';
@@ -199,6 +200,9 @@ export class Game {
         return p.data.cleared;
       },
       flag: (f) => p.flag(f),
+      get discovered() {
+        return p.discovered;
+      },
     });
     this.factory = new Factory(p.data.factory, p.factorySize);
     this.factory.onCraft = (item, n) => this.quests.event({ type: 'craft', item, count: n });
@@ -433,7 +437,7 @@ export class Game {
     const dungeon = new DungeonScene(data, this.progress.data.ngPlus, {
       player: () => this.player.position,
       cameraQuat: () => this.camera.quaternion,
-      hurtPlayer: (d, x, z) => this.hurtPlayer(d, x, z),
+      hurtPlayer: (d, x, z, debuff, dot) => this.hurtPlayer(d, x, z, debuff, dot),
       monsterKilled: (m) => this.monsterKilled(m),
       monsterHitByProjectile: (m, proj) => this.combat.projectileHit(m, proj),
       exit: () => this.openWarp(),
@@ -574,6 +578,7 @@ export class Game {
           this.finishRun('귀환석으로 귀환');
         },
         onGiveUp: () => this.fall(),
+        onBestiary: this.quests.isDone('m_research') ? () => this.openBestiary(false) : undefined,
         autoAim: d.settings.autoAim !== false,
         onToggleAim: (on) => {
           d.settings.autoAim = on;
@@ -656,6 +661,8 @@ export class Game {
     const pl = this.player;
     if (!pl) return st;
     let atk = 1;
+    // 저주: 주는 피해 -30%
+    if (pl.buff('curse')) atk *= 0.7;
     if (pl.buff('warcry')) {
       atk *= 1.25;
       st.speed *= 1.15;
@@ -835,9 +842,26 @@ export class Game {
     if (npc === 'merchant') this.interactVillage('shop');
     else if (npc === 'smith') this.interactVillage('forge');
     else if (npc === 'trainer') this.openSkillShop();
+    else if (npc === 'researcher' && this.quests.isDone('m_research')) this.openBestiary(true);
     else if (npc === 'engineer' && this.quests.isDone('m4_factory')) this.openBlueprints();
     else if (npc === 'chief' && this.dailyUnlocked()) this.openDaily();
     else if (npc === 'chief' && !this.dailyUnlocked() && p.flag('intro')) this.hud.toast('첫 던전을 다녀오면 촌장의 일일 의뢰를 받을 수 있습니다', 2500);
+  }
+
+  /** 몬스터 도감. canClaim: 연구자 노아 앞에서만 보상을 받는다 */
+  private openBestiary(canClaim: boolean): void {
+    this.openMenu(() =>
+      this.screens.bestiary(
+        this.progress,
+        canClaim,
+        () => {
+          this.audio.play('coin');
+          this.applyStats();
+          this.saveNow();
+        },
+        () => this.resume(),
+      ),
+    );
   }
 
   /** 촌장 일일 의뢰: 첫 퀘스트(1-1 사냥)를 끝내면 열린다 */
@@ -919,7 +943,7 @@ export class Game {
   /** 촌장에게 보고할 수 있는 일일 의뢰가 있는지 */
   private dailyReady(): boolean {
     const p = this.progress;
-    const ctx = { count: (id: string) => p.count(id), stones: p.stoneCount, cleared: p.data.cleared, flag: (f: string) => p.flag(f) };
+    const ctx = { count: (id: string) => p.count(id), stones: p.stoneCount, cleared: p.data.cleared, flag: (f: string) => p.flag(f), discovered: p.discovered };
     return this.quests.state.daily.list.some((d) => d.accepted && !d.claimed && objectiveProgress(d.objective, d.progress, ctx) >= objectiveNeed(d.objective));
   }
 
@@ -1058,6 +1082,15 @@ export class Game {
   // =============== 전투 ===============
   private damageMonster(m: Monster, mult: number, knock: number, fx: number, fz: number): void {
     if (!m.alive) return;
+    this.player.inCombat();
+    if (m.isDown) return;
+    // 망령: 공격의 30%를 흘려 피한다
+    if (m.species.trait === 'evasive' && Math.random() < 0.3) {
+      const s = this.toScreen(m.x, m.rig.height * m.rig.root.scale.y + 0.3, m.z);
+      this.hud.floatText(s.x, s.y, '회피', '#c8d0ff', 'small');
+      this.level.effects.sparks(m.x, 1.2, m.z, 0xc8d0ff, 5, { up: true, spread: 0.4 });
+      return;
+    }
     if (m.shielded) {
       m.damage(0, fx, fz, 0);
       const s = this.toScreen(m.x, m.rig.height * m.rig.root.scale.y + 0.3, m.z);
@@ -1076,9 +1109,22 @@ export class Game {
     if (killed) this.monsterKilled(m);
   }
 
-  private hurtPlayer(dmg: number, fx: number, fz: number): void {
+  /** 플레이어가 맞는다. 실제로 들어간 피해를 돌려준다. dot: 독 웅덩이처럼 무적 시간 없이 조금씩 */
+  private hurtPlayer(dmg: number, fx: number, fz: number, debuff?: DebuffSpec, dot = false): number {
     const pl = this.player;
-    if (pl.isInvulnerable || this.mode !== 'play') return;
+    if (this.mode !== 'play' || !pl.alive) return 0;
+    if (dot) {
+      const d = Math.max(1, Math.round(dmg * (60 / (60 + this.buffedStats().def))));
+      pl.inCombat();
+      pl.hurtDot(d);
+      const s = this.toScreen(pl.position.x, 2, pl.position.z);
+      this.hud.floatText(s.x, s.y, `-${d}`, '#b8ff6a', 'small');
+      if (debuff && Math.random() < debuff.chance) this.applyDebuff(debuff, dmg);
+      this.checkPlayerDeath();
+      return d;
+    }
+    if (pl.isInvulnerable) return 0;
+    pl.inCombat();
     const st = this.buffedStats();
     const head = this.toScreen(pl.position.x, 2, pl.position.z);
     // 수호의 방패: 공격을 통째로 막는다
@@ -1089,13 +1135,13 @@ export class Game {
       this.hud.floatText(head.x, head.y, '막음!', '#ffe07a', 'small');
       this.level.effects.ring(pl.position.x, pl.position.z, 1.4, 0xffe07a, 0.3);
       this.audio.play('hit');
-      return;
+      return 0;
     }
     // 바람 걸음: 확률 회피
     if (pl.buff('windwalk') && Math.random() < 0.3) {
       pl.invulnFor(0.3);
       this.hud.floatText(head.x, head.y, '회피', '#c8ffb0', 'small');
-      return;
+      return 0;
     }
     let final = Math.max(1, Math.round(dmg * (0.9 + Math.random() * 0.2) * (60 / (60 + st.def))));
     if (pl.buff('ironwall')) final = Math.max(1, Math.round(final * 0.6));
@@ -1108,7 +1154,7 @@ export class Game {
       if (absorb > 0) this.hud.floatText(head.x + 24, head.y, `-${absorb} MP`, '#7fb4ff', 'small');
       if (final <= 0) {
         pl.invulnFor(0.3);
-        return;
+        return 0;
       }
     }
     pl.hurt(final);
@@ -1125,11 +1171,52 @@ export class Game {
     const lv = this.level;
     const d = Math.hypot(pl.position.x - fx, pl.position.z - fz) || 1;
     moveWithCollision(lv.grid, pl.position, ((pl.position.x - fx) / d) * 0.5, ((pl.position.z - fz) / d) * 0.5, PLAYER.radius, lv.obstacles);
-    if (!pl.alive) {
+    if (debuff && Math.random() < debuff.chance) this.applyDebuff(debuff, dmg);
+    this.checkPlayerDeath();
+    return final;
+  }
+
+  private checkPlayerDeath(): void {
+    if (!this.player.alive && this.mode === 'play') {
       this.mode = 'dead';
       this.deadTimer = 0;
       this.hud.setVisible(false);
       this.audio.play('fall');
+    }
+  }
+
+  /** 몬스터가 건 약화 효과. 중독·화상은 맞은 공격력에 비례해 초마다 피해 */
+  private applyDebuff(spec: DebuffSpec, dmg: number): void {
+    const pl = this.player;
+    const info = DEBUFF_INFO[spec.id];
+    const dps = spec.id === 'poison' ? dmg * 0.12 : spec.id === 'burn' ? dmg * 0.22 : undefined;
+    const had = !!pl.buff(spec.id);
+    pl.addDebuff(spec.id, info.name, spec.duration, dps);
+    if (!had) {
+      const s = this.toScreen(pl.position.x, 2.4, pl.position.z);
+      this.hud.floatText(s.x, s.y, info.name, `#${info.color.toString(16).padStart(6, '0')}`, 'small');
+      this.level.effects.ring(pl.position.x, pl.position.z, 1.2, info.color, 0.3, 0.5);
+    }
+  }
+
+  /** 약화 효과: 지속 피해와 몸에서 피어오르는 색 입자 */
+  private updateDebuffs(dt: number): void {
+    const pl = this.player;
+    if (!pl.alive) return;
+    for (const b of pl.buffs) {
+      if (!b.bad) continue;
+      const info = DEBUFF_INFO[b.id as DebuffId];
+      if (Math.random() < dt * 6) this.level.effects.sparks(pl.position.x, 0.6 + Math.random() * 0.8, pl.position.z, info.color, 1, { up: true, spread: 0.35, life: 0.6 });
+      if (!b.dps) continue;
+      b.tick = (b.tick ?? 1) - dt;
+      if (b.tick <= 0) {
+        b.tick = 1;
+        const d = Math.max(1, Math.round(b.dps));
+        pl.hurtDot(d);
+        const s = this.toScreen(pl.position.x, 2, pl.position.z);
+        this.hud.floatText(s.x, s.y, `-${d}`, `#${info.color.toString(16).padStart(6, '0')}`, 'small');
+        this.checkPlayerDeath();
+      }
     }
   }
 
@@ -1161,7 +1248,12 @@ export class Game {
     const rng = new Rng(randomSeed());
     this.audio.play('kill');
     this.level.particles.burst(m.x, 0.7, m.z, 0xffffff, 12, 1.2);
-    this.quests.event({ type: 'kill', tier, elite: m.kind === 'elite' });
+    this.quests.event({ type: 'kill', tier, elite: m.kind === 'elite', species: m.species.id });
+    // 몬스터 도감: 처음 잡은 종족은 알린다
+    if (this.progress.recordKill(m.species.id)) {
+      const name = m.species.id === 'slime_small' ? '슬라임' : m.species.name;
+      this.hud.toast(this.quests.isDone('m_research') ? `도감에 새 몬스터 등록: ${name} — 연구자 노아에게 보상을 받자` : `새 몬스터 발견: ${name}`, 2600);
+    }
 
     const weapon = this.progress.cls.equipment.weapon;
     if (weapon && durability(weapon) > 0 && Math.random() < 0.12) this.wearEquip(weapon);
@@ -1850,6 +1942,8 @@ export class Game {
 
   private updatePlay(dt: number): void {
     const input = this.input;
+    if (this.level instanceof DungeonScene) this.updateDebuffs(dt);
+    if (this.mode !== 'play') return;
     if (input.consume('pause')) {
       if (this.bigMap) return this.setBigMap(false);
       return this.openPause();
@@ -2076,7 +2170,7 @@ export class Game {
       this.hud.setWarpButton(!!this.run.roomCleared && d.exitOpen);
       this.hud.setObjective([head, ...questLines(p, this.quests)].join('\n'));
     } else this.hud.setObjective(objective(p, this.quests));
-    this.hud.setBuffs(pl.buffs.map((b) => `${b.name}${b.stacks !== undefined ? ` ${b.stacks}회` : ''} ${Math.ceil(b.t)}s`));
+    this.hud.setBuffs(pl.buffs.map((b) => ({ text: `${b.name}${b.stacks !== undefined ? ` ${b.stacks}회` : ''} ${Math.ceil(b.t)}s`, bad: b.bad })));
     this.hud.setPotions(this.run && this.level instanceof DungeonScene ? this.run.pouch.length : POTION_KINDS.reduce((a, [k]) => a + p.count(k), 0), this.potionCd / POTION_COOLDOWN);
     this.hud.setDodgeCooldown(pl.rollCooldown / (PLAYER.rollCooldown + PLAYER.rollTime));
     const skills = pl.cls.skills;
@@ -2108,7 +2202,7 @@ export class Game {
         let mark = '';
         if (isNpc) {
           const ref = it.id as NpcRef;
-          const dailyReady = it.id === 'chief' && this.dailyReady();
+          const dailyReady = (it.id === 'chief' && this.dailyReady()) || (it.id === 'researcher' && this.quests.isDone('m_research') && this.progress.bestiaryClaimable > 0);
           if (dailyReady || this.quests.activeFor(ref).some((q) => this.quests.canComplete(q))) mark = '? ';
           else if (hasStory(it.id as NpcId, this.progress) || this.quests.available(ref).length) mark = '! ';
         }

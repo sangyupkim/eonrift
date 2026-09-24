@@ -302,8 +302,8 @@ export class Hud {
 
   private buffEl!: HTMLDivElement;
   /** 걸려 있는 버프 표시 */
-  setBuffs(list: string[]): void {
-    const html = list.map((t) => `<span>${t}</span>`).join('');
+  setBuffs(list: { text: string; bad?: boolean }[]): void {
+    const html = list.map((t) => `<span class="${t.bad ? 'bad' : ''}">${t.text}</span>`).join('');
     if (this.buffEl.innerHTML !== html) this.buffEl.innerHTML = html;
   }
 

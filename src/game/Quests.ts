@@ -31,6 +31,8 @@ export interface QuestContext {
   stones: number;
   cleared: number;
   flag(name: string): number;
+  /** 도감에 발견한 종족 수 */
+  discovered?: number;
 }
 
 export function todayKey(d = new Date()): string {
@@ -44,6 +46,8 @@ export function objectiveProgress(o: Objective, stored: number, ctx: QuestContex
       return Math.min(o.count, ctx.count(o.item));
     case 'clear':
       return ctx.cleared >= o.stage ? 1 : 0;
+    case 'discover':
+      return Math.min(o.count, ctx.discovered ?? 0);
     default:
       return Math.min(o.count, stored);
   }
@@ -71,6 +75,10 @@ export function objectiveText(o: Objective): string {
       return o.label;
     case 'stages':
       return `스테이지 클리어${o.minTier ? ` (${o.minTier}단계 이상)` : ''}`;
+    case 'discover':
+      return '도감에 몬스터 발견';
+    case 'killSpecies':
+      return o.label;
   }
 }
 
@@ -134,7 +142,7 @@ export class Quests {
   }
 
   /** 게임 이벤트를 진행 중인 퀘스트와 일일 퀘스트에 반영한다 */
-  event(e: { type: 'kill'; tier: number; elite: boolean } | { type: 'gather'; item: string; count: number } | { type: 'build'; building: string } | { type: 'craft'; item: string; count: number } | { type: 'stage'; tier: number }): void {
+  event(e: { type: 'kill'; tier: number; elite: boolean; species?: string } | { type: 'gather'; item: string; count: number } | { type: 'build'; building: string } | { type: 'craft'; item: string; count: number } | { type: 'stage'; tier: number }): void {
     const apply = (o: Objective, cur: number): number => {
       switch (o.type) {
         case 'kill':
@@ -149,6 +157,8 @@ export class Quests {
           return e.type === 'craft' && e.item === o.item ? cur + e.count : cur;
         case 'stages':
           return e.type === 'stage' && e.tier >= (o.minTier ?? 0) ? cur + 1 : cur;
+        case 'killSpecies':
+          return e.type === 'kill' && (e.species === o.species || (o.species === 'slime' && e.species === 'slime_small')) ? cur + 1 : cur;
         default:
           return cur;
       }

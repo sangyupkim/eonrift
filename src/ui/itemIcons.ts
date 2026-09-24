@@ -5,6 +5,8 @@ import { buildHero, type HeroGear, type HeroLook } from '../models/hero';
 import { buildEquipGeometry, buildItemGeometry, buildToolGeometry } from '../models/items';
 import { buildSkillGeometry } from '../models/skills';
 import { buildUiIcon, type UiIcon } from '../models/uiIcons';
+import { buildMonster, MONSTER_COLORS } from '../models/monsters';
+import type { SpeciesDef } from '../data/species';
 
 /**
  * 아이템 모델을 한 번 그려서 이미지로 만들어 두는 아이콘 공장.
@@ -65,6 +67,20 @@ function geoIcon(key: string, make: () => BufferGeometry): string {
   g.translate(-s.center.x, -s.center.y, -s.center.z);
   const url = snap(new Mesh(g, material), 96, 96, s.radius * 1.05, 0);
   g.dispose();
+  cache.set(key, url);
+  return url;
+}
+
+/** 몬스터 도감 그림 (종족 모델을 정면에서 비스듬히) */
+export function monsterIconUrl(sp: SpeciesDef, tier: number, crowned = false): string {
+  const key = `m:${sp.id}`;
+  const hit = cache.get(key);
+  if (hit !== undefined) return hit;
+  const rig = buildMonster(material, sp.model, sp.colors ?? MONSTER_COLORS[tier - 1], crowned, sp.glow);
+  rig.root.rotation.y = 0.2;
+  const h = rig.height;
+  const url = snap(rig.root, 120, 120, Math.max(1.05, h * 0.62), h * 0.42);
+  for (const m of rig.meshes) m.geometry.dispose();
   cache.set(key, url);
   return url;
 }

@@ -1,3 +1,4 @@
+import type { DebuffSpec } from '../data/species';
 import { AdditiveBlending, Mesh, MeshBasicMaterial, Scene } from 'three';
 import { TILE } from '../config';
 import { isFloor, type DungeonData } from '../dungeon/generator';
@@ -23,6 +24,7 @@ export interface Projectile {
   /** 적에게 맞거나 벽에 부딪혔을 때 (폭발 등) */
   onEnd?: (x: number, z: number) => void;
   kind: 'orb' | 'arrow' | 'shard' | 'wave';
+  debuff?: DebuffSpec;
 }
 
 export interface ProjectileOptions {
@@ -40,6 +42,7 @@ export interface ProjectileOptions {
   knock?: number;
   y?: number;
   onEnd?: (x: number, z: number) => void;
+  debuff?: DebuffSpec;
 }
 
 export interface ProjectileHost {
@@ -79,6 +82,7 @@ export class Projectiles {
       knock: o.knock ?? 0.6,
       onEnd: o.onEnd,
       kind: o.kind ?? 'orb',
+      debuff: o.debuff,
     };
     if (o.kind === 'wave') mesh.scale.set(1, 1, 1);
     mesh.rotation.y = o.angle;

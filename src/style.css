@@ -2591,3 +2591,101 @@ img.mico-inline {
 .screen.select h3 {
   margin: 8px 0 6px;
 }
+.buffs span.bad {
+  background: rgba(120, 30, 60, 0.75);
+  border-color: rgba(255, 110, 140, 0.7);
+  color: #ffd0dc;
+}
+
+/* 몬스터 도감 */
+.bestiary .tier-tabs .tier-tab {
+  position: relative;
+}
+.bestiary .tier-tab small {
+  display: block;
+  font-size: 10px;
+  color: var(--ink-dim);
+}
+.bestiary .tier-tab .dot {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ffd23a;
+  box-shadow: 0 0 6px #ffd23a;
+}
+.list.beasts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 8px;
+}
+.list.beasts li.beast {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.beast-img {
+  width: 76px;
+  height: 76px;
+  flex: none;
+  border-radius: 12px;
+  background: radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.12), rgba(0, 0, 0, 0.25));
+}
+.beast.unknown .beast-img {
+  filter: brightness(0) drop-shadow(0 0 3px rgba(160, 140, 255, 0.6));
+  opacity: 0.8;
+}
+.beast-info {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  font-size: 12px;
+}
+.beast-info small.trait {
+  color: #9fe8ff;
+}
+.beast-info small.debuff {
+  color: #ff9ab8;
+}
+.bms {
+  display: grid;
+  gap: 3px;
+  margin-top: 4px;
+}
+.bms.wide {
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  margin-bottom: 10px;
+}
+.bm {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 11px;
+}
+.bm span {
+  font-weight: 800;
+}
+.bm small {
+  color: var(--ink-dim);
+}
+.bm.ready {
+  background: rgba(255, 210, 58, 0.16);
+  border: 1px solid rgba(255, 210, 58, 0.5);
+}
+.bm.done {
+  opacity: 0.55;
+}
+.bm button {
+  padding: 3px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--panel-line);
+  background: rgba(255, 210, 58, 0.3);
+  font-weight: 800;
+  font-size: 11px;
+}

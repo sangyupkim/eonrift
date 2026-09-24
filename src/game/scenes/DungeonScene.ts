@@ -15,7 +15,7 @@ import {
 import { TILE } from '../../config';
 import { Rng } from '../../core/rng';
 import { ITEMS, ORE_TIERS, WOOD_TIERS } from '../../data/items';
-import { pickSpecies, resolveSpecies, tierFactions, type Faction, type SpeciesDef } from '../../data/species';
+import { pickSpecies, resolveSpecies, stagePool, tierFactions, type DebuffSpec, type Faction, type SpeciesDef } from '../../data/species';
 import { isFloor } from '../../dungeon/generator';
 import { NODES, resourceTier, type NodeDef } from '../../data/nodes';
 import { themeForTier, type DungeonTheme } from '../../data/themes';
@@ -60,7 +60,7 @@ export interface Drop {
 export interface DungeonHooks {
   player: () => { x: number; z: number };
   cameraQuat: () => Quaternion;
-  hurtPlayer: (dmg: number, fromX: number, fromZ: number) => void;
+  hurtPlayer: (dmg: number, fromX: number, fromZ: number, debuff?: DebuffSpec, dot?: boolean) => number;
   monsterKilled: (m: Monster) => void;
   monsterHitByProjectile: (m: Monster, p: Projectile) => void;
   exit: () => void;
@@ -112,11 +112,11 @@ export class DungeonScene extends Level {
         return hooks.player();
       },
       monsters: this.monsters,
-      hurtPlayer: (d, x, z) => hooks.hurtPlayer(d, x, z),
+      hurtPlayer: (d, x, z, debuff) => hooks.hurtPlayer(d, x, z, debuff),
       fireEnemyProjectile: (spec: ProjectileSpec) =>
         self.projectiles.spawn({ ...spec, fromPlayer: false, kind: spec.kind ?? 'orb', life: 2.2 }),
       summon: (what, x, z) => self.spawnMonster(resolveSpecies(self.grid.tier, what, () => self.rng.next()), 'normal', x, z, -1, true),
-      hazard: (x, z, r, duration, dps, color) => self.addHazard(x, z, r, duration, dps, color),
+      hazard: (x, z, r, duration, dps, color, debuff) => self.addHazard(x, z, r, duration, dps, color, debuff),
       burst: (x, y, z, c, n, p) => self.particles.burst(x, y, z, c, n, p),
       shake: (a) => hooks.shake(a),
       announce: (t) => hooks.announce(t),
@@ -126,7 +126,8 @@ export class DungeonScene extends Level {
     this.ngPlus = ngPlus;
     // 몬스터 배치 (방마다 정해진 위치).
     // 방마다 절반쯤은 한 세력(언데드·오크·다크엘프…)이 차지하고, 떼로 다니는 종족은 무리로 나온다
-    const factions = tierFactions(grid.tier);
+    this.pool = stagePool(grid.tier, grid.stage, () => this.rng.next());
+    const factions = tierFactions(grid.tier, this.pool);
     const roomFavor = new Map<number, Faction | undefined>();
     const rand = () => this.rng.next();
     grid.monsters.forEach((m) => {
@@ -135,7 +136,7 @@ export class DungeonScene extends Level {
       if (!roomFavor.has(room)) roomFavor.set(room, this.rng.chance(0.5) ? this.rng.pick(factions) : undefined);
       const boss = m.kind === 'boss' || m.kind === 'midboss';
       // 정예는 떼 종족이 아닌 것 중에서
-      const sp = pickSpecies(grid.tier, rand, m.kind === 'elite' ? (d) => d.arch !== 'swarm' : undefined, roomFavor.get(room));
+      const sp = pickSpecies(grid.tier, rand, m.kind === 'elite' ? (d) => d.arch !== 'swarm' : undefined, roomFavor.get(room), this.pool);
       const mon = this.spawnMonster(sp, m.kind, p.x, p.z, room, false);
       if (boss) this.boss = mon;
       if (m.kind === 'normal' && sp.pack) {
@@ -175,6 +176,8 @@ export class DungeonScene extends Level {
   }
 
   private ngPlus = 0;
+  /** 이번 방에 나오는 종족 몇 가지 */
+  private pool: [string, number][] = [];
 
   static toWorld(tx: number, ty: number): { x: number; z: number } {
     return { x: (tx + 0.5) * TILE, z: (ty + 0.5) * TILE };
@@ -190,7 +193,7 @@ export class DungeonScene extends Level {
       const pz = z + Math.sin(a) * r;
       if (!isFloor(this.grid, Math.floor(px / TILE), Math.floor(pz / TILE))) continue;
       const kind = i % 6 === 5 ? 'elite' : 'normal';
-      out.push(this.spawnMonster(pickSpecies(this.grid.tier, () => this.rng.next(), kind === 'elite' ? (d) => d.arch !== 'swarm' : undefined), kind, px, pz, -1, true));
+      out.push(this.spawnMonster(pickSpecies(this.grid.tier, () => this.rng.next(), kind === 'elite' ? (d) => d.arch !== 'swarm' : undefined, undefined, this.pool), kind, px, pz, -1, true));
       this.particles.burst(px, 0.6, pz, 0xffd23a, 8, 1);
       i++;
     }
@@ -207,10 +210,10 @@ export class DungeonScene extends Level {
   }
 
   /** 독 웅덩이 같은 바닥 장판: 안에 서 있으면 0.5초마다 피해 */
-  private hazards: { x: number; z: number; r: number; left: number; tick: number; dps: number }[] = [];
+  private hazards: { x: number; z: number; r: number; left: number; tick: number; dps: number; debuff?: DebuffSpec }[] = [];
 
-  private addHazard(x: number, z: number, r: number, duration: number, dps: number, color: number): void {
-    this.hazards.push({ x, z, r, left: duration, tick: 0.3, dps });
+  private addHazard(x: number, z: number, r: number, duration: number, dps: number, color: number, debuff?: DebuffSpec): void {
+    this.hazards.push({ x, z, r, left: duration, tick: 0.3, dps, debuff });
     this.effects.zone(x, z, r, color, duration);
   }
 
@@ -222,7 +225,7 @@ export class DungeonScene extends Level {
       h.tick -= dt;
       if (h.tick <= 0) {
         h.tick = 0.5;
-        if (Math.hypot(p.x - h.x, p.z - h.z) < h.r + 0.3) this.hooks.hurtPlayer(h.dps * 0.5, h.x, h.z);
+        if (Math.hypot(p.x - h.x, p.z - h.z) < h.r + 0.3) this.hooks.hurtPlayer(h.dps * 0.5, h.x, h.z, h.debuff, true);
       }
       if (h.left <= 0) this.hazards.splice(i, 1);
     }
@@ -371,7 +374,7 @@ export class DungeonScene extends Level {
       grid: this.grid,
       monsters: this.monsters,
       player: focus,
-      playerHit: (p) => this.hooks.hurtPlayer(p.damage, p.x - p.vx, p.z - p.vz),
+      playerHit: (p) => void this.hooks.hurtPlayer(p.damage, p.x - p.vx, p.z - p.vz, p.debuff),
       monsterHit: (m, p) => this.hooks.monsterHitByProjectile(m, p),
       burst: (x, y, z, c, n, pw) => this.particles.burst(x, y, z, c, n, pw),
       trail: (x, y, z, c, big) => {

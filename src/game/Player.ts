@@ -1,4 +1,5 @@
-import { AdditiveBlending, Color, GreaterDepth, Material, Mesh, MeshBasicMaterial, MeshLambertMaterial, NotEqualStencilFunc, Plane, ReplaceStencilOp, Vector3 } from 'three';
+import type { DebuffId } from '../data/species';
+import { AdditiveBlending, AlwaysStencilFunc, Color, GreaterDepth, Material, Mesh, MeshBasicMaterial, MeshLambertMaterial, NotEqualStencilFunc, Plane, ReplaceStencilOp, Vector3 } from 'three';
 import { PLAYER, SCREEN_RIGHT, SCREEN_UP } from '../config';
 import type { ClassDef } from '../data/classes';
 import { buildHero, glowColor, type HeroGear, type HeroRig } from '../models/hero';
@@ -18,13 +19,18 @@ export interface ActionSpec {
   tool?: 'pickaxe' | 'axe';
 }
 
-export type BuffId = 'ironwall' | 'block' | 'warcry' | 'manashield' | 'focus' | 'windwalk' | 'smoke' | 'hunter';
+export type BuffId = 'ironwall' | 'block' | 'warcry' | 'manashield' | 'focus' | 'windwalk' | 'smoke' | 'hunter' | DebuffId;
 export interface Buff {
   id: BuffId;
   name: string;
   t: number;
   /** 막기 같은 횟수형 버프 */
   stacks?: number;
+  /** 몬스터가 건 약화 효과 */
+  bad?: boolean;
+  /** 지속 피해 (초당) */
+  dps?: number;
+  tick?: number;
 }
 
 export interface DashSpec {
@@ -71,6 +77,8 @@ export class Player {
   rollCooldown = 0;
   /** 걸려 있는 버프 (방어·보조 스킬) */
   buffs: Buff[] = [];
+  /** 마지막으로 싸운 뒤 지난 시간 */
+  private combatT = 99;
   private material: MeshLambertMaterial;
 
   constructor(
@@ -88,7 +96,7 @@ export class Player {
       hat: cls.look.weapon === 'staff' ? 'wizard' : 'none',
       gear,
     });
-    addSilhouette(this.rig.meshes);
+    addSilhouette(this.rig.meshes, this.material);
     if (gear?.glow) this.addGlow(gear.glow);
   }
 
@@ -106,6 +114,28 @@ export class Player {
   addBuff(id: BuffId, name: string, duration: number, stacks?: number): void {
     this.buffs = this.buffs.filter((b) => b.id !== id);
     this.buffs.push({ id, name, t: duration, stacks });
+  }
+
+  /** 약화 효과: 같은 것이 걸려 있으면 시간만 새로 (지속 피해는 더 센 쪽) */
+  addDebuff(id: DebuffId, name: string, duration: number, dps?: number): void {
+    const old = this.buffs.find((b) => b.id === id);
+    if (old) {
+      old.t = Math.max(old.t, duration);
+      if (dps) old.dps = Math.max(old.dps ?? 0, dps);
+      return;
+    }
+    this.buffs.push({ id, name, t: duration, bad: true, dps, tick: 1 });
+  }
+
+  /** 지속 피해: 무적 시간 없이 체력만 깎는다 */
+  hurtDot(amount: number): void {
+    this.hp = Math.max(0, this.hp - amount);
+    this.hurtFlash = Math.max(this.hurtFlash, 0.4);
+    if (this.hp <= 0) {
+      this.state = 'dead';
+      this.action = null;
+      this.dash = null;
+    }
   }
 
   buff(id: BuffId): Buff | undefined {
@@ -156,7 +186,17 @@ export class Player {
     return this.invuln > 0 || (this.dash?.invuln ?? false) || !this.alive;
   }
 
+  /** 싸웠다(때리거나 맞았다): MP 회복이 3초 멈춘다 */
+  inCombat(): void {
+    this.combatT = 0;
+  }
+
+  get mpRegenerating(): boolean {
+    return this.combatT >= MP_REGEN_DELAY;
+  }
+
   hurt(amount: number): void {
+    this.combatT = 0;
     this.hp = Math.max(0, this.hp - amount);
     this.hurtFlash = 1;
     this.invuln = 0.45;
@@ -192,7 +232,9 @@ export class Player {
     this.buffs = this.buffs.filter((b) => b.t > 0 && (b.stacks === undefined || b.stacks > 0));
     this.rollCooldown = Math.max(0, this.rollCooldown - dt);
     this.invuln = Math.max(0, this.invuln - dt);
-    this.mp = Math.min(this.maxMp, this.mp + dt * (2 + this.maxMp * 0.02));
+    // MP는 전투 중에는 차지 않는다: 3초 동안 때리지도 맞지도 않아야 회복된다
+    this.combatT += dt;
+    if (this.combatT >= MP_REGEN_DELAY) this.mp = Math.min(this.maxMp, this.mp + dt * (2 + this.maxMp * 0.02));
 
     const d = Player.worldDir(ctx.move);
     const mag = Math.min(1, Math.hypot(ctx.move.x, ctx.move.y));
@@ -231,7 +273,7 @@ export class Player {
         this.state = 'idle';
       }
     } else {
-      const targetSpeed = mag > 0.12 ? PLAYER.walkSpeed * mag * (this.buff('windwalk') ? 1.4 : 1) : 0;
+      const targetSpeed = mag > 0.12 ? PLAYER.walkSpeed * mag * (this.buff('windwalk') ? 1.4 : 1) * (this.buff('slow') ? 0.6 : 1) : 0;
       this.speed += (targetSpeed - this.speed) * Math.min(1, dt * 14);
       if (mag > 0.12) {
         this.facing = lerpAngle(this.facing, Math.atan2(d.x, d.z), Math.min(1, dt * 16));
@@ -401,6 +443,9 @@ export class Player {
   }
 }
 
+/** 전투가 끝나고 MP가 차기 시작할 때까지 (초) */
+const MP_REGEN_DELAY = 3;
+
 /** 구를 때 몸을 웅크리는 비율 */
 const ROLL_TUCK = 0.82;
 
@@ -411,7 +456,13 @@ const ROLL_TUCK = 0.82;
  * - 바닥 높이 아래는 잘라 내서 땅에 살짝 묻힐 때 파랗게 물들지 않는다
  * 본체(renderOrder 2)가 나중에 덮어써서 자기 몸에는 실루엣이 생기지 않는다.
  */
-function addSilhouette(meshes: Mesh[]): void {
+function addSilhouette(meshes: Mesh[], body: MeshLambertMaterial): void {
+  // 보이는 몸이 먼저 스텐실에 1을 찍는다 → 실루엣은 몸이 보이는 곳에는 절대 칠해지지 않는다
+  // (반투명 실루엣은 불투명한 몸보다 나중에 그려져서, 몸 뒤에 숨은 팔·다리의 실루엣이 몸 위에 비치던 문제)
+  body.stencilWrite = true;
+  body.stencilRef = 1;
+  body.stencilFunc = AlwaysStencilFunc;
+  body.stencilZPass = ReplaceStencilOp;
   const mat = new MeshBasicMaterial({
     color: 0x9ab8ff,
     transparent: true,

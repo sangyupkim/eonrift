@@ -2,7 +2,7 @@ import { SCRIPTS, type Step } from './story';
 import { ITEMS, ORE_TIERS, TIER_MANA_METAL, TIER_PLANK, TIER_PLATE, WOOD_TIERS } from './items';
 import { TIER_INGOT } from './tools';
 
-export type NpcRef = 'chief' | 'guide' | 'smith' | 'engineer' | 'merchant' | 'stranger' | 'trainer';
+export type NpcRef = 'chief' | 'guide' | 'smith' | 'engineer' | 'merchant' | 'stranger' | 'trainer' | 'researcher';
 
 export type Objective =
   | { type: 'kill'; count: number; minTier?: number; label?: string }
@@ -12,7 +12,11 @@ export type Objective =
   | { type: 'build'; building: string; count: number }
   | { type: 'craft'; item: string; count: number }
   | { type: 'clear'; stage: number; label: string }
-  | { type: 'stages'; count: number; minTier?: number };
+  | { type: 'stages'; count: number; minTier?: number }
+  /** 도감에 발견한 종족 수 (지금 상태) */
+  | { type: 'discover'; count: number }
+  /** 특정 종족 처치 */
+  | { type: 'killSpecies'; species: string; count: number; label: string };
 
 export interface Reward {
   gold?: number;
@@ -80,6 +84,24 @@ export const MAIN_QUESTS: QuestDef[] = [
       { type: 'deliver', item: 'wood', count: 5 },
     ],
     rewards: { gold: 150, exp: 80 },
+  },
+  {
+    id: 'm_research',
+    npc: 'researcher',
+    kind: 'main',
+    title: '몬스터 연구',
+    after: ['m2_tools'],
+    offer: [
+      say('노아', '반가워! 나는 틈새의 몬스터를 연구하는 노아야. 여긴 몬스터마다 버릇이 달라서 연구할 게 끝이 없거든.'),
+      say('노아', '해골은 한 번 쓰러져도 다시 일어나고, 슬라임은 쪼개지고, 망령은 공격을 흘려 버려. 서로 다른 몬스터를 네 종류만 쓰러뜨리고 와 줄래?'),
+    ],
+    pending: [say('노아', '서로 다른 몬스터 네 종류! 처음 잡는 몬스터는 자동으로 도감에 기록돼.')],
+    complete: [
+      say('노아', '대단해! 기록이 벌써 이만큼이나. 이제부터 도감을 함께 채우자.'),
+      say('노아', '종족마다 정해진 수를 쓰러뜨리거나 새 종족을 발견하면 나한테 와. 보상을 주고, 연구가 쌓일수록 네 공격력과 체력도 올려 줄게.'),
+    ],
+    objectives: [{ type: 'discover', count: 4 }],
+    rewards: { gold: 300, exp: 150, items: { potion: 3 }, flags: ['bestiary'] },
   },
   {
     id: 'm3_essence',
@@ -240,6 +262,28 @@ interface SubTemplate {
   make: (t: number) => [Omit<QuestDef, 'id' | 'npc' | 'kind' | 'after' | 'requireCleared'>, Omit<QuestDef, 'id' | 'npc' | 'kind' | 'after' | 'requireCleared'>];
 }
 
+/** 노아의 단계별 연구 대상: [종족, 이름, 수, 종족, 이름, 수] */
+const RESEARCH_TARGETS: [string, string, number, string, string, number][] = [
+  ['slime', '슬라임', 20, 'skel_warrior', '해골 전사', 10],
+  ['goblin', '고블린', 25, 'orc_shaman', '오크 주술사', 6],
+  ['skel_warrior', '해골 전사', 20, 'necromancer', '강령술사', 5],
+  ['crystal_spider', '수정 거미', 15, 'delf_witch', '다크엘프 마녀', 8],
+  ['iron_spider', '강철 거미', 15, 'mech_knight', '마공 기사', 8],
+  ['lava_imp', '화염 임프', 25, 'fire_orc', '화염 광전사', 10],
+  ['void_wraith', '공허 망령', 15, 'void_witch', '공허 마녀', 10],
+];
+const RESEARCH_HINT: Record<string, string> = {
+  slime: '쓰러뜨리면 작게 쪼개지니까 조각까지 정리해야 해.',
+  skel_warrior: '한 번 무너져도 다시 일어나니 방심하지 마.',
+  orc_shaman: '동료를 치유하니까 먼저 노려.',
+  necromancer: '해골을 불러내고 저주를 걸어. 저주에 걸리면 주는 피해가 줄어.',
+  delf_witch: '마법에 맞으면 한동안 스킬을 못 써.',
+  mech_knight: '방패로 정면을 막으니 옆이나 뒤를 노려.',
+  fire_orc: '맞으면 화상을 입어. 격노하면 더 빨라져.',
+  void_witch: '침묵 마법을 조심해.',
+  goblin: '겁이 많아서 불리하면 도망쳐.',
+};
+
 const gold = (t: number, k: number) => Math.round((150 + 200 * t) * k);
 const exp = (t: number, k: number) => Math.round((60 + 90 * t * t) * k);
 
@@ -381,6 +425,32 @@ const TEMPLATES: SubTemplate[] = [
         rewards: { gold: gold(t, 1.3), exp: exp(t, 1.8), items: { [TIER_PLATE[t - 1]]: 1 } },
       },
     ],
+  },
+  {
+    npc: 'researcher',
+    name: '노아',
+    after: 'm_research',
+    make: (t) => {
+      const [a, an, ac, b, bn, bc] = RESEARCH_TARGETS[t - 1];
+      return [
+        {
+          title: `${an} 연구`,
+          offer: [say('노아', `${an}의 습성을 더 알고 싶어. ${ac}마리만 쓰러뜨려 줄래? ${RESEARCH_HINT[a] ?? ''}`)],
+          pending: [say('노아', `${an} ${ac}마리! 기록은 내가 알아서 할게.`)],
+          complete: [say('노아', '좋은 자료가 모였어. 고마워!')],
+          objectives: [{ type: 'killSpecies', species: a, count: ac, label: `${an} 처치` }],
+          rewards: { gold: gold(t, 1.2), exp: exp(t, 1.1), items: { [ESS(t)]: 2 + t } },
+        },
+        {
+          title: `${bn} 표본`,
+          offer: [say('노아', `이번엔 ${bn}이야. 까다로운 녀석이지만 ${bc}마리만 부탁해. ${RESEARCH_HINT[b] ?? ''}`)],
+          pending: [say('노아', `${bn}, 조심해!`)],
+          complete: [say('노아', '완벽해! 도감 연구가 한 걸음 더 나아갔어.')],
+          objectives: [{ type: 'killSpecies', species: b, count: bc, label: `${bn} 처치` }],
+          rewards: { gold: gold(t, 1.6), exp: exp(t, 1.4), items: { [TIER_PLATE[t - 1]]: 2 } },
+        },
+      ];
+    },
   },
   {
     npc: 'stranger',
