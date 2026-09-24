@@ -31,6 +31,8 @@ export interface BuildingState {
   /** 발전기: 지금 타고 있는 연료의 남은 시간(초) */
   fuel?: number;
   rr?: number;
+  /** 마력 치유석: 누군가 회복 중이면 true (그때만 전력을 쓴다) */
+  active?: boolean;
   /** 제작대: 레벨과 충전된 에너지 */
   level?: number;
   energy?: number;
@@ -174,7 +176,7 @@ export class Factory {
       id++;
     }
     for (const m of this.state.buildings) {
-      if (!MACHINE_TYPES.has(m.type) && m.type !== 'workbench') continue;
+      if (!MACHINE_TYPES.has(m.type) && m.type !== 'workbench' && m.type !== 'healer') continue;
       for (const [dx, dy] of DIRS) {
         const n = this.at(m.x + dx, m.y + dy);
         if (n && conducts(n)) {
@@ -226,6 +228,7 @@ export class Factory {
       if (MACHINE_TYPES.has(b.type) && b.crafting && this.netOf.has(b)) this.netDemand[this.netOf.get(b)!] += BUILDINGS[b.type].power;
       // 제작대는 에너지가 덜 찼을 때만 전력을 쓴다
       if (b.type === 'workbench' && (b.energy ?? 0) < workbenchCap(b) && this.netOf.has(b)) this.netDemand[this.netOf.get(b)!] += BUILDINGS.workbench.power;
+      if (b.type === 'healer' && b.active && this.netOf.has(b)) this.netDemand[this.netOf.get(b)!] += BUILDINGS.healer.power;
     }
     for (const b of buildings) {
       if (b.type !== 'generator') continue;

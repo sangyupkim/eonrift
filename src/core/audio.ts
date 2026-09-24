@@ -1,6 +1,6 @@
 /**
- * Web Audio로 즉석에서 만드는 효과음과 배경음.
- * 소리 파일이 없어서 용량이 들지 않는다. 브라우저 정책상 첫 터치 뒤에 켜진다.
+ * Web Audio 효과음(즉석 합성)과 배경음(마을·던전·차원집은 sound/ 파일).
+ * 브라우저 정책상 첫 터치 뒤에 켜진다.
  */
 export class Audio {
   private ctx: AudioContext | null = null;
@@ -150,12 +150,78 @@ export class Audio {
     }
   }
 
-  /** 장소별 배경음: 느린 화음 반복 */
+  /** 파일로 된 배경음 (sound/ 폴더, CC BY 4.0 · orangefreesounds.com) */
+  private static readonly FILES: Record<string, string> = {
+    dungeon: 'sound/dungeon.mp3',
+    village: 'sound/village.mp3',
+    home: 'sound/home.mp3',
+  };
+  private buffers = new Map<string, Promise<AudioBuffer | null>>();
+
+  private loadBuffer(url: string): Promise<AudioBuffer | null> {
+    let p = this.buffers.get(url);
+    if (!p) {
+      const ctx = this.ctx!;
+      p = fetch(url)
+        .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(url))))
+        .then((b) => new Promise<AudioBuffer>((res, rej) => ctx.decodeAudioData(b, res, rej)))
+        .catch(() => null);
+      this.buffers.set(url, p);
+    }
+    return p;
+  }
+
+  /** 파일 배경음을 끊김 없이 반복 재생한다. 파일을 못 읽으면 합성 배경음으로 */
+  private playFile(kind: string, url: string): void {
+    const ctx = this.ctx!;
+    const out = ctx.createGain();
+    out.gain.value = 0;
+    out.connect(this.master!);
+    let src: AudioBufferSourceNode | null = null;
+    let stopped = false;
+    this.music = {
+      stop: () => {
+        stopped = true;
+        out.gain.setTargetAtTime(0, ctx.currentTime, 0.4);
+        window.setTimeout(() => {
+          src?.stop();
+          out.disconnect();
+        }, 2000);
+      },
+    };
+    void this.loadBuffer(url).then((buf) => {
+      if (stopped || this.musicKind !== kind) return;
+      if (!buf) {
+        this.music = null;
+        this.playSynth(kind);
+        return;
+      }
+      src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.loop = true;
+      // MP3 앞뒤에 붙는 짧은 무음을 건너뛰어 이음새를 줄인다
+      src.loopStart = Math.min(0.03, buf.duration / 4);
+      src.loopEnd = Math.max(src.loopStart + 0.1, buf.duration - 0.03);
+      src.connect(out);
+      src.start(0, src.loopStart);
+      out.gain.setTargetAtTime(0.55, ctx.currentTime, 0.6);
+    });
+  }
+
+  /** 장소별 배경음 (마을·던전·차원집은 파일, 보스전은 합성음) */
   playMusic(kind: string, force = false): void {
     if (this.musicKind === kind && !force) return;
     this.musicKind = kind;
     this.music?.stop();
     this.music = null;
+    if (!this.ctx || !this.master) return;
+    const file = Audio.FILES[kind];
+    if (file) return this.playFile(kind, file);
+    this.playSynth(kind);
+  }
+
+  /** 합성 배경음: 느린 화음 반복 */
+  private playSynth(kind: string): void {
     if (!this.ctx || !this.master) return;
     const ctx = this.ctx;
     const out = ctx.createGain();

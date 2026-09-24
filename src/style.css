@@ -695,9 +695,7 @@ button {
 
 /* ================= v1.0 추가 ================= */
 .hud[data-mode='village'] .act.skill,
-.hud[data-mode='village'] .act.potion,
 .hud[data-mode='home'] .act.skill,
-.hud[data-mode='home'] .act.potion,
 .hud[data-mode='home'] .act.dodge,
 .hud:not([data-mode='home']) .build-btn {
   display: none;

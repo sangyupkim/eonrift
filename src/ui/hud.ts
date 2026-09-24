@@ -355,9 +355,15 @@ export class Hud {
     });
   }
 
-  setPotions(n: number): void {
+  private potionShade: HTMLDivElement | null = null;
+  setPotions(n: number, cooldown = 0): void {
     this.potionCount.textContent = String(n);
     this.potionBtn.classList.toggle('empty', n === 0);
+    if (!this.potionShade) {
+      this.potionShade = el('div', 'cooldown') as HTMLDivElement;
+      this.potionBtn.appendChild(this.potionShade);
+    }
+    this.potionShade.style.transform = `scaleY(${Math.min(1, Math.max(0, cooldown))})`;
   }
 
   setBagCount(used: number, total: number): void {

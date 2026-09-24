@@ -160,3 +160,19 @@ describe('레일 막힘 방지', () => {
     expect(out.buffer!.return_stone).toBe(10);
   });
 });
+
+describe('마력 치유석', () => {
+  it('회복 중일 때만 전력을 받고, 발전기 연료를 쓴다', () => {
+    const f = new Factory({ sizeLevel: 0, buildings: [] }, 8);
+    const h = f.place('healer', 0, 0, 0)!;
+    f.place('wire', 1, 0, 0);
+    const g = f.place('generator', 2, 0, 0)!;
+    g.buffer = { essence_low: 3 };
+    f.simulate(10);
+    expect(g.buffer!.essence_low).toBe(3);
+    h.active = true;
+    f.simulate(1);
+    expect(f.powerOf(h)).toBeGreaterThan(0);
+    expect(g.buffer!.essence_low).toBe(2);
+  });
+});

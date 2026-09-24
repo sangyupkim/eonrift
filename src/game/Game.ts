@@ -50,11 +50,22 @@ interface Run {
   /** 던전에 들어갈 때 가방에 있던 것 (결과 화면에서 새로 얻은 것만 보여 준다) */
   start: Map<string, number>;
   startEquips: Set<string>;
+  /** 물약 주머니 (좋은 것부터, 최대 POTION_POUCH개) */
+  pouch: string[];
 }
 
 const ESSENCE = (tier: number) => (tier <= 3 ? 'essence_low' : tier <= 5 ? 'essence_mid' : 'essence_high');
 const NPC_IDS = new Set<string>(NPCS.map((n) => n.id));
 const MAX_STAGE = 70;
+
+/** 물약 (좋은 순서) → 회복 비율 */
+const POTION_KINDS: [string, number][] = [
+  ['potion_high', 1],
+  ['potion_mid', 0.7],
+  ['potion', 0.4],
+];
+const POTION_POUCH = 10;
+const POTION_COOLDOWN = 8;
 
 export class Game {
   private renderer: WebGLRenderer;
@@ -241,6 +252,7 @@ export class Game {
 
   private saveNow(): void {
     if (this.mode === 'title') return;
+    if (this.player) this.progress.data.hp = Math.max(1, Math.round(this.player.hp));
     this.progress.save();
   }
 
@@ -268,6 +280,8 @@ export class Game {
 
   private loadLevel(level: Level, fogMap: boolean): void {
     if (this.level) this.level.dispose();
+    // 차원집을 떠나면 치유석은 쉰다 (전력을 쓰지 않는다)
+    for (const b of this.factory.state.buildings) if (b.type === 'healer') b.active = false;
     this.level = level;
     this.buildMode(false);
     this.gathering = null;
@@ -282,7 +296,8 @@ export class Game {
     this.fade();
   }
 
-  private makePlayer(x: number, z: number, facing: number, keepHp = false): void {
+  /** 장면이 바뀌어도 HP는 그대로 이어진다 (쓰러졌으면 1). fullHeal이면 가득 */
+  private makePlayer(x: number, z: number, facing: number, keepHp = false, fullHeal = false): void {
     const prev = this.player;
     if (prev) prev.rig.root.parent?.remove(prev.rig.root);
     const cls = CLASSES[this.progress.data.currentClass];
@@ -293,7 +308,8 @@ export class Game {
     const st = this.progress.stats();
     this.player.maxHp = st.maxHp;
     this.player.maxMp = st.maxMp;
-    this.player.hp = keepHp && prev ? Math.min(st.maxHp, Math.max(1, prev.hp)) : st.maxHp;
+    const carried = prev ? prev.hp : (this.progress.data.hp ?? st.maxHp);
+    this.player.hp = fullHeal ? st.maxHp : Math.min(st.maxHp, Math.max(1, carried));
     this.player.mp = keepHp && prev ? Math.min(st.maxMp, prev.mp) : st.maxMp;
     this.level.scene.add(this.player.rig.root);
     const game = this;
@@ -385,8 +401,9 @@ export class Game {
       const start = new Map<string, number>();
       for (const b of [bag, dim]) for (const [id, n] of b.totals()) start.set(id, (start.get(id) ?? 0) + n);
       const startEquips = new Set([...bag.equips(), ...dim.equips()].map((e) => e.uid));
-      this.run = { tier, stage, bag, dimBag: dim, gold: 0, exp: 0, time: 0, stagesCleared: 0, roomCleared: false, start, startEquips };
+      this.run = { tier, stage, bag, dimBag: dim, gold: 0, exp: 0, time: 0, stagesCleared: 0, roomCleared: false, start, startEquips, pouch: [] };
     }
+    this.fillPouch();
     this.hud.setLocation(`${tier}-${stage} · ${dungeon.theme.name}`, dungeon.theme.portalColor);
     this.audio.playMusic('dungeon');
     this.audio.play('portal');
@@ -544,6 +561,7 @@ export class Game {
   }
 
   private gearKey = '';
+  private healFx = 0;
   /** 이번 방 보스와 싸운 시간 */
   private bossTime = 0;
   private timeOver = false;
@@ -834,7 +852,7 @@ export class Game {
     if (id === this.progress.data.currentClass) return;
     this.progress.data.currentClass = id;
     const pos = { ...this.player.position };
-    this.makePlayer(pos.x, pos.z, this.player.facing);
+    this.makePlayer(pos.x, pos.z, this.player.facing, false, true);
     this.level.effects.pillar(pos.x, pos.z, CLASSES[id].look.tunic);
     this.audio.play('level');
     this.hud.toast(`${CLASSES[id].name}(으)로 전환했습니다`);
@@ -1235,6 +1253,7 @@ export class Game {
       else items.delete(id);
     }
     const equips = [...run.bag.equips(), ...run.dimBag.equips()].filter((e) => !run.startEquips.has(e.uid));
+    this.returnPouch();
     p.setFlag('returned');
     this.audio.play('portal');
     const explored = this.exploredRatio();
@@ -1263,6 +1282,8 @@ export class Game {
     const kept = run.dimBag.totals();
     const keptEquips = run.dimBag.equips();
     run.bag.clear();
+    // 물약 주머니는 몸에 지닌 것이라 잃지 않는다
+    this.returnPouch();
     p.setFlag('returned');
     const explored = this.exploredRatio();
     this.run = null;
@@ -1609,6 +1630,29 @@ export class Game {
     });
     level.update(dt, pl.position);
 
+    // 차원집 마력 치유석: 곁에 서 있으면 전력을 써서 빠르게 회복
+    if (level instanceof HomeScene) {
+      for (const b of this.factory.state.buildings) {
+        if (b.type !== 'healer') continue;
+        const near = Math.hypot((b.x + 0.5) * TILE - pl.position.x, (b.y + 0.5) * TILE - pl.position.z) < TILE * 1.6;
+        const needs = pl.hp < pl.maxHp || pl.mp < pl.maxMp;
+        b.active = near && needs;
+        if (b.active && this.factory.powerOf(b) > 0) {
+          const k = 0.12 * dt * this.factory.powerOf(b);
+          pl.hp = Math.min(pl.maxHp, pl.hp + pl.maxHp * k);
+          pl.mp = Math.min(pl.maxMp, pl.mp + pl.maxMp * k);
+          this.healFx += dt;
+          if (this.healFx > 0.25) {
+            this.healFx = 0;
+            level.particles.burst(pl.position.x, 0.4, pl.position.z, 0x6aff9a, 4, 0.5);
+          }
+        } else if (b.active && near && !this.factory.connected(b) && this.healFx >= 0) {
+          this.healFx = -5;
+          this.hud.toast('마력 치유석이 마력선으로 발전기와 이어져 있지 않습니다', 2000);
+        }
+      }
+      if (this.healFx < 0) this.healFx = Math.min(0, this.healFx + dt);
+    }
     if (level instanceof DungeonScene && this.run) {
       const boss = level.boss;
       if (boss && boss.alive && boss.aggro) {
@@ -1658,23 +1702,51 @@ export class Game {
     if (this.bigMap) mm.draw({ ...pl.position, facing: pl.facing }, markers, true);
   }
 
+  /**
+   * 물약: 던전에는 물약 주머니(최대 10개)만 들고 간다. 좋은 물약부터 채우고, 방을 넘어갈 때마다 가방에서 다시 채운다.
+   * 마을·차원집에서는 가방의 물약을 바로 마신다. 어디서든 재사용 대기 8초
+   */
   private drinkPotion(): void {
-    if (!(this.level instanceof DungeonScene)) return this.hud.toast('물약은 던전에서 마실 수 있습니다');
-    if (this.potionCd > 0) return;
-    // 가장 좋은 물약부터 마신다
-    const kinds: [string, number][] = [
-      ['potion_high', 1],
-      ['potion_mid', 0.7],
-      ['potion', 0.4],
-    ];
-    const pick = kinds.find(([id]) => this.progress.count(id) > 0);
-    if (!pick || !this.progress.take(pick[0], 1)) return this.hud.toast('물약이 없습니다 (상점·연금 솥에서 구하기)');
+    if (this.potionCd > 0) return this.hud.toast(`물약 재사용 대기 ${Math.ceil(this.potionCd)}초`, 900);
     const pl = this.player;
-    pl.hp = Math.min(pl.maxHp, pl.hp + pl.maxHp * pick[1]);
-    pl.mp = Math.min(pl.maxMp, pl.mp + pl.maxMp * pick[1]);
-    this.potionCd = 1;
+    if (pl.hp >= pl.maxHp && pl.mp >= pl.maxMp) return this.hud.toast('HP와 MP가 가득합니다', 900);
+    let id: string | undefined;
+    if (this.run && this.level instanceof DungeonScene) {
+      id = this.run.pouch.shift();
+      if (!id) return this.hud.toast('물약 주머니가 비었습니다 (다음 방으로 가면 가방에서 다시 채워짐)');
+    } else {
+      id = POTION_KINDS.find(([k]) => this.progress.count(k) > 0)?.[0];
+      if (!id || !this.progress.take(id, 1)) return this.hud.toast('물약이 없습니다 (상점·연금 솥에서 구하기)');
+    }
+    const heal = POTION_KINDS.find(([k]) => k === id)![1];
+    pl.hp = Math.min(pl.maxHp, pl.hp + pl.maxHp * heal);
+    pl.mp = Math.min(pl.maxMp, pl.mp + pl.maxMp * heal);
+    this.potionCd = POTION_COOLDOWN;
     this.level.effects.ring(pl.position.x, pl.position.z, 2, 0xff7a9a, 0.4);
     this.audio.play('pickup');
+  }
+
+  /** 물약 주머니를 가방·창고의 물약으로 채운다 (좋은 물약부터) */
+  private fillPouch(): void {
+    const run = this.run;
+    if (!run) return;
+    const before = run.pouch.length;
+    while (run.pouch.length < POTION_POUCH) {
+      const id = POTION_KINDS.find(([k]) => this.progress.count(k) > 0)?.[0];
+      if (!id || !this.progress.take(id, 1)) break;
+      run.pouch.push(id);
+    }
+    const rank = (id: string) => POTION_KINDS.findIndex(([k]) => k === id);
+    run.pouch.sort((a, b) => rank(a) - rank(b));
+    if (run.pouch.length > before && before > 0) this.hud.toast(`물약 주머니 보충 (${run.pouch.length}/${POTION_POUCH})`, 1500);
+  }
+
+  /** 던전을 나올 때 남은 물약을 가방(가득이면 창고)으로 돌려놓는다 */
+  private returnPouch(): void {
+    const run = this.run;
+    if (!run) return;
+    for (const id of run.pouch) if (run.bag.add(id, 1) === 0) this.progress.add(id, 1);
+    run.pouch = [];
   }
 
   private refreshHud(): void {
@@ -1691,7 +1763,7 @@ export class Game {
       this.hud.setObjective([head, ...questLines(p, this.quests)].join('\n'));
     } else this.hud.setObjective(objective(p, this.quests));
     this.hud.setBuffs(pl.buffs.map((b) => `${b.name}${b.stacks !== undefined ? ` ${b.stacks}회` : ''} ${Math.ceil(b.t)}s`));
-    this.hud.setPotions(p.count('potion') + p.count('potion_mid') + p.count('potion_high'));
+    this.hud.setPotions(this.run && this.level instanceof DungeonScene ? this.run.pouch.length : POTION_KINDS.reduce((a, [k]) => a + p.count(k), 0), this.potionCd / POTION_COOLDOWN);
     this.hud.setDodgeCooldown(pl.rollCooldown / (PLAYER.rollCooldown + PLAYER.rollTime));
     const skills = pl.cls.skills;
     const quick = p.cls.quick.map((i) => (i >= 0 && (p.cls.skills[i] ?? 0) > 0 ? i : -1));

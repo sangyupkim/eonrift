@@ -93,6 +93,14 @@ export function buildBuildingGeometry(type: BuildingType, connections: boolean[]
         part(new BoxGeometry(0.6, 0.12, 0.12), metal, { pos: [0.1, 1.95, 0] }),
         arrow(0xffffff, 1.15),
       ]);
+    case 'healer':
+      return merge([
+        part(new CylinderGeometry(0.8, 0.95, 0.35, 8), dark, { pos: [0, 0.18, 0] }),
+        part(new CylinderGeometry(0.55, 0.7, 0.3, 8), metal, { pos: [0, 0.5, 0] }),
+        part(new OctahedronGeometry(0.45), 0x6aff9a, { pos: [0, 1.25, 0], scale: [1, 1.5, 1] }),
+        part(new OctahedronGeometry(0.18), 0xd8ffe8, { pos: [0.45, 0.8, 0.2] }),
+        part(new OctahedronGeometry(0.15), 0xd8ffe8, { pos: [-0.4, 0.75, -0.25] }),
+      ]);
     case 'workbench':
       return merge([
         part(new BoxGeometry(1.8, 0.16, 1.2), 0xb07a3a, { pos: [0, 0.9, 0] }),

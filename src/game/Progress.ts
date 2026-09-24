@@ -44,6 +44,8 @@ export interface SaveData {
   ngPlus: number;
   factory: FactoryState;
   lastSaved: number;
+  /** 지금 HP (마을·차원집에 가도 회복되지 않는다). 없으면 가득 */
+  hp?: number;
   settings: { shadows: boolean; sound: boolean };
   /** 곡괭이·도끼 내구도 */
   tools: Record<ToolKind, ToolState>;
