@@ -32,10 +32,10 @@ describe('Progress', () => {
     expect(p.cls.points).toBe(POINTS_PER_LEVEL * 2);
     const before = p.stats();
     expect(p.allocate('vit', 3)).toBe(true);
-    expect(p.allocate('str', 1)).toBe(true);
+    expect(p.allocate('str', 2)).toBe(true);
     const after = p.stats();
     expect(after.maxHp - before.maxHp).toBe(30);
-    expect(after.atk - before.atk).toBe(2);
+    expect(after.atk).toBeGreaterThan(before.atk);
     expect(p.allocate('dex', 100)).toBe(false);
   });
 

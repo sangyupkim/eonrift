@@ -2104,3 +2104,7 @@ textarea.code {
   background: rgba(160, 120, 255, 0.25);
   border-color: rgba(190, 160, 255, 0.6);
 }
+.boss-bar.hurry .boss-name {
+  color: #ff5a5a;
+  animation: blink 0.8s infinite;
+}

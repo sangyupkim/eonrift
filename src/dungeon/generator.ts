@@ -94,6 +94,13 @@ function tryGenerate(rng: Rng, seed: number, tier: number, stage: number): Dunge
 
   // 1. 방 배치
   const rooms: Room[] = [];
+  // 보스 방(5·10번째 방)은 넓은 방을 먼저 놓는다
+  const bossStage = stage === 5 || stage === 10;
+  if (bossStage) {
+    const w = stage === 10 ? 17 : 14;
+    const h = stage === 10 ? 14 : 12;
+    rooms.push({ id: 0, x: rng.int(1, width - w - 1), y: rng.int(1, height - h - 1), w, h, type: 'combat' });
+  }
   const targetRooms = rng.int(8, 10);
   for (let i = 0; i < 600 && rooms.length < targetRooms; i++) {
     const w = rng.int(6, 10);
@@ -186,7 +193,21 @@ function tryGenerate(rng: Rng, seed: number, tier: number, stage: number): Dunge
   }
 
   // 4. 시작 방과 출구 방 (시작에서 가장 먼 방이 출구)
-  const startRoom = rng.pick(rooms);
+  let startRoom = rng.pick(rooms);
+  if (bossStage) {
+    // 보스 방에서 가장 먼 방에서 시작한다
+    const b = roomCenter(rooms[0]);
+    const fromBoss = bfs(cells, width, height, b.x, b.y);
+    let best = -1;
+    for (const r of rooms.slice(1)) {
+      const c = roomCenter(r);
+      const d = fromBoss[c.y * width + c.x];
+      if (d > best) {
+        best = d;
+        startRoom = r;
+      }
+    }
+  }
   startRoom.type = 'start';
   const start = roomCenter(startRoom);
   const distances = bfs(cells, width, height, start.x, start.y);
@@ -200,6 +221,7 @@ function tryGenerate(rng: Rng, seed: number, tier: number, stage: number): Dunge
       exitRoom = r;
     }
   }
+  if (bossStage) exitRoom = rooms[0];
   exitRoom.type = 'exit';
   const exit = roomCenter(exitRoom);
 

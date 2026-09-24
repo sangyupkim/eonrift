@@ -812,9 +812,16 @@ export class Screens {
         .join('')}</ul>`;
     } else {
       const items = ITEM_LIST.filter((i) => p.count(i.id) > 0 && i.value > 0)
-        .map((i) => `<li>${itemGem(i.id)}<div><b>${i.name} <span class="dim">× ${p.count(i.id)}</span></b><small>개당 ${i.value} G</small></div><button data-sell="${i.id}">1개</button><button data-sellall="${i.id}">전부</button></li>`)
+        .map((i) => {
+          const inBag = p.count(i.id) - p.stored(i.id);
+          return `<li>${itemGem(i.id)}<div><b>${i.name} <span class="dim">× ${p.count(i.id)}</span></b><small>개당 ${i.value} G · 창고 ${p.stored(i.id)}${inBag ? ` · 가방 ${inBag}` : ''}</small></div><button data-sell="${i.id}">1개</button><button data-sellall="${i.id}">전부</button></li>`;
+        })
         .join('');
-      const eqs = p.data.equips.map((e) => `<li>${equipGem(e)}<div>${equipTitle(e)}<small>${equipLine(e)}</small></div><button data-selleq="${e.uid}">${equipValue(e)} G</button></li>`).join('');
+      // 창고 장비 + 가방·차원가방 장비
+      const bagEquips = [p.invBag, p.dimBagObj].flatMap((b) => b.equips());
+      const eqs = [...p.data.equips, ...bagEquips]
+        .map((e) => `<li>${equipGem(e)}<div>${equipTitle(e)}<small>${bagEquips.includes(e) ? '<span class="ok">[가방]</span> ' : '<span class="dim">[창고]</span> '}${equipLine(e)}</small></div><button data-selleq="${e.uid}">${equipValue(e)} G</button></li>`)
+        .join('');
       body = `<ul class="list scroll">${items}${eqs}${!items && !eqs ? '<li class="empty">팔 물건이 없습니다</li>' : ''}</ul>`;
     }
     const s = this.open(
@@ -852,9 +859,19 @@ export class Screens {
       again(tab, `${ITEMS[id].name} ${n}개 판매 +${ITEMS[id].value * n} G`);
     });
     this.on(s, '[data-selleq]', (b) => {
-      const e = p.data.equips.find((x) => x.uid === b.dataset.selleq);
+      const uid = b.dataset.selleq;
+      let e = p.data.equips.find((x) => x.uid === uid);
+      if (e) p.data.equips = p.data.equips.filter((x) => x !== e);
+      else
+        for (const bag of [p.invBag, p.dimBagObj]) {
+          const i = bag.slots.findIndex((x) => x?.equip?.uid === uid);
+          if (i >= 0) {
+            e = bag.slots[i]!.equip;
+            bag.slots[i] = null;
+            break;
+          }
+        }
       if (!e) return;
-      p.data.equips = p.data.equips.filter((x) => x !== e);
       p.data.gold += equipValue(e);
       again(tab, `${equipName(e)} 판매 +${equipValue(e)} G`);
     });

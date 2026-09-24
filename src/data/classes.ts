@@ -3,8 +3,8 @@ export type ClassId = 'sword' | 'mage' | 'archer';
 export type StatKey = 'str' | 'int' | 'dex' | 'vit' | 'mag';
 
 export const STAT_INFO: Record<StatKey, { name: string; desc: string }> = {
-  str: { name: '힘', desc: '물리 공격력 +2 (검사·궁수)' },
-  int: { name: '지능', desc: '마법 공격력 +2 (마법사)' },
+  str: { name: '힘', desc: '물리 공격력 +0.5, 무기 위력 +0.67% (검사·궁수)' },
+  int: { name: '지능', desc: '마법 공격력 +0.5, 무기 위력 +0.67% (마법사)' },
   dex: { name: '민첩', desc: '치명타 확률 +0.3%, 공격 속도 +0.5%' },
   vit: { name: '체력', desc: '최대 HP +10' },
   mag: { name: '마력', desc: '최대 MP +6' },

@@ -1,6 +1,7 @@
 import { bustUrl, itemIconUrl } from '../ui/itemIcons';
 import { decodeSave, encodeSave } from './saveCode';
 import { gearLook } from '../models/items';
+import { BOSS_TIME_LIMIT } from '../data/monsters';
 import { TOOL_KIND_NAMES, TOOL_TIER_NAMES, toolBonusChance, toolName, toolSpeed, toolWear, type ToolKind } from '../data/tools';
 import { MeshLambertMaterial, OrthographicCamera, PCFShadowMap, Plane, Raycaster, Vector2, Vector3, WebGLRenderer } from 'three';
 import { BAG_SLOTS, CAMERA_OFFSET, PLAYER, SCREEN_UP, TILE, VIEW_HEIGHT } from '../config';
@@ -354,6 +355,7 @@ export class Game {
         this.audio.play('portal');
       },
     });
+    this.bossTime = 0;
     const continuing = !background && this.run !== null;
     const prevPlayer = this.player;
     this.loadLevel(dungeon, true);
@@ -510,6 +512,9 @@ export class Game {
   }
 
   private gearKey = '';
+  /** 이번 방 보스와 싸운 시간 */
+  private bossTime = 0;
+  private timeOver = false;
   /** 장비가 바뀌면 캐릭터 모델을 새 장비 모습으로 다시 만든다 (위치·HP·방향은 그대로) */
   private refreshGear(): void {
     const gear = gearLook(this.progress.cls.equipment, this.progress.data.tools);
@@ -1173,7 +1178,7 @@ export class Game {
   }
 
   /** 쓰러짐: 착용 장비는 남고, 일반 가방은 모두 잃고, 차원가방은 지켜진다 */
-  private fall(): void {
+  private fall(timeOver = false): void {
     const run = this.run;
     if (!run) return;
     const p = this.progress;
@@ -1190,8 +1195,10 @@ export class Game {
       () =>
         this.screens.result(
           {
-            title: '쓰러졌다…',
-            note: '틈새가 몸을 마을로 밀어냈다. 일반 가방의 짐은 틈새에 삼켜졌다.',
+            title: timeOver ? '시간 초과…' : '쓰러졌다…',
+            note: timeOver
+              ? `${BOSS_TIME_LIMIT / 60}분 안에 수호자를 쓰러뜨리지 못해 틈새가 닫혔다. 일반 가방의 짐은 틈새에 삼켜졌다. (장비를 강화해서 다시 도전하자)`
+              : '틈새가 몸을 마을로 밀어냈다. 일반 가방의 짐은 틈새에 삼켜졌다.',
             items: kept,
             equips: keptEquips,
             lost,
@@ -1421,7 +1428,10 @@ export class Game {
         this.deadTimer += dt;
         this.player.update(dt, { move: { x: 0, y: 0 }, applyMove: () => {} });
         this.level.update(dt, this.player.position);
-        if (this.deadTimer > 1.6 && this.mode === 'dead') this.fall();
+        if (this.deadTimer > 1.6 && this.mode === 'dead') {
+          this.fall(this.timeOver);
+          this.timeOver = false;
+        }
         break;
       case 'menu':
         if (this.input.consume('pause') || (this.input.consume('bag') && this.screens.isOpen)) this.screens.close();
@@ -1525,8 +1535,22 @@ export class Game {
     if (level instanceof DungeonScene && this.run) {
       const boss = level.boss;
       if (boss && boss.alive && boss.aggro) {
+        // 보스 제한 시간: 싸움이 시작되면 흐른다
+        this.bossTime += dt;
+        const left = Math.max(0, BOSS_TIME_LIMIT - this.bossTime);
+        if (left <= 0 && this.mode === 'play') {
+          this.hud.setBoss(null);
+          this.hud.toast('제한 시간 초과! 틈새가 닫힌다…', 3000);
+          this.mode = 'dead';
+          this.deadTimer = 0;
+          this.timeOver = true;
+          this.hud.setVisible(false);
+          this.audio.play('fall');
+          return;
+        }
+        const clock = `⏱ ${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, '0')}`;
         const tag = boss.shielded ? ` · 보호막 (수호병 ${boss.guardsLeft})` : boss.phase2 ? ' · 격노' : '';
-        this.hud.setBoss(`${boss.name}${tag}`, boss.hp / boss.maxHp, boss.bars, boss.shielded);
+        this.hud.setBoss(`${boss.name}${tag}  ${clock}`, boss.hp / boss.maxHp, boss.bars, boss.shielded, left < 60);
         this.audio.playMusic('boss');
       }
       if (!this.run.roomCleared && level.exitOpen) this.roomClear();

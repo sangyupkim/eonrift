@@ -54,8 +54,16 @@ export const MIDBOSS_NAMES = [
 ];
 
 /** 단계·방·회차에 따른 몬스터 능력치 배율. 같은 단계 안에서도 방이 깊을수록 강해진다 */
-export function tierScale(tier: number, stage: number, ngPlus: number): { hp: number; atk: number } {
+export function tierScale(tier: number, stage: number, ngPlus: number): { hp: number; atk: number; def: number } {
   const ng = 1 + ngPlus * 0.6;
-  const deep = 1 + (stage - 1) * 0.12;
-  return { hp: (1 + (tier - 1) * 1.05) * deep * ng, atk: (1 + (tier - 1) * 0.85) * deep * ng };
+  // 방이 깊을수록 체력 18%·공격 10%씩, 단계가 오를 때마다 체력 ×2.1 · 공격 ×1.8 · 방어 ×1.3
+  const deep = 1 + (stage - 1) * 0.18;
+  return {
+    hp: Math.pow(2.1, tier - 1) * deep * ng,
+    atk: Math.pow(1.8, tier - 1) * (1 + (stage - 1) * 0.1) * ng,
+    def: Math.pow(1.3, tier - 1) * (1 + (stage - 1) * 0.05),
+  };
 }
+
+/** 보스 제한 시간 (초) */
+export const BOSS_TIME_LIMIT = 300;

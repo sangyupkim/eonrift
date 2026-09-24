@@ -20,7 +20,7 @@ export type MonsterKind = 'normal' | 'elite' | 'midboss' | 'boss';
 
 type State = 'idle' | 'chase' | 'windup' | 'dash' | 'recover' | 'dead';
 
-type BossPattern = 'slam' | 'cone' | 'volley' | 'charge' | 'summon' | 'rain';
+type BossPattern = 'slam' | 'cone' | 'volley' | 'charge' | 'summon' | 'rain' | 'cross' | 'nova' | 'barrage';
 
 export interface ProjectileSpec {
   x: number;
@@ -49,14 +49,15 @@ export interface MonsterWorld {
 }
 
 const BOSS_ARCH: Archetype[] = ['tank', 'charger', 'ranged', 'bomber', 'tank', 'melee', 'ranged'];
+/** 앞의 세 패턴은 중간보스도 쓰고, 수호자는 전부 쓴다 */
 const BOSS_PATTERNS: BossPattern[][] = [
-  ['slam', 'cone', 'summon'],
-  ['charge', 'slam', 'cone'],
-  ['volley', 'rain', 'summon'],
-  ['volley', 'slam', 'rain'],
-  ['slam', 'charge', 'volley', 'summon'],
-  ['cone', 'rain', 'charge', 'slam'],
-  ['volley', 'rain', 'charge', 'summon', 'slam'],
+  ['slam', 'cone', 'cross', 'summon', 'nova'],
+  ['charge', 'slam', 'cross', 'cone', 'barrage'],
+  ['volley', 'rain', 'nova', 'summon', 'cross'],
+  ['volley', 'slam', 'barrage', 'rain', 'nova'],
+  ['slam', 'charge', 'cross', 'volley', 'summon', 'barrage'],
+  ['cone', 'rain', 'nova', 'charge', 'slam', 'cross'],
+  ['volley', 'rain', 'cross', 'charge', 'summon', 'slam', 'nova', 'barrage'],
 ];
 
 const HIT_TINT = new Color(0xffffff);
@@ -119,13 +120,15 @@ export class Monster {
     this.arch = archetype;
     this.def = ARCHETYPES[archetype];
     const scale = tierScale(tier, stage, ngPlus);
-    const mult = kind === 'boss' ? { hp: 26, atk: 1.5, size: 2.1 } : kind === 'midboss' ? { hp: 14, atk: 1.3, size: 1.65 } : kind === 'elite' ? { hp: 3, atk: 1.4, size: 1.35 } : { hp: 1, atk: 1, size: 1 };
-    this.maxHp = this.hp = Math.round(this.def.hp * scale.hp * mult.hp);
+    // 보스 체력은 모양(원형)과 관계없이 같은 기준(220)에서 계산한다.
+    // 기준: 구리 무기 +5로 X-10 수호자를 5분 안에 잡을 수 있을 정도
+    const mult = kind === 'boss' ? { hp: 39, atk: 1.6, size: 2.1 } : kind === 'midboss' ? { hp: 21, atk: 1.4, size: 1.65 } : kind === 'elite' ? { hp: 3, atk: 1.4, size: 1.35 } : { hp: 1, atk: 1, size: 1 };
+    this.maxHp = this.hp = Math.round((boss ? 220 : this.def.hp) * scale.hp * mult.hp);
     // 중간보스 5줄 (3줄을 깎으면 보호막), 수호자 7줄 (3줄·5줄에서 보호막)
     this.bars = kind === 'boss' ? 7 : kind === 'midboss' ? 5 : 1;
     this.gimmickAt = kind === 'boss' ? [4, 2] : kind === 'midboss' ? [2] : [];
     this.atk = this.def.atk * scale.atk * mult.atk;
-    this.defense = this.def.def * (1 + (tier - 1) * 0.6);
+    this.defense = (boss ? 6 : this.def.def) * scale.def;
     this.speed = this.def.speed * (boss ? 0.95 : 1);
     this.radius = this.def.radius * mult.size;
     this.x = x;
@@ -435,7 +438,7 @@ export class Monster {
   private beginBossPattern(world: MonsterWorld, dist: number, toPlayer: number): void {
     if (this.bossQueue.length === 0) {
       const pats = BOSS_PATTERNS[this.tier - 1];
-      this.bossQueue = [...(this.isFinal ? pats : pats.slice(0, 2))].sort(() => Math.random() - 0.5);
+      this.bossQueue = [...(this.isFinal ? pats : pats.slice(0, 3))].sort(() => Math.random() - 0.5);
     }
     let pattern = this.bossQueue.shift()!;
     if (pattern === 'charge' && dist < 3) pattern = 'slam';
@@ -458,6 +461,47 @@ export class Monster {
       case 'summon':
         this.startTelegraph(world, { kind: 'circle', r: 2 }, this.x, this.z, 0, 0.9 * speed);
         break;
+      case 'cross': {
+        // 보스를 중심으로 십자(격노 시 8방향) 베기
+        this.clearTelegraph(world.scene);
+        const n = this.phase2 ? 8 : 4;
+        const base = Math.random() < 0.5 ? 0 : Math.PI / 4;
+        for (let i = 0; i < n; i++) {
+          const t = new Telegraph({ kind: 'line', length: 15, width: 2.2 }, this.x, this.z, base + (i / n) * Math.PI * 2, 1.3 * speed);
+          world.scene.add(t.group);
+          this.rainSpots.push(t);
+        }
+        break;
+      }
+      case 'nova': {
+        // 바깥 고리가 터진다: 보스 품으로 파고들어야 산다
+        this.clearTelegraph(world.scene);
+        for (const [ring, count] of [
+          [4.5, 8],
+          [7.5, 12],
+        ] as const) {
+          for (let i = 0; i < count; i++) {
+            const a = (i / count) * Math.PI * 2 + ring;
+            const t = new Telegraph({ kind: 'circle', r: 1.9 }, this.x + Math.cos(a) * ring, this.z + Math.sin(a) * ring, 0, 1.5 * speed);
+            world.scene.add(t.group);
+            this.rainSpots.push(t);
+          }
+        }
+        break;
+      }
+      case 'barrage': {
+        // 방 곳곳에 운석이 떨어진다 (늦게 떨어지는 것도 섞인다)
+        this.clearTelegraph(world.scene);
+        const count = this.phase2 ? 14 : 9;
+        for (let i = 0; i < count; i++) {
+          const a = Math.random() * Math.PI * 2;
+          const r = i < 2 ? Math.random() * 1.5 : 2 + Math.random() * 7;
+          const t = new Telegraph({ kind: 'circle', r: 1.7 }, world.player.x + Math.cos(a) * r, world.player.z + Math.sin(a) * r, 0, 1.0 * speed + Math.random() * 0.6);
+          world.scene.add(t.group);
+          this.rainSpots.push(t);
+        }
+        break;
+      }
       case 'rain': {
         this.clearTelegraph(world.scene);
         const count = this.phase2 ? 6 : 4;
@@ -519,18 +563,26 @@ export class Monster {
           break;
         }
         case 'rain':
+        case 'cross':
+        case 'nova':
+        case 'barrage': {
+          const mult = this.pattern === 'cross' ? 1.3 : this.pattern === 'nova' ? 1.2 : 0.9;
           for (const r of this.rainSpots) {
             if (r.contains(p.x, p.z, 0.35)) {
-              world.hurtPlayer(this.atk * 0.9, r.x, r.z);
+              world.hurtPlayer(this.atk * mult, r.x, r.z);
               break;
             }
           }
           for (const r of this.rainSpots) {
-            world.effects.ring(r.x, r.z, 2, 0xff7040, 0.35);
-            world.burst(r.x, 0.3, r.z, 0xff9a50, 6);
+            if (this.pattern === 'cross') world.effects.slash(this.x, this.z, r.facing, 15, 0xff8a5a, 0.3, 0.5);
+            else {
+              world.effects.ring(r.x, r.z, 2, 0xff7040, 0.35);
+              world.burst(r.x, 0.3, r.z, 0xff9a50, 5);
+            }
           }
-          world.shake(0.2);
+          world.shake(this.pattern === 'cross' ? 0.35 : 0.25);
           break;
+        }
       }
       this.clearTelegraph(world.scene);
       this.setState('recover');

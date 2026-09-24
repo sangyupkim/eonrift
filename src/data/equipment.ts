@@ -56,11 +56,13 @@ export interface EquipStats {
 export function equipStats(e: Equip): EquipStats {
   if (durability(e) <= 0) return { atk: 0, def: 0, hp: 0, mp: 0, crit: 0 };
   const m = GRADES[e.grade].mult * (1 + e.plus * 0.12);
-  const t = e.tier;
+  // 단계마다 방어구 ×1.9 (1, 1.9, 3.6, 6.9, 13, 25, 47)
+  const t = Math.pow(1.9, e.tier - 1);
   const s: EquipStats = { atk: 0, def: 0, hp: 0, mp: 0, crit: 0 };
   switch (e.slot) {
     case 'weapon':
-      s.atk = Math.round(8 * t * m + 4);
+      // 무기는 단계마다 ×2.3: 다음 단계 무기가 이전 단계 +10보다 확실히 세다
+      s.atk = Math.round(14 * Math.pow(2.3, e.tier - 1) * m + 4);
       break;
     case 'helmet':
       s.def = Math.round(1.5 * t * m + 1);

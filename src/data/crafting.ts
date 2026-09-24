@@ -11,11 +11,11 @@ export interface CraftCost {
   gold: number;
 }
 
-/** 제작대 레벨 L → L+1 (레벨 = 만들 수 있는 최고 단계) */
+/** 제작대 레벨 L → L+1 (레벨 = 만들 수 있는 최고 단계). 지금 레벨 단계의 재료로 올린다 */
 export function workbenchUpgradeCost(level: number): CraftCost | null {
   if (level >= WORKBENCH_MAX_LEVEL) return null;
   return {
-    items: { [TIER_INGOT[level]]: 10 + level * 5, [TIER_PLANK[level]]: 10 + level * 2, [level < 3 ? 'essence_low' : level < 5 ? 'essence_mid' : 'essence_high']: 5 + level },
+    items: { [TIER_INGOT[level - 1]]: 10 + level * 5, [TIER_PLANK[level - 1]]: 10 + level * 2, [level < 4 ? 'essence_low' : level < 6 ? 'essence_mid' : 'essence_high']: 5 + level },
     energy: 200 * level,
     gold: 500 * level,
   };

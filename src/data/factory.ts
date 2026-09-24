@@ -92,16 +92,19 @@ export const UPGRADABLE: BuildingType[] = ['generator', 'smelter', 'crusher', 'i
 
 const LEVEL_INGOT = ['copper_ingot', 'iron_ingot', 'gold_ingot', 'diamond', 'titanium_ingot', 'orichalcum_ingot', 'dim_ingot'];
 
-/** Lv.L 강화 도면 (세라): 그 단계 주괴 + 골드 */
+/**
+ * Lv.L 강화 도면 (세라): 한 단계 아래 재료로 산다.
+ * 새 단계 재료는 새 단계 건물이 있어야 만들 수 있으므로, 이전 단계 재료로 계단을 오른다.
+ */
 export function upgradeBlueprintCost(type: BuildingType, level: number): { gold: number; items: Record<string, number> } {
   const heavy = type === 'assembler' || type === 'generator' ? 2 : 1;
-  return { gold: 400 * level * heavy, items: { [LEVEL_INGOT[level - 1]]: 3 * heavy, [PLANKS[level - 1]]: 4 } };
+  return { gold: 400 * level * heavy, items: { [LEVEL_INGOT[level - 2]]: 4 * heavy, [PLANKS[level - 2]]: 4 * heavy } };
 }
 
-/** 설치된 건물을 Lv.L로 올리는 비용 (도면이 있어야 한다) */
+/** 설치된 건물을 Lv.L로 올리는 비용: 역시 한 단계 아래 재료 */
 export function buildingUpgradeCost(type: BuildingType, level: number): Record<string, number> {
   const heavy = type === 'assembler' || type === 'generator' ? 2 : 1;
-  return { [LEVEL_INGOT[level - 1]]: 5 * heavy, [PLANKS[level - 1]]: 5 };
+  return { [LEVEL_INGOT[level - 2]]: 6 * heavy, [PLANKS[level - 2]]: 6 * heavy };
 }
 
 /** 레벨에 따른 가공 속도 배율 */

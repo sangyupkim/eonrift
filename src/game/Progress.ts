@@ -258,7 +258,8 @@ export class Progress {
     const s: Stats = {
       maxHp: def.baseHp + b.vit * 10 + lv * 6,
       maxMp: def.baseMp + b.mag * 6 + lv * 2,
-      atk: main * 2 + lv,
+      // 공격력은 무기가 중심이고 주 스탯이 무기 위력을 키운다 (아래에서 무기 반영)
+      atk: main * 0.5 + lv * 0.3,
       def: Math.floor(b.vit * 0.4),
       crit: 5 + b.dex * 0.3,
       speed: 1 + Math.min(0.6, b.dex * 0.006),
@@ -267,12 +268,13 @@ export class Progress {
     for (const e of Object.values(c.equipment)) {
       if (!e) continue;
       const st = equipStats(e);
-      s.atk += st.atk;
+      s.atk += e.slot === 'weapon' ? st.atk * (1 + main / 150) : st.atk;
       s.def += st.def;
       s.maxHp += st.hp;
       s.maxMp += st.mp;
       s.crit += st.crit;
     }
+    s.atk = Math.round(s.atk);
     s.crit = Math.round(s.crit * 10) / 10;
     return s;
   }

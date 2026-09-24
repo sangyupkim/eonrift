@@ -257,7 +257,7 @@ export class Hud {
   }
 
   /** 레이드 보스 체력: 여러 줄. 지금 줄은 앞에, 다음 줄 색이 뒤에 깔린다 */
-  setBoss(name: string | null, ratio = 1, bars = 1, shielded = false): void {
+  setBoss(name: string | null, ratio = 1, bars = 1, shielded = false, hurry = false): void {
     this.bossEl.classList.toggle('hidden', !name);
     if (!name) return;
     const COLORS = ['#ff5a4a', '#ff9a3a', '#ffd23a', '#7aff9a', '#5ac8ff', '#a07aff', '#ff6ad0'];
@@ -271,6 +271,7 @@ export class Hud {
     track.style.background = left > 1 ? COLORS[(left - 2 + COLORS.length) % COLORS.length] + '66' : 'rgba(0,0,0,0.6)';
     track.dataset.bars = bars > 1 ? `×${left}` : '';
     this.bossEl.classList.toggle('shielded', shielded);
+    this.bossEl.classList.toggle('hurry', hurry);
   }
 
   setMinimap(canvas: HTMLCanvasElement | null): void {
