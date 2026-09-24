@@ -2108,3 +2108,34 @@ textarea.code {
   color: #ff5a5a;
   animation: blink 0.8s infinite;
 }
+.patch-btn {
+  position: absolute;
+  top: calc(12px + var(--safe-top));
+  right: calc(12px + var(--safe-right));
+  border: 1px solid var(--panel-line);
+  background: rgba(20, 20, 40, 0.7);
+  border-radius: 12px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 800;
+  touch-action: manipulation;
+}
+.patch {
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+}
+.patch.latest {
+  background: rgba(94, 224, 255, 0.1);
+  border: 1px solid rgba(94, 224, 255, 0.35);
+}
+.patch h3 {
+  margin: 0 0 4px;
+}
+.patch ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.55;
+}

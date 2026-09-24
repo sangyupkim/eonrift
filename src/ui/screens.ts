@@ -1,4 +1,5 @@
 import { BUILD_ID, GAME_VERSION } from '../config';
+import { PATCH_NOTES } from '../data/patchnotes';
 import { applyUpdate, fetchRemoteVersion, isNewer, type RemoteVersion } from './update';
 import { CLASSES, CLASS_ORDER, expToNext, MAX_LEVEL, MAX_SKILL_LEVEL, SKILL_LEARN, skillUpgradeCost, STAT_INFO, STAT_KEYS, type ClassId, type StatKey } from '../data/classes';
 import { newTool, TOOL_KIND_NAMES, TOOL_TIER_NAMES, toolBonusChance, toolEnhanceCost, toolMaxDur, toolName, toolRepair, toolSpeed, type ToolKind, type ToolState } from '../data/tools';
@@ -166,11 +167,13 @@ export class Screens {
            <button class="update" data-a="update">🔄 업데이트 확인</button>
          </div>
        </div>
+       <button class="patch-btn" data-a="patch">📜 패치노트</button>
        <div class="version">v${GAME_VERSION} (${BUILD_ID}) · 모바일 가로 화면 권장</div>`,
     );
     this.on(s, '[data-a="continue"]', onContinue);
     this.on(s, '[data-a="install"]', () => void promptInstall());
     if (onLoadCode) this.on(s, '[data-a="loadcode"]', onLoadCode);
+    this.on(s, '[data-a="patch"]', () => this.patchNotes(() => this.title(hasSave, onNew, onContinue, onLoadCode)));
     // 업데이트 확인 → 새 버전이 있으면 같은 버튼이 "업데이트" 버튼으로 바뀐다
     let remote: RemoteVersion | null = null;
     this.on(s, '[data-a="update"]', (b) => {
@@ -342,6 +345,22 @@ export class Screens {
       );
     };
     render();
+  }
+
+  // ---------------- 패치노트 ----------------
+  patchNotes(onClose: () => void): void {
+    const body = PATCH_NOTES.map(
+      (n, i) => `<section class="patch ${i === 0 ? 'latest' : ''}"><h3>v${n.version} <small>${n.date}${i === 0 ? ' · 최신' : ''}</small></h3><ul>${n.items.map((t) => `<li>${esc(t)}</li>`).join('')}</ul></section>`,
+    ).join('');
+    this.open(
+      'patchnotes',
+      `<div class="panel wide tall">
+         <button class="close">${ICONS.close}</button>
+         <h2>패치노트 <small>지금 버전 v${GAME_VERSION}</small></h2>
+         <div class="scroll">${body}</div>
+       </div>`,
+      onClose,
+    );
   }
 
   // ---------------- 저장 코드 ----------------
