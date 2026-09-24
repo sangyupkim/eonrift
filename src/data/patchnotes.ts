@@ -7,6 +7,15 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '2.9',
+    date: '2026-09-24',
+    items: [
+      '퀘스트를 진행 중이어도 NPC 기능(상점·대장간·스킬·도면·일일 의뢰)이 대사 뒤에 바로 열림',
+      '촌장 일일 의뢰: 1-10 전설 퀘스트 전에도 첫 퀘스트(1-1 사냥)를 끝내면 이용 가능',
+      '버그 수정: 메인 퀘스트 진행 중에는 촌장이 대사만 하고 일일 의뢰 게시판이 열리지 않던 문제',
+    ],
+  },
+  {
     version: '2.8',
     date: '2026-09-24',
     items: [

@@ -332,7 +332,7 @@ export class Game {
       grown++;
     }
     if (grown) this.hud.toast(`차원가방이 ${p.data.dimBag.length}칸으로 늘어났습니다`, 3000);
-    if (this.quests.refreshDaily(p.maxTier, p.flag('home') > 0) && p.flag('legend')) this.hud.toast('촌장 에단의 일일 의뢰가 새로 올라왔습니다', 3000);
+    if (this.quests.refreshDaily(p.maxTier, p.flag('home') > 0) && this.dailyUnlocked()) this.hud.toast('촌장 에단의 일일 의뢰가 새로 올라왔습니다', 3000);
     if (this.mode !== 'dialogue') this.mode = 'play';
     this.hud.setVisible(this.mode === 'play');
     this.refreshHud();
@@ -658,31 +658,43 @@ export class Game {
     const ready = q.activeFor(ref).find((x) => q.canComplete(x));
     if (ready) return this.playSteps(ready.complete, () => this.completeQuest(ready));
 
+    // 이야기·퀘스트 대사가 끝나면 그 NPC의 기능(상점, 스킬, 도면, 일일 의뢰 …)을 이어서 연다
     if (hasStory(npc, p)) {
       const script = scriptFor(npc, p);
       if (script === 'stone_n') p.setFlag(`stoneTalk${p.stoneCount}`);
-      return this.playScript(script);
+      return this.playScript(script, () => this.npcService(npc));
     }
 
     const offer = q.available(ref)[0];
-    if (offer) return this.playSteps(offer.offer, () => this.offerQuest(offer));
+    if (offer) return this.playSteps(offer.offer, () => this.offerQuest(offer, () => this.npcService(npc)));
 
     const pending = q.activeFor(ref)[0];
-    if (pending?.pending) return this.playSteps(pending.pending);
+    if (pending?.pending) return this.playSteps(pending.pending, () => this.npcService(npc));
 
     const script = scriptFor(npc, p);
     if (script === 'stone_n') p.setFlag(`stoneTalk${p.stoneCount}`);
-    this.playScript(script, () => {
-      if (npc === 'merchant') this.interactVillage('shop');
-      else if (npc === 'smith') this.interactVillage('forge');
-      else if (npc === 'trainer') this.openSkillShop();
-      else if (npc === 'engineer' && q.isDone('m4_factory')) this.openBlueprints();
-      else if (npc === 'chief' && p.flag('legend')) this.openDaily();
-    });
+    this.playScript(script, () => this.npcService(npc));
   }
 
-  private offerQuest(qd: QuestDef): void {
-    this.openMenu(() =>
+  /** NPC 고유 기능. 퀘스트 진행 중이어도 언제나 쓸 수 있다 */
+  private npcService(npc: NpcId): void {
+    const p = this.progress;
+    if (npc === 'merchant') this.interactVillage('shop');
+    else if (npc === 'smith') this.interactVillage('forge');
+    else if (npc === 'trainer') this.openSkillShop();
+    else if (npc === 'engineer' && this.quests.isDone('m4_factory')) this.openBlueprints();
+    else if (npc === 'chief' && this.dailyUnlocked()) this.openDaily();
+    else if (npc === 'chief' && !this.dailyUnlocked() && p.flag('intro')) this.hud.toast('첫 던전을 다녀오면 촌장의 일일 의뢰를 받을 수 있습니다', 2500);
+  }
+
+  /** 촌장 일일 의뢰: 첫 퀘스트(1-1 사냥)를 끝내면 열린다 */
+  private dailyUnlocked(): boolean {
+    return this.quests.isDone('m1_hunt') || this.progress.flag('legend') > 0;
+  }
+
+  private offerQuest(qd: QuestDef, after?: () => void): void {
+    this.openMenu(
+      () =>
       this.screens.questOffer(
         qd,
         () => {
@@ -695,6 +707,7 @@ export class Game {
         },
         () => this.resume(),
       ),
+      after,
     );
   }
 

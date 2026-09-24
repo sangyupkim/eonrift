@@ -146,3 +146,25 @@ describe('자원 단계', () => {
     expect(resourceTier(1, 10, 0)).toBe(1);
   });
 });
+
+describe('촌장 일일 의뢰', () => {
+  it('수락한 의뢰만 진행되고, 목표를 채우면 보상을 받을 수 있다', () => {
+    const p = new Progress(newSave());
+    const q = questsOf(p);
+    q.refreshDaily(1, false);
+    const list = q.state.daily.list;
+    expect(list).toHaveLength(3);
+    for (let i = 0; i < 300; i++) {
+      q.event({ type: 'kill', tier: 1, elite: true });
+      q.event({ type: 'stage' });
+    }
+    expect(list.every((d) => d.progress === 0)).toBe(true);
+    for (const d of list) d.accepted = true;
+    for (let i = 0; i < 300; i++) {
+      q.event({ type: 'kill', tier: 1, elite: true });
+      q.event({ type: 'stage' });
+    }
+    const killOrStage = list.filter((d) => d.objective.type === 'kill' || d.objective.type === 'elite' || d.objective.type === 'stages');
+    expect(killOrStage.every((d) => d.progress > 0)).toBe(true);
+  });
+});
