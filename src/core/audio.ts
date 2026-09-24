@@ -5,6 +5,11 @@
 export class Audio {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
+  /** 배경음·효과음 따로 조절 (0~1) */
+  private musicBus: GainNode | null = null;
+  private sfxBus: GainNode | null = null;
+  musicVolume = 0.7;
+  sfxVolume = 0.8;
   private music: { stop: () => void } | null = null;
   private musicKind = '';
   private noiseBuf: AudioBuffer | null = null;
@@ -21,6 +26,12 @@ export class Audio {
       this.master = this.ctx.createGain();
       this.master.gain.value = this.enabled ? 0.5 : 0;
       this.master.connect(this.ctx.destination);
+      this.musicBus = this.ctx.createGain();
+      this.musicBus.gain.value = this.musicVolume;
+      this.musicBus.connect(this.master);
+      this.sfxBus = this.ctx.createGain();
+      this.sfxBus.gain.value = this.sfxVolume;
+      this.sfxBus.connect(this.master);
       const len = this.ctx.sampleRate;
       this.noiseBuf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
       const d = this.noiseBuf.getChannelData(0);
@@ -29,6 +40,18 @@ export class Audio {
     } catch {
       this.ctx = null;
     }
+  }
+
+  /** 배경음 크기 (0~1) */
+  setMusicVolume(v: number): void {
+    this.musicVolume = Math.min(1, Math.max(0, v));
+    if (this.musicBus && this.ctx) this.musicBus.gain.setTargetAtTime(this.musicVolume, this.ctx.currentTime, 0.05);
+  }
+
+  /** 효과음 크기 (0~1) */
+  setSfxVolume(v: number): void {
+    this.sfxVolume = Math.min(1, Math.max(0, v));
+    if (this.sfxBus && this.ctx) this.sfxBus.gain.setTargetAtTime(this.sfxVolume, this.ctx.currentTime, 0.05);
   }
 
   setEnabled(on: boolean): void {
@@ -46,7 +69,7 @@ export class Audio {
     if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
     g.gain.setValueAtTime(vol, t);
     g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    o.connect(g).connect(this.master);
+    o.connect(g).connect(this.sfxBus!);
     o.start(t);
     o.stop(t + dur + 0.02);
   }
@@ -63,7 +86,7 @@ export class Audio {
     const g = this.ctx.createGain();
     g.gain.setValueAtTime(vol, t);
     g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    src.connect(f).connect(g).connect(this.master);
+    src.connect(f).connect(g).connect(this.sfxBus!);
     src.start(t, Math.random() * 0.5);
     src.stop(t + dur + 0.02);
   }
@@ -176,7 +199,7 @@ export class Audio {
     const ctx = this.ctx!;
     const out = ctx.createGain();
     out.gain.value = 0;
-    out.connect(this.master!);
+    out.connect(this.musicBus!);
     let src: AudioBufferSourceNode | null = null;
     let stopped = false;
     this.music = {
@@ -226,7 +249,7 @@ export class Audio {
     const ctx = this.ctx;
     const out = ctx.createGain();
     out.gain.value = 0.07;
-    out.connect(this.master);
+    out.connect(this.musicBus!);
     const chords: Record<string, number[][]> = {
       village: [
         [261.6, 329.6, 392],

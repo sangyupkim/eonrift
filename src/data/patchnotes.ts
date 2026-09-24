@@ -7,6 +7,11 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '3.3',
+    date: '2026-09-24',
+    items: ['메뉴에 배경음·효과음 볼륨 슬라이더 추가 (각각 0~100, 저장됨)'],
+  },
+  {
     version: '3.2',
     date: '2026-09-24',
     items: ['대장간에서 가방·차원가방에 든 장비도 수리·강화 가능 (착용 중 / 가방 / 창고 표시)'],

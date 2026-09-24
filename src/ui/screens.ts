@@ -261,6 +261,10 @@ export class Screens {
     onGiveUp: () => void;
     onToggleShadows: (on: boolean) => void;
     onToggleSound: (on: boolean) => void;
+    music: number;
+    sfx: number;
+    onMusicVolume: (v: number) => void;
+    onSfxVolume: (v: number) => void;
     onTitle: () => void;
     onSaveCode: () => void;
     onClose: () => void;
@@ -275,7 +279,9 @@ export class Screens {
            ${opts.inDungeon ? `<button data-a="stone" ${opts.returnStones ? '' : 'disabled'}>귀환석 사용 (보유 ${opts.returnStones})</button>` : ''}
            ${opts.inDungeon ? '<button data-a="giveup" class="danger">포기하고 쓰러지기</button>' : ''}
            <label class="toggle"><input type="checkbox" data-t="shadow" ${opts.shadows ? 'checked' : ''}/> 그림자</label>
-           <label class="toggle"><input type="checkbox" data-t="sound" ${opts.sound ? 'checked' : ''}/> 소리</label>
+           <label class="toggle"><input type="checkbox" data-t="sound" ${opts.sound ? 'checked' : ''}/> 소리 켜기</label>
+           <label class="volume">🎵 배경음 <input type="range" min="0" max="100" step="5" value="${Math.round(opts.music * 100)}" data-v="music"/><b data-vl="music">${Math.round(opts.music * 100)}</b></label>
+           <label class="volume">🔊 효과음 <input type="range" min="0" max="100" step="5" value="${Math.round(opts.sfx * 100)}" data-v="sfx"/><b data-vl="sfx">${Math.round(opts.sfx * 100)}</b></label>
            <button data-a="savecode">💾 저장 코드 만들기</button>
            <button data-a="title">타이틀로 (자동 저장)</button>
          </div>
@@ -294,6 +300,16 @@ export class Screens {
     this.on(s, '[data-a="savecode"]', opts.onSaveCode);
     s.querySelector<HTMLInputElement>('[data-t="shadow"]')!.addEventListener('change', (e) => opts.onToggleShadows((e.target as HTMLInputElement).checked));
     s.querySelector<HTMLInputElement>('[data-t="sound"]')!.addEventListener('change', (e) => opts.onToggleSound((e.target as HTMLInputElement).checked));
+    for (const k of ['music', 'sfx'] as const) {
+      const input = s.querySelector<HTMLInputElement>(`[data-v="${k}"]`)!;
+      const label = s.querySelector<HTMLElement>(`[data-vl="${k}"]`)!;
+      input.addEventListener('input', () => {
+        label.textContent = input.value;
+        (k === 'music' ? opts.onMusicVolume : opts.onSfxVolume)(Number(input.value) / 100);
+      });
+      // 효과음은 손을 뗄 때 한 번 들려준다
+      if (k === 'sfx') input.addEventListener('change', () => this.click());
+    }
   }
 
   // ---------------- 던전 가방: 누르면 정보, 반대쪽 가방을 누르면 옮기기 ----------------

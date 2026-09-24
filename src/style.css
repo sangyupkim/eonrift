@@ -2170,3 +2170,21 @@ textarea.code {
   font-size: 11px;
   font-weight: 800;
 }
+.volume {
+  display: grid;
+  grid-template-columns: 70px 1fr 32px;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 2px;
+  font-size: 14px;
+}
+.volume b {
+  text-align: right;
+  font-size: 12px;
+}
+.volume input[type='range'] {
+  width: 100%;
+  accent-color: #5ee0ff;
+  touch-action: pan-x;
+  height: 28px;
+}

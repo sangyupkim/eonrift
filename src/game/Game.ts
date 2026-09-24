@@ -216,6 +216,8 @@ export class Game {
     if (isNew) deleteSave();
     this.setProgress(new Progress(data));
     this.audio.setEnabled(data.settings.sound);
+    this.audio.setMusicVolume(data.settings.music ?? 0.7);
+    this.audio.setSfxVolume(data.settings.sfx ?? 0.8);
     this.screens.close();
     const offline = isNew ? 0 : Math.min(OFFLINE_CAP_HOURS * 3600, (Date.now() - data.lastSaved) / 1000);
     this.mode = 'play';
@@ -478,6 +480,16 @@ export class Game {
         onToggleShadows: (on) => {
           d.settings.shadows = on;
           this.level.sun.castShadow = on;
+        },
+        music: d.settings.music ?? 0.7,
+        sfx: d.settings.sfx ?? 0.8,
+        onMusicVolume: (v) => {
+          d.settings.music = v;
+          this.audio.setMusicVolume(v);
+        },
+        onSfxVolume: (v) => {
+          d.settings.sfx = v;
+          this.audio.setSfxVolume(v);
         },
         onToggleSound: (on) => {
           d.settings.sound = on;

@@ -46,7 +46,7 @@ export interface SaveData {
   lastSaved: number;
   /** 지금 HP (마을·차원집에 가도 회복되지 않는다). 없으면 가득 */
   hp?: number;
-  settings: { shadows: boolean; sound: boolean };
+  settings: { shadows: boolean; sound: boolean; music?: number; sfx?: number };
   /** 곡괭이·도끼 내구도 */
   tools: Record<ToolKind, ToolState>;
 }
@@ -74,7 +74,7 @@ export function newSave(): SaveData {
     ngPlus: 0,
     factory: { sizeLevel: 0, buildings: [] },
     lastSaved: Date.now(),
-    settings: { shadows: true, sound: true },
+    settings: { shadows: true, sound: true, music: 0.7, sfx: 0.8 },
     tools: { pickaxe: newTool(), axe: newTool() },
   };
 }
