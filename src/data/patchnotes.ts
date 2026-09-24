@@ -7,6 +7,14 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '4.2',
+    date: '2026-09-24',
+    items: [
+      '조립기가 마력 주입기보다 먼저 여는 건물로 바뀜: 조립기 도면 600G (구리 주괴 3·판자 3), 설치 구리광석 4·목재 4',
+      '마력 주입기가 상위 건물로: 도면 1200G (구리 주괴 5·판자 5), 설치 철광석 6·구리광석 4, 레벨업 비용 2배',
+    ],
+  },
+  {
     version: '4.1',
     date: '2026-09-24',
     items: [
