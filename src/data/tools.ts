@@ -1,3 +1,4 @@
+import { repairMaterial } from './equipment';
 import { TIER_MANA_PLATE, TIER_PLATE } from './items';
 
 /** 채집 도구 (곡괭이·도끼): 단계, 강화, 내구도 */
@@ -55,7 +56,8 @@ export function toolEnhanceCost(t: ToolState): { ore: string; count: number; gol
 export function toolRepair(t: ToolState): { ore: string; count: number; gold: number } | null {
   const missing = toolMaxDur(t) - t.dur;
   if (missing <= 0) return null;
-  return { ore: TIER_ORE[t.tier - 1], count: Math.ceil(missing / 20), gold: Math.round(missing * t.tier * 0.8) };
+  const m = repairMaterial(t.tier, t.plus);
+  return { ore: m.id, count: Math.ceil(missing / (m.per * 2)), gold: Math.round(missing * t.tier * 0.8) };
 }
 
 export function newTool(tier = 1): ToolState {

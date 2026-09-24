@@ -126,16 +126,26 @@ export function durability(e: Equip): number {
   return e.dur ?? EQUIP_MAX_DUR;
 }
 
-/** 강화 단계가 높을수록 더 높은 광석으로 고친다: +0~1 구리, +2~3 철, +4~5 금, +6~7 다이아, +8 티타늄, +9 오리하르콘, +10 차원광물 */
-export function repairOre(plus: number): string {
-  const ores = ['copper_ore', 'copper_ore', 'iron_ore', 'iron_ore', 'gold_ore', 'gold_ore', 'diamond_ore', 'diamond_ore', 'titanium_ore', 'orichalcum_ore', 'dim_ore'];
-  return ores[Math.min(10, Math.max(0, plus))];
+const REPAIR_ORE = ['copper_ore', 'iron_ore', 'gold_ore', 'diamond_ore', 'titanium_ore', 'orichalcum_ore', 'dim_ore'];
+const REPAIR_INGOT = ['copper_ingot', 'iron_ingot', 'gold_ingot', 'diamond', 'titanium_ingot', 'orichalcum_ingot', 'dim_ingot'];
+
+/**
+ * 수리 재료: 장비와 같은 재질. 강화 단계가 높을수록 더 가공된 재료가 든다.
+ * +0~2 광석 · +3~5 주괴 · +6~8 판 · +9~10 마력판 (구리 장비 → 구리광석 / 구리 주괴 / 구리판 / 마력 구리판)
+ */
+export function repairMaterial(tier: number, plus: number): { id: string; per: number } {
+  const t = Math.min(7, Math.max(1, tier)) - 1;
+  if (plus <= 2) return { id: REPAIR_ORE[t], per: 10 };
+  if (plus <= 5) return { id: REPAIR_INGOT[t], per: 20 };
+  if (plus <= 8) return { id: TIER_PLATE[t], per: 35 };
+  return { id: TIER_MANA_PLATE[t], per: 50 };
 }
 
 export function repairCost(e: Equip): { ore: string; count: number; gold: number } | null {
   const missing = EQUIP_MAX_DUR - durability(e);
   if (missing <= 0) return null;
-  return { ore: repairOre(e.plus), count: Math.ceil(missing / 10) * (1 + Math.floor(e.tier / 3)), gold: Math.round(missing * e.tier * 1.5) };
+  const m = repairMaterial(e.tier, e.plus);
+  return { ore: m.id, count: Math.ceil(missing / m.per), gold: Math.round(missing * e.tier * 1.5) };
 }
 
 export function toolRepairCost(dur: number): { ore: string; count: number; gold: number } | null {

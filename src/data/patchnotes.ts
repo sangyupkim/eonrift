@@ -7,6 +7,14 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '3.1',
+    date: '2026-09-24',
+    items: [
+      '수리 재료를 장비 재질에 맞춤: 구리 장비는 구리 재료로만 수리',
+      '강화 단계가 높을수록 가공된 재료: +0~2 광석 · +3~5 주괴 · +6~8 판 · +9~10 마력판 (곡괭이·도끼도 같음)',
+    ],
+  },
+  {
     version: '3.0',
     date: '2026-09-24',
     items: [

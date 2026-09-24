@@ -168,3 +168,16 @@ describe('촌장 일일 의뢰', () => {
     expect(killOrStage.every((d) => d.progress > 0)).toBe(true);
   });
 });
+
+describe('수리 재료', () => {
+  it('구리 장비는 강화 단계에 따라 구리광석 → 구리 주괴 → 구리판 → 마력 구리판으로 고친다', async () => {
+    const { repairCost } = await import('../src/data/equipment');
+    const at = (plus: number) => repairCost({ uid: 'r', slot: 'helmet', tier: 1, grade: 0, plus, dur: 50 })!.ore;
+    expect(at(0)).toBe('copper_ore');
+    expect(at(2)).toBe('copper_ore');
+    expect(at(3)).toBe('copper_ingot');
+    expect(at(6)).toBe('copper_plate');
+    expect(at(10)).toBe('mana_copper_plate');
+    expect(repairCost({ uid: 'r', slot: 'helmet', tier: 2, grade: 0, plus: 4, dur: 50 })!.ore).toBe('iron_ingot');
+  });
+});

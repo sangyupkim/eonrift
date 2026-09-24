@@ -1050,7 +1050,7 @@ export class Screens {
       const rc = repairCost(sel);
       if (rc) {
         const ok = p.count(rc.ore) >= rc.count && p.data.gold >= rc.gold;
-        detail += `<h3>수리 <small>+${sel.plus} 장비는 ${ITEMS[rc.ore].name}으로 고칩니다</small></h3>${costLine(rc.ore, rc.count, rc.gold)}<div class="menu"><button data-repair ${ok ? '' : 'disabled'}>수리하기</button></div>`;
+        detail += `<h3>수리 <small>+${sel.plus} 장비는 ${ITEMS[rc.ore].name}(으)로 고칩니다 · 강화가 높을수록 광석 → 주괴 → 판 → 마력판</small></h3>${costLine(rc.ore, rc.count, rc.gold)}<div class="menu"><button data-repair ${ok ? '' : 'disabled'}>수리하기</button></div>`;
       }
       if (!cost) detail += '<p class="hint">이미 최대 강화(+10)입니다.</p>';
       else {
