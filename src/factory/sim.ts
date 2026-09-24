@@ -37,6 +37,8 @@ export interface BuildingState {
   level?: number;
   /** 제작대: 지금 만드는 작업 */
   job?: WorkJob | null;
+  /** 제작대: 다음에 만들 작업들 (예약) */
+  queue?: WorkJob[];
   /** 제작대: 완성된 장비·도구 (게임이 창고로 옮긴다) */
   ready?: WorkJob[];
 }
@@ -67,6 +69,35 @@ export interface WorkJob {
 
 /** 제작대가 내보내지 못하고 쌓아 둘 수 있는 완성품 수 */
 export const WORKBENCH_OUT_MAX = 20;
+/** 제작대 예약 줄 길이 (지금 작업 제외) */
+export const WORKBENCH_QUEUE_MAX = 8;
+
+const sameJob = (a: WorkJob, b: WorkJob) => a.kind === b.kind && a.id === b.id && a.tier === b.tier && !!a.mana === !!b.mana && a.cls === b.cls;
+
+/** 예약 줄에 넣을 수 있는지: 비어 있거나, 마지막 작업과 같은 것이거나, 자리가 남았을 때 */
+export function canEnqueue(b: BuildingState, job: WorkJob): boolean {
+  if (!b.job) return true;
+  const last = b.queue?.length ? b.queue[b.queue.length - 1] : b.job;
+  return sameJob(last, job) || (b.queue?.length ?? 0) < WORKBENCH_QUEUE_MAX;
+}
+
+/**
+ * 제작대에 작업을 넣는다. 쉬고 있으면 바로 시작하고, 일하는 중이면 예약 줄 끝에 붙인다.
+ * 마지막 작업과 같은 것이면 개수만 늘린다
+ */
+export function enqueueJob(b: BuildingState, job: WorkJob): boolean {
+  if (!canEnqueue(b, job)) return false;
+  if (!b.job) {
+    b.job = job;
+    b.progress = 0;
+    return true;
+  }
+  b.queue ??= [];
+  const last = b.queue.length ? b.queue[b.queue.length - 1] : b.job;
+  if (sameJob(last, job)) last.left += job.left;
+  else b.queue.push(job);
+  return true;
+}
 
 export interface FactoryState {
   sizeLevel: number;
@@ -320,7 +351,7 @@ export class Factory {
         while (b.out.length > 0 && this.pushForward(b, b.out[0])) b.out.shift();
       } else (b.ready ??= []).push({ ...job, left: 1 });
       job.left--;
-      if (job.left <= 0) b.job = null;
+      if (job.left <= 0) b.job = b.queue?.shift() ?? null;
     }
 
     // 2. 투입 보관상자: 앞 칸이 받을 수 있을 때만 하나씩 보낸다

@@ -1684,9 +1684,10 @@ export class Game {
       f.remove(cell.x, cell.y, (id, n) => p.add(id, n));
       for (const [id, n] of Object.entries(BUILDINGS[existing.type].cost)) p.add(id, n);
       // 제작대: 남은 작업의 재료와 골드를 돌려주고, 다 된 장비·도구는 창고로
-      if (existing.job) {
-        for (const [id, n] of Object.entries(existing.job.cost.items)) p.add(id, n * existing.job.left);
-        p.data.gold += existing.job.cost.gold * existing.job.left;
+      for (const j of [existing.job, ...(existing.queue ?? [])]) {
+        if (!j) continue;
+        for (const [id, n] of Object.entries(j.cost.items)) p.add(id, n * j.left);
+        p.data.gold += j.cost.gold * j.left;
       }
       this.deliverWorkbench([existing]);
       this.audio.play('build');
