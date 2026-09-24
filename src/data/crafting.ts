@@ -51,7 +51,7 @@ export function equipManaCraftCost(slot: EquipSlot, tier: number): CraftCost {
   return { items: { [TIER_INGOT[tier - 1]]: SLOT_INGOTS[slot], [TIER_MANA_PLANK[tier - 1]]: slot === 'ring' || slot === 'necklace' ? 2 : 3 }, time: 25 * tier, gold: 80 * tier };
 }
 
-/** 마력 제작 등급: 고급 이상 보장, 희귀 30% · 영웅 8% · 전설 2% */
+/** 마력 제작 등급: 고급 이상 보장, 희귀 30% · 영웅 9% · 유니크 2.5% · 전설 0.5% (차원 등급은 제작 불가) */
 export function rollManaGrade(r: number): number {
-  return r < 0.02 ? 4 : r < 0.1 ? 3 : r < 0.4 ? 2 : 1;
+  return r < 0.005 ? 5 : r < 0.03 ? 4 : r < 0.12 ? 3 : r < 0.42 ? 2 : 1;
 }

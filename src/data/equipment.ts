@@ -32,8 +32,12 @@ export const GRADES = [
   { name: '고급', color: 0x6fe07a, mult: 1.2 },
   { name: '희귀', color: 0x5aa8ff, mult: 1.45 },
   { name: '영웅', color: 0xc07aff, mult: 1.75 },
-  { name: '전설', color: 0xffa53a, mult: 2.1 },
+  { name: '유니크', color: 0xffd84a, mult: 2.1 },
+  { name: '전설', color: 0xff7a2a, mult: 2.5 },
+  { name: '차원', color: 0x4affe0, mult: 3.0 },
 ];
+/** 등급 번호 */
+export const GRADE = { normal: 0, magic: 1, rare: 2, hero: 3, unique: 4, legend: 5, dimension: 6 } as const;
 
 const MATERIAL = ['구리', '철', '황금', '다이아', '티타늄', '오리하르콘', '차원'];
 
@@ -99,9 +103,30 @@ export function newUid(): string {
 }
 
 /** 던전 드롭 장비. bonus가 클수록 좋은 등급이 나온다 */
-export function rollEquip(rng: Rng, tier: number, cls: ClassId, bonus: number): Equip {
-  const r = rng.next() - bonus;
-  const grade = r < 0.03 ? 4 : r < 0.1 ? 3 : r < 0.25 ? 2 : r < 0.5 ? 1 : 0;
+/**
+ * 장비 등급 굴리기. bonus(정예·보스·깊은 방)는 높은 등급 확률을 몇 배로 늘린다.
+ * dimChance: 차원 등급 확률 (보스만 준다, 아주 낮다)
+ */
+export function rollGrade(r: number, bonus: number, dimChance = 0): number {
+  const luck = 1 + bonus * 6;
+  const table: [number, number][] = [
+    [GRADE.dimension, dimChance],
+    [GRADE.legend, 0.002 * luck],
+    [GRADE.unique, 0.012 * luck],
+    [GRADE.hero, 0.045 * luck],
+    [GRADE.rare, 0.12 * luck],
+    [GRADE.magic, 0.25 * (1 + bonus * 2)],
+  ];
+  let acc = 0;
+  for (const [g, p] of table) {
+    acc += p;
+    if (r < acc) return g;
+  }
+  return GRADE.normal;
+}
+
+export function rollEquip(rng: Rng, tier: number, cls: ClassId, bonus: number, dimChance = 0): Equip {
+  const grade = rollGrade(rng.next(), bonus, dimChance);
   const slot = rng.next() < 0.3 ? 'weapon' : rng.pick(EQUIP_SLOTS.slice(1));
   return { uid: newUid(), slot, cls: slot === 'weapon' ? cls : undefined, tier, grade, plus: 0 };
 }
@@ -115,7 +140,9 @@ export function enhanceCost(e: Equip): { item: string; count: number; gold: numb
   if (e.plus >= 10) return null;
   const p = e.plus;
   const rates = [1, 0.95, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2];
-  return { item: p >= 5 ? TIER_MANA_PLATE[e.tier - 1] : TIER_PLATE[e.tier - 1], count: p >= 5 ? 1 + Math.floor((p - 5) / 2) : 1 + Math.floor(p / 3), gold: 50 * (p + 1) * e.tier, rate: rates[p] };
+  // 차원 등급은 강화 재료와 골드가 세 배
+  const k = e.grade >= GRADE.dimension ? 3 : 1;
+  return { item: p >= 5 ? TIER_MANA_PLATE[e.tier - 1] : TIER_PLATE[e.tier - 1], count: (p >= 5 ? 1 + Math.floor((p - 5) / 2) : 1 + Math.floor(p / 3)) * k, gold: 50 * (p + 1) * e.tier * k, rate: rates[p] };
 }
 
 // ---- 내구도와 수리 ----

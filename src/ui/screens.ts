@@ -1505,7 +1505,7 @@ export class Screens {
           const mc = equipManaCraftCost(slot, t);
           rows.push(`<li>${equipGem(e)}<div><b>${equipName(e)}</b><small>${equipLine(e)}</small><small>일반: ${costHtml(c)}</small><small class="mana-line">${SPK('sparkle', '✨')} 마력 제작 (고급 이상): ${costHtml(mc)}</small></div>${btn(`data-eqc="${slot}:${t}"`, c)}<button class="mana-btn" data-eqm="${slot}:${t}" ${can(mc) ? '' : 'disabled'}>${SPK('sparkle', '✨')} 마력</button></li>`);
         }
-      body = `<p class="hint">일반 제작은 일반 등급, <b>${SPK('sparkle', '✨')} 마력 제작</b>(판자 대신 마력 판자)은 고급 이상 (희귀 30% · 영웅 8% · 전설 2%). 완성된 장비는 창고로 들어갑니다. 무기는 지금 직업(${CLASSES[p.data.currentClass].name}) 전용입니다.</p><ul class="list scroll">${rows.join('')}</ul>`;
+      body = `<p class="hint">일반 제작은 일반 등급, <b>${SPK('sparkle', '✨')} 마력 제작</b>(판자 대신 마력 판자)은 고급 이상 (희귀 30% · 영웅 9% · 유니크 2.5% · 전설 0.5%). 차원 등급은 제작할 수 없고 보스에게서만 나옵니다. 완성된 장비는 창고로 들어갑니다. 무기는 지금 직업(${CLASSES[p.data.currentClass].name}) 전용입니다.</p><ul class="list scroll">${rows.join('')}</ul>`;
     } else {
       const c = workbenchUpgradeCost(lv);
       body = c

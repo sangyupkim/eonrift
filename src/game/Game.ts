@@ -9,7 +9,7 @@ import { Audio } from '../core/audio';
 import { Input } from '../core/input';
 import { Rng, randomSeed } from '../core/rng';
 import { CLASSES, expToNext, MAX_SKILL_LEVEL, SKILL_LEARN, skillUpgradeCost, type ClassId } from '../data/classes';
-import { durability, equipName, GRADES, newUid, rollEquip, type Equip } from '../data/equipment';
+import { durability, equipName, GRADE, GRADES, newUid, rollEquip, type Equip } from '../data/equipment';
 import { rollManaGrade } from '../data/crafting';
 import { BUILDINGS, FACTORY_SIZES, OFFLINE_CAP_HOURS, type BuildingType, upgradeBlueprintCost } from '../data/factory';
 import { ITEMS, TIER_PLATE, ORE_TIERS, TIER_MANA_PLATE } from '../data/items';
@@ -1188,7 +1188,13 @@ export class Game {
     const eqCount = m.kind === 'boss' ? 2 : m.kind === 'midboss' ? 2 : rng.chance(m.kind === 'elite' ? 0.4 + run.stage * 0.02 : 0.008 + run.stage * 0.0008) ? 1 : 0;
     const bonus = (m.kind === 'midboss' ? 0.35 : m.kind === 'boss' ? 0.3 : m.kind === 'elite' ? 0.12 : 0) + run.stage * 0.01;
     for (let i = 0; i < eqCount; i++) {
-      const e = rollEquip(rng, tier, this.progress.data.currentClass, bonus);
+      // 차원 등급: 보스만, 아주 낮은 확률 (수호자 1%, 파수꾼 0.3%)
+      const dim = m.kind === 'boss' ? 0.01 : m.kind === 'midboss' ? 0.003 : 0;
+      const e = rollEquip(rng, tier, this.progress.data.currentClass, bonus, dim);
+      if (e.grade >= GRADE.dimension) {
+        this.level.effects.pillar(m.x, m.z, GRADES[e.grade].color, 10);
+        this.hud.toast(`:sparkle: 차원 등급 장비! ${equipName(e)}`, 4000);
+      }
       if (run.bag.addEquip(e)) loot(`${GRADES[e.grade].name} ${equipName(e)}`, hex(GRADES[e.grade].color));
       else this.hud.toast('가방이 가득 차서 장비를 줍지 못했습니다');
     }
