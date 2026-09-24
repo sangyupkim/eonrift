@@ -7,7 +7,8 @@ export const WORKBENCH_MAX_LEVEL = 7;
 
 export interface CraftCost {
   items: Record<string, number>;
-  energy: number;
+  /** 제작 시간(초, 제작대 Lv.1·전력 100% 기준) */
+  time: number;
   gold: number;
 }
 
@@ -16,13 +17,13 @@ export function workbenchUpgradeCost(level: number): CraftCost | null {
   if (level >= WORKBENCH_MAX_LEVEL) return null;
   return {
     items: { [TIER_INGOT[level - 1]]: 10 + level * 5, [TIER_PLANK[level - 1]]: 10 + level * 2, [level < 4 ? 'essence_low' : level < 6 ? 'essence_mid' : 'essence_high']: 5 + level },
-    energy: 200 * level,
+    time: 0,
     gold: 500 * level,
   };
 }
 
 export function toolCraftCost(tier: number): CraftCost {
-  return { items: { [TIER_INGOT[tier - 1]]: 4, [TIER_PLANK[tier - 1]]: 3 }, energy: 20 * tier, gold: 50 * tier };
+  return { items: { [TIER_INGOT[tier - 1]]: 4, [TIER_PLANK[tier - 1]]: 3 }, time: 20 * tier, gold: 50 * tier };
 }
 
 const SLOT_INGOTS: Record<EquipSlot, number> = { weapon: 5, helmet: 3, armor: 6, pants: 4, boots: 3, ring: 2, necklace: 2 };
@@ -31,23 +32,23 @@ export function equipCraftCost(slot: EquipSlot, tier: number): CraftCost {
   const items: Record<string, number> = { [TIER_INGOT[tier - 1]]: SLOT_INGOTS[slot] };
   if (slot !== 'ring' && slot !== 'necklace') items[TIER_PLANK[tier - 1]] = 2;
   else items[tier < 4 ? 'essence_low' : tier < 6 ? 'essence_mid' : 'essence_high'] = 2;
-  return { items, energy: 15 * tier, gold: 40 * tier };
+  return { items, time: 15 * tier, gold: 40 * tier };
 }
 
 /** 판 합성: 주괴 + 판자 → 재질판 (강화 재료) */
 export function plateCraftCost(tier: number): CraftCost {
-  return { items: { [TIER_INGOT[tier - 1]]: 2, [TIER_PLANK[tier - 1]]: 2 }, energy: 8 * tier, gold: 0 };
+  return { items: { [TIER_INGOT[tier - 1]]: 2, [TIER_PLANK[tier - 1]]: 2 }, time: 8 * tier, gold: 0 };
 }
 
 /** 마력판 합성: 마력 금속 + 같은 단계 판자 (+6~+10 강화 재료) */
 export function manaPlateCraftCost(tier: number): CraftCost {
-  return { items: { [TIER_MANA_METAL[tier - 1]]: 2, [TIER_PLANK[tier - 1]]: 2 }, energy: 15 * tier, gold: 0 };
+  return { items: { [TIER_MANA_METAL[tier - 1]]: 2, [TIER_PLANK[tier - 1]]: 2 }, time: 15 * tier, gold: 0 };
 }
 export const MANA_PLATE_OF = (tier: number) => TIER_MANA_PLATE[tier - 1];
 
 /** 마력 제작: 판자 대신 마력 판자를 쓰면 좋은 등급이 나올 수 있다 */
 export function equipManaCraftCost(slot: EquipSlot, tier: number): CraftCost {
-  return { items: { [TIER_INGOT[tier - 1]]: SLOT_INGOTS[slot], [TIER_MANA_PLANK[tier - 1]]: slot === 'ring' || slot === 'necklace' ? 2 : 3 }, energy: 25 * tier, gold: 80 * tier };
+  return { items: { [TIER_INGOT[tier - 1]]: SLOT_INGOTS[slot], [TIER_MANA_PLANK[tier - 1]]: slot === 'ring' || slot === 'necklace' ? 2 : 3 }, time: 25 * tier, gold: 80 * tier };
 }
 
 /** 마력 제작 등급: 고급 이상 보장, 희귀 30% · 영웅 8% · 전설 2% */

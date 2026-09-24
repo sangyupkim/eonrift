@@ -85,14 +85,6 @@ export function buildBuildingGeometry(type: BuildingType, connections: boolean[]
         part(new BoxGeometry(0.12, 1.4, 0.12), metal, { pos: [-0.7, 1, -0.7] }),
         arrow(0xffffff, 0.65),
       ]);
-    case 'assembler':
-      return merge([
-        part(new BoxGeometry(1.8, 1.1, 1.8), 0x4a8a7a, { pos: [0, 0.55, 0] }),
-        part(new BoxGeometry(1.2, 0.3, 1.2), dark, { pos: [0, 1.25, 0] }),
-        part(new BoxGeometry(0.15, 0.8, 0.15), metal, { pos: [0.4, 1.6, 0], rot: [0, 0, 0.4] }),
-        part(new BoxGeometry(0.6, 0.12, 0.12), metal, { pos: [0.1, 1.95, 0] }),
-        arrow(0xffffff, 1.15),
-      ]);
     case 'healer':
       return merge([
         part(new CylinderGeometry(0.8, 0.95, 0.35, 8), dark, { pos: [0, 0.18, 0] }),
@@ -116,6 +108,8 @@ export function buildBuildingGeometry(type: BuildingType, connections: boolean[]
         part(new BoxGeometry(0.16, 0.14, 0.12), metal, { pos: [-0.28, 1.04, 0.3], rot: [0, 0.5, 0] }),
         // 에너지 수정
         part(new OctahedronGeometry(0.14), 0x5ee0ff, { pos: [-0.6, 1.2, -0.35] }),
+        // 완성품이 나가는 방향
+        arrow(0xffffff, 0.4),
       ]);
     case 'alchemy':
       return merge([

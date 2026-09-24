@@ -2,14 +2,15 @@ import { bustUrl, itemIconUrl, skillIconUrl } from '../ui/itemIcons';
 import { decodeSave, encodeSave } from './saveCode';
 import { gearLook } from '../models/items';
 import { BOSS_TIME_LIMIT } from '../data/monsters';
-import { TOOL_KIND_NAMES, TOOL_TIER_NAMES, toolBonusChance, toolName, toolSpeed, toolWear, type ToolKind } from '../data/tools';
+import { newTool, TOOL_KIND_NAMES, TOOL_TIER_NAMES, toolBonusChance, toolName, toolSpeed, toolWear, type ToolKind } from '../data/tools';
 import { MeshLambertMaterial, OrthographicCamera, PCFShadowMap, Plane, Raycaster, Vector2, Vector3, WebGLRenderer } from 'three';
 import { BAG_SLOTS, CAMERA_OFFSET, PLAYER, SCREEN_UP, TILE, VIEW_HEIGHT } from '../config';
 import { Audio } from '../core/audio';
 import { Input } from '../core/input';
 import { Rng, randomSeed } from '../core/rng';
 import { CLASSES, expToNext, MAX_SKILL_LEVEL, SKILL_LEARN, skillUpgradeCost, type ClassId } from '../data/classes';
-import { durability, equipName, GRADES, rollEquip, type Equip } from '../data/equipment';
+import { durability, equipName, GRADES, newUid, rollEquip, type Equip } from '../data/equipment';
+import { rollManaGrade } from '../data/crafting';
 import { BUILDINGS, FACTORY_SIZES, OFFLINE_CAP_HOURS, type BuildingType, upgradeBlueprintCost } from '../data/factory';
 import { ITEMS, TIER_PLATE, ORE_TIERS, TIER_MANA_PLATE } from '../data/items';
 import { QUEST_BY_ID, type NpcRef, type QuestDef } from '../data/quests';
@@ -21,7 +22,7 @@ import { BuildBar } from '../ui/buildbar';
 import { Dialogue } from '../ui/dialogue';
 import { Hud } from '../ui/hud';
 import { Minimap, type MapMarker } from '../ui/minimap';
-import { hex, Screens } from '../ui/screens';
+import { hex, Screens, workJobEquip, workJobIconUrl } from '../ui/screens';
 import { Bag } from './Bag';
 import { Combat } from './Combat';
 import type { Monster } from './Monster';
@@ -110,6 +111,9 @@ export class Game {
   private ground = new Plane(new Vector3(0, 1, 0), 0);
   private dragCell: { x: number; y: number } | null = null;
   private ghostCell: { x: number; y: number } | null = null;
+  /** 이동 도구: 옮기는 건물의 원래 칸과 지금 가리키는 칸 */
+  private moveFrom: { x: number; y: number } | null = null;
+  private moveTo: { x: number; y: number } | null = null;
 
   constructor(private container: HTMLElement) {
     this.renderer = new WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -1465,6 +1469,32 @@ export class Game {
   }
 
   // =============== 공장 ===============
+  /** 제작대에서 완성된 장비·도구를 창고로 옮긴다 */
+  private deliverWorkbench(list: BuildingState[] = this.factory.state.buildings): void {
+    const p = this.progress;
+    let tools = false;
+    for (const b of list) {
+      if (b.type !== 'workbench' || !b.ready?.length) continue;
+      for (const j of b.ready) {
+        if (j.kind === 'tool') {
+          const k = j.id as ToolKind;
+          p.data.tools[k] = newTool(j.tier);
+          p.setFlag(k === 'axe' ? 'tool_axe' : 'tool_pickaxe');
+          tools = true;
+          this.hud.toast(`제작대: ${toolName(k, p.data.tools[k])} 완성! (지금 도구와 교체)`);
+        } else if (j.kind === 'equip') {
+          const e: Equip = { ...workJobEquip(j), uid: newUid(), grade: j.mana ? rollManaGrade(Math.random()) : 0 };
+          p.data.equips.push(e);
+          this.hud.toast(`제작대: ${j.mana ? `✨ [${GRADES[e.grade].name}] ` : ''}${equipName(e)} 완성! (창고)`);
+        }
+      }
+      b.ready = [];
+      this.audio.play('coin');
+      if (tools) this.applyStats();
+      this.saveNow();
+    }
+  }
+
   private buildingUnlocked(t: BuildingType): boolean {
     return !BUILDINGS[t].blueprint || this.progress.flag(`bp_${t}`) > 0;
   }
@@ -1535,6 +1565,23 @@ export class Game {
       const cell = this.pickCell(e);
       if (!cell) return;
       canvas.setPointerCapture(e.pointerId);
+      const tool = this.buildBar.tool;
+      if (tool === 'rotate') {
+        const b = this.factory.at(cell.x, cell.y);
+        if (b && b.type !== 'wire') {
+          this.factory.rotate(cell.x, cell.y);
+          this.audio.play('click');
+        }
+        return;
+      }
+      if (tool === 'move') {
+        const b = this.factory.at(cell.x, cell.y);
+        if (!b) return this.hud.toast('옮길 건물을 누른 채 끌어 주세요');
+        this.moveFrom = cell;
+        this.moveTo = cell;
+        this.updateMoveGhost(cell);
+        return;
+      }
       if (isLine()) {
         this.dragCell = cell;
         this.applyTool(cell, null);
@@ -1546,6 +1593,13 @@ export class Game {
     canvas.addEventListener('pointermove', (e) => {
       if (!this.building || !(this.level instanceof HomeScene)) return;
       const cell = this.pickCell(e);
+      if (this.buildBar.tool === 'move' || this.buildBar.tool === 'rotate') {
+        if (this.moveFrom && cell) {
+          this.moveTo = cell;
+          this.updateMoveGhost(cell);
+        }
+        return;
+      }
       if (!isLine()) {
         // 마우스는 누르지 않아도 미리보기를 보여 준다
         if (cell && (this.ghostCell || e.pointerType === 'mouse')) {
@@ -1570,6 +1624,22 @@ export class Game {
     });
     const end = (e: PointerEvent) => {
       this.dragCell = null;
+      if (this.moveFrom) {
+        const from = this.moveFrom;
+        const to = this.moveTo;
+        this.moveFrom = this.moveTo = null;
+        if (this.level instanceof HomeScene) {
+          this.level.hideGhost();
+          this.level.hideCursor();
+        }
+        if (e.type === 'pointerup' && to && (to.x !== from.x || to.y !== from.y)) {
+          if (this.factory.move(from.x, from.y, to.x, to.y)) {
+            this.audio.play('build');
+            this.saveNow();
+          } else this.hud.toast('빈 칸으로만 옮길 수 있습니다');
+        }
+        return;
+      }
       if (this.ghostCell && this.building && e.type === 'pointerup') {
         const cell = this.ghostCell;
         this.ghostCell = null;
@@ -1582,10 +1652,21 @@ export class Game {
     canvas.addEventListener('pointercancel', end);
   }
 
+  /** 이동 도구: 옮기는 건물을 손가락 아래에 미리 보여 준다 */
+  private updateMoveGhost(cell: { x: number; y: number }): void {
+    if (!(this.level instanceof HomeScene) || !this.moveFrom) return;
+    const b = this.factory.at(this.moveFrom.x, this.moveFrom.y);
+    if (!b) return;
+    const same = cell.x === this.moveFrom.x && cell.y === this.moveFrom.y;
+    const ok = same || !this.factory.at(cell.x, cell.y);
+    this.level.showGhost(b.type, cell.x, cell.y, b.dir, ok);
+    this.level.showCursor(cell.x, cell.y, ok);
+  }
+
   private updateGhost(cell: { x: number; y: number }): void {
     if (!(this.level instanceof HomeScene)) return;
     const tool = this.buildBar.tool;
-    if (tool === 'remove') return;
+    if (tool === 'remove' || tool === 'move' || tool === 'rotate') return;
     const existing = this.factory.at(cell.x, cell.y);
     const ok = (!existing || existing.type === tool) && this.progress.hasAll(BUILDINGS[tool].cost);
     this.level.showGhost(tool, cell.x, cell.y, existing && existing.type === tool ? existing.dir : this.buildBar.dir, ok);
@@ -1596,11 +1677,18 @@ export class Game {
     const f = this.factory;
     const p = this.progress;
     const tool = this.buildBar.tool;
+    if (tool === 'move' || tool === 'rotate') return;
     const existing = f.at(cell.x, cell.y);
     if (tool === 'remove') {
       if (!existing) return;
       f.remove(cell.x, cell.y, (id, n) => p.add(id, n));
       for (const [id, n] of Object.entries(BUILDINGS[existing.type].cost)) p.add(id, n);
+      // 제작대: 남은 작업의 재료와 골드를 돌려주고, 다 된 장비·도구는 창고로
+      if (existing.job) {
+        for (const [id, n] of Object.entries(existing.job.cost.items)) p.add(id, n * existing.job.left);
+        p.data.gold += existing.job.cost.gold * existing.job.left;
+      }
+      this.deliverWorkbench([existing]);
       this.audio.play('build');
       return;
     }
@@ -1650,6 +1738,7 @@ export class Game {
         this.factory.step(0.1);
         this.factoryAcc -= 0.1;
       }
+      this.deliverWorkbench();
     }
 
     switch (this.mode) {
@@ -1963,8 +2052,8 @@ export class Game {
       this.hud.setBubbles(
         this.level.producing().map(({ b, x, z }) => {
           const s = this.toScreen(x, 2.6, z);
-          const r = RECIPE_BY_ID[b.crafting!];
-          return { x: s.x, y: s.y, icon: itemIconUrl(r.output), progress: b.progress ?? 0, onClick: () => this.openBuilding(b) };
+          const icon = b.type === 'workbench' ? workJobIconUrl(b.job!) : itemIconUrl(RECIPE_BY_ID[b.crafting!].output);
+          return { x: s.x, y: s.y, icon, progress: b.progress ?? 0, onClick: () => this.openBuilding(b) };
         }),
       );
     } else this.hud.setBubbles([]);

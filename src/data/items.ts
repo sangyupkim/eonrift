@@ -72,7 +72,7 @@ const defs: ItemDef[] = [
   { id: 'potion_mid', name: '중급 치유 물약', color: 0xff3a9a, kind: 'consumable', value: 60, description: 'HP 70%와 MP 70%를 회복한다. 연금 솥: 치유 물약 + 중급 마력 정수.' },
   { id: 'potion_high', name: '상급 치유 물약', color: 0xd04aff, kind: 'consumable', value: 160, description: 'HP·MP를 모두 회복한다. 연금 솥: 중급 치유 물약 + 상급 마력 정수.' },
   { id: 'return_stone', name: '귀환석', color: 0x7affc0, kind: 'consumable', value: 30, description: '던전에서 언제든 전리품을 가지고 마을로 돌아간다.' },
-  { id: 'bag_kit', name: '차원가방 확장 키트', color: 0xb07aff, kind: 'consumable', value: 120, description: '차원가방을 한 칸 늘린다 (최대 12칸). 조립기: 마공 합금 + 톱니 부품 + 마력 철.' },
+  { id: 'bag_kit', name: '차원가방 확장 키트', color: 0xb07aff, kind: 'consumable', value: 120, description: '차원가방을 한 칸 늘린다 (최대 12칸). 제작대 조립: 마공 합금 + 톱니 부품 + 마력 철.' },
   { id: 'resonator', name: '차원석 공명 장치', color: 0x5ef0ff, kind: 'key', value: 0, description: '일곱 차원석의 힘을 하나로 모으는 장치.' },
 ];
 

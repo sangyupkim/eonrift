@@ -2387,3 +2387,43 @@ textarea.code {
 .qty-total {
   margin: 4px 0 10px;
 }
+
+/* 제작대: 지금 만드는 작업 */
+.wb-job {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  border-radius: 10px;
+  background: rgba(94, 224, 255, 0.08);
+  border: 1px solid var(--panel-line);
+  font-size: 13px;
+}
+.wb-job > img.wb-ico {
+  width: 40px;
+  height: 40px;
+  flex: none;
+}
+.wb-job .wb-main {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+.wb-job .bar {
+  display: block;
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+.wb-job .bar i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #5ee0ff, #8a7cff);
+  transition: width 0.3s linear;
+}
+.wb-job small {
+  font-size: 11px;
+}

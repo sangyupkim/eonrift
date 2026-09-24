@@ -24,7 +24,7 @@ export interface BuildingState {
   crafting?: string | null;
   /** 내보내지 못한 완성품 */
   out?: string[];
-  /** 조립기: 고른 레시피 */
+  /** 연금 솥: 고른 레시피 */
   recipe?: string | null;
   /** 보관상자: 투입(in) / 출하(out) */
   mode?: 'in' | 'out';
@@ -33,10 +33,40 @@ export interface BuildingState {
   rr?: number;
   /** 마력 치유석: 누군가 회복 중이면 true (그때만 전력을 쓴다) */
   active?: boolean;
-  /** 제작대: 레벨과 충전된 에너지 */
+  /** 건물 레벨 (제작대 포함) */
   level?: number;
-  energy?: number;
+  /** 제작대: 지금 만드는 작업 */
+  job?: WorkJob | null;
+  /** 제작대: 완성된 장비·도구 (게임이 창고로 옮긴다) */
+  ready?: WorkJob[];
 }
+
+/**
+ * 제작대 작업. 재료와 골드는 시작할 때 전부 낸다.
+ * item: 아이템(판·귀환석 등) — 완성되면 앞쪽 레일로 내보낸다
+ * equip / tool: 장비·채집 도구 — 완성되면 창고로 간다
+ */
+export interface WorkJob {
+  kind: 'item' | 'equip' | 'tool';
+  /** item: 아이템 id · equip: 부위 · tool: pickaxe/axe */
+  id: string;
+  tier: number;
+  /** 마력 제작 장비 (고급 이상) */
+  mana?: boolean;
+  /** 무기 제작 시 직업 */
+  cls?: string;
+  /** 한 번에 나오는 개수 (item) */
+  count: number;
+  /** 남은 횟수 */
+  left: number;
+  /** 한 번 만드는 데 걸리는 시간(초) */
+  time: number;
+  /** 한 번 분량 비용 (취소하면 남은 횟수만큼 돌려준다) */
+  cost: { items: Record<string, number>; gold: number };
+}
+
+/** 제작대가 내보내지 못하고 쌓아 둘 수 있는 완성품 수 */
+export const WORKBENCH_OUT_MAX = 20;
 
 export interface FactoryState {
   sizeLevel: number;
@@ -47,7 +77,7 @@ export type MachineStatus = 'working' | 'no-power' | 'idle' | 'blocked' | 'no-re
 
 const BELT_SPEED = 1;
 export const BOX_CAPACITY = 999;
-export const MACHINE_TYPES = new Set<BuildingType>(['smelter', 'crusher', 'infuser', 'assembler', 'alchemy']);
+export const MACHINE_TYPES = new Set<BuildingType>(['smelter', 'crusher', 'infuser', 'alchemy']);
 export const ESSENCES = ['essence_low', 'essence_mid', 'essence_high'];
 
 export function recipesFor(machine: BuildingType): Recipe[] {
@@ -56,9 +86,9 @@ export function recipesFor(machine: BuildingType): Recipe[] {
 
 export const RECIPE_BY_ID: Record<string, Recipe> = Object.fromEntries(RECIPES.map((r) => [r.id, r]));
 
-/** 제작대 에너지 최대치 */
-export function workbenchCap(b: BuildingState): number {
-  return 300 * (b.level ?? 1);
+/** 제작대가 지금 일하는 중인지 (출구가 가득 차면 멈춘다) */
+export function workbenchBusy(b: BuildingState): boolean {
+  return !!b.job && (b.out?.length ?? 0) < WORKBENCH_OUT_MAX;
 }
 
 export function boxTotal(b: BuildingState): number {
@@ -121,7 +151,10 @@ export class Factory {
     }
     if (type === 'workbench') {
       b.level = 1;
-      b.energy = 0;
+      b.job = null;
+      b.out = [];
+      b.ready = [];
+      b.progress = 0;
     }
     if (type === 'box') {
       b.buffer = {};
@@ -148,7 +181,20 @@ export class Factory {
 
   rotate(x: number, y: number): void {
     const b = this.at(x, y);
-    if (b) b.dir = ((b.dir + 1) % 4) as Dir;
+    if (b) {
+      b.dir = ((b.dir + 1) % 4) as Dir;
+      this.dirty = true;
+    }
+  }
+
+  /** 지은 건물을 빈 칸으로 옮긴다 (안에 든 것은 그대로) */
+  move(fx: number, fy: number, tx: number, ty: number): boolean {
+    const b = this.at(fx, fy);
+    if (!b || !this.inBounds(tx, ty) || this.at(tx, ty)) return false;
+    b.x = tx;
+    b.y = ty;
+    this.reindex();
+    return true;
   }
 
   /**
@@ -210,8 +256,12 @@ export class Factory {
   }
 
   status(b: BuildingState): MachineStatus {
+    if (b.type === 'workbench') {
+      if ((b.out?.length ?? 0) >= WORKBENCH_OUT_MAX) return 'blocked';
+      if (!b.job) return 'idle';
+      return this.powerOf(b) > 0 ? 'working' : 'no-power';
+    }
     if (!MACHINE_TYPES.has(b.type)) return 'idle';
-    if (b.type === 'assembler' && !b.recipe) return 'no-recipe';
     if ((b.out?.length ?? 0) > 0) return 'blocked';
     if (!b.crafting) return 'idle';
     return this.powerOf(b) > 0 ? 'working' : 'no-power';
@@ -226,8 +276,8 @@ export class Factory {
     this.netDemand.fill(0);
     for (const b of buildings) {
       if (MACHINE_TYPES.has(b.type) && b.crafting && this.netOf.has(b)) this.netDemand[this.netOf.get(b)!] += BUILDINGS[b.type].power;
-      // 제작대는 에너지가 덜 찼을 때만 전력을 쓴다
-      if (b.type === 'workbench' && (b.energy ?? 0) < workbenchCap(b) && this.netOf.has(b)) this.netDemand[this.netOf.get(b)!] += BUILDINGS.workbench.power;
+      // 제작대는 만드는 동안에만 전력을 쓴다
+      if (b.type === 'workbench' && workbenchBusy(b) && this.netOf.has(b)) this.netDemand[this.netOf.get(b)!] += BUILDINGS.workbench.power;
       if (b.type === 'healer' && b.active && this.netOf.has(b)) this.netDemand[this.netOf.get(b)!] += BUILDINGS.healer.power;
     }
     for (const b of buildings) {
@@ -254,17 +304,29 @@ export class Factory {
       if (this.netDemand[net] > 0) b.fuel = Math.max(0, b.fuel! - dt * Math.min(1, this.netDemand[net] / this.netSupply[net]));
     }
 
-    // 제작대 충전: 전력을 받는 만큼 초당 에너지 1
+    // 제작대: 전력을 받는 만큼 작업이 진행된다
     for (const b of buildings) {
       if (b.type !== 'workbench') continue;
-      const r = this.powerOf(b);
-      if (r > 0) b.energy = Math.min(workbenchCap(b), (b.energy ?? 0) + dt * r);
+      b.out ??= [];
+      while (b.out.length > 0 && this.pushForward(b, b.out[0])) b.out.shift();
+      const job = b.job;
+      if (!job || !workbenchBusy(b)) continue;
+      b.progress = (b.progress ?? 0) + (dt * this.powerOf(b) * levelSpeed(b.level ?? 1)) / Math.max(1, job.time);
+      if (b.progress < 1) continue;
+      b.progress = 0;
+      if (job.kind === 'item') {
+        for (let i = 0; i < job.count; i++) b.out.push(job.id);
+        this.onCraft?.(job.id, job.count);
+        while (b.out.length > 0 && this.pushForward(b, b.out[0])) b.out.shift();
+      } else (b.ready ??= []).push({ ...job, left: 1 });
+      job.left--;
+      if (job.left <= 0) b.job = null;
     }
 
     // 2. 투입 보관상자: 앞 칸이 받을 수 있을 때만 하나씩 보낸다
     for (const b of buildings) {
       if (b.type !== 'box' || b.mode !== 'in') continue;
-      // 여러 재료가 있으면 번갈아 보낸다 (조립기에 재료가 골고루 들어가도록).
+      // 여러 재료가 있으면 번갈아 보낸다 (두 재료 레시피에 재료가 골고루 들어가도록).
       // 레일 끝에 기계가 있으면 그 기계가 지금 받을 수 있는 재료만 보낸다 (레일 위에 가는 중인 것까지 계산)
       // → 한 재료만 줄지어 레일을 막아 멈추는 일이 없다
       const dest = this.lineEnd(b);
@@ -409,7 +471,6 @@ export class Factory {
       case 'smelter':
       case 'crusher':
       case 'infuser':
-      case 'assembler':
       case 'alchemy': {
         // 가공할 재료를 한 번 분량만 받는다. 한 재료를 여러 개 쓰는 레시피는 레일이 막히지 않게 두 번 분량까지
         // 건물 레벨보다 높은 단계 재료는 받지 않는다

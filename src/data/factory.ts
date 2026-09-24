@@ -1,5 +1,5 @@
 /** 차원집 공장의 건물과 레시피 */
-export type BuildingType = 'generator' | 'wire' | 'belt' | 'splitter' | 'box' | 'smelter' | 'crusher' | 'infuser' | 'assembler' | 'alchemy' | 'workbench' | 'healer';
+export type BuildingType = 'generator' | 'wire' | 'belt' | 'splitter' | 'box' | 'smelter' | 'crusher' | 'infuser' | 'alchemy' | 'workbench' | 'healer';
 
 export interface BuildingDef {
   type: BuildingType;
@@ -22,14 +22,13 @@ export const BUILDINGS: Record<BuildingType, BuildingDef> = {
   smelter: { type: 'smelter', name: '제련로', power: 6, color: 0xc0583a, cost: { copper_ore: 5 }, description: '광석을 주괴로 만든다 (다이아 원석 → 다이아 주괴 포함).', blueprint: null },
   crusher: { type: 'crusher', name: '벌목소', power: 5, color: 0x9a6a3c, cost: { copper_ore: 4, wood: 2 }, description: '나무를 켜서 판자로 만든다. 좋은 나무일수록 판자가 많이 나온다.', blueprint: { gold: 300, items: { copper_ingot: 3 } } },
   infuser: { type: 'infuser', name: '마력 주입기', power: 12, color: 0x8a6aff, cost: { iron_ore: 4, copper_ore: 4 }, description: '주괴·판자에 마력을 불어넣어 마력 금속·마력 판자를 만든다.', blueprint: { gold: 800, items: { copper_ingot: 3, plank: 3 } } },
-  assembler: { type: 'assembler', name: '조립기', power: 10, color: 0x4a9a8a, cost: { iron_ore: 6, wood: 4 }, description: '고른 설계대로 여러 재료를 조립한다.', blueprint: { gold: 1200, items: { copper_ingot: 5, plank: 5 } } },
   alchemy: { type: 'alchemy', name: '연금 솥', power: 4, color: 0x5a9a4a, cost: { copper_ore: 3, wood: 3 }, description: '치유 물약에 더 높은 마력 정수를 넣어 상위 물약을 만든다.', blueprint: { gold: 500, items: { wood: 10 } } },
-  workbench: { type: 'workbench', name: '제작대', power: 8, color: 0xb07a3a, cost: { copper_ore: 10, wood: 10 }, description: '장비와 채집 도구를 만든다. 마력선으로 발전기와 이으면 에너지가 충전되고, 제작과 레벨업에 에너지를 쓴다.', blueprint: null },
+  workbench: { type: 'workbench', name: '제작대', power: 8, color: 0xb07a3a, cost: { copper_ore: 10, wood: 10 }, description: '판·장비·채집 도구·귀환석 등을 만든다. 제작을 시작하면 전력을 쓰며 시간이 지나면 완성된다. 완성품은 앞쪽 레일로 내보낸다 (막히면 제작대에 쌓임).', blueprint: null },
   healer: { type: 'healer', name: '마력 치유석 (회복)', power: 10, color: 0x6aff9a, cost: { copper_ore: 6, wood: 4 }, description: '마력선으로 발전기와 이으면, 곁에 서 있는 동안 HP·MP를 초당 12%씩 회복한다. 회복할 때만 전력을 쓴다 (물약보다 훨씬 싸다).', blueprint: null },
   splitter: { type: 'splitter', name: '분배기', power: 0, color: 0x6a7080, cost: { copper_ore: 1 }, description: '들어온 아이템을 앞·왼쪽·오른쪽으로 번갈아 보낸다.', blueprint: { gold: 400, items: {} } },
 };
 
-export const BUILD_ORDER: BuildingType[] = ['generator', 'wire', 'belt', 'box', 'workbench', 'healer', 'smelter', 'crusher', 'infuser', 'assembler', 'alchemy', 'splitter'];
+export const BUILD_ORDER: BuildingType[] = ['generator', 'wire', 'belt', 'box', 'workbench', 'healer', 'smelter', 'crusher', 'infuser', 'alchemy', 'splitter'];
 
 export interface Recipe {
   id: string;
@@ -63,9 +62,9 @@ export const RECIPES: Recipe[] = [
   { id: 'titanium_ingot', machine: 'smelter', inputs: { titanium_ore: 1 }, output: 'titanium_ingot', count: 1, tier: 5, time: 40 },
   { id: 'orichalcum_ingot', machine: 'smelter', inputs: { orichalcum_ore: 1 }, output: 'orichalcum_ingot', count: 1, tier: 6, time: 50 },
   { id: 'dim_ingot', machine: 'smelter', inputs: { dim_ore: 1 }, output: 'dim_ingot', count: 1, tier: 7, time: 60 },
-  { id: 'return_stone', machine: 'assembler', inputs: { mana_copper: 1, plank: 2 }, output: 'return_stone', count: 1, tier: 1, time: 45 },
-  { id: 'bag_kit', machine: 'assembler', inputs: { magi_alloy: 1, gear_part: 2, mana_iron: 1 }, output: 'bag_kit', count: 1, tier: 5, time: 120 },
-  { id: 'resonator', machine: 'assembler', inputs: { dim_ingot: 3, orichalcum_ingot: 2, mana_titanium: 2 }, output: 'resonator', count: 1, tier: 7, time: 300 },
+  { id: 'return_stone', machine: 'workbench', inputs: { mana_copper: 1, plank: 2 }, output: 'return_stone', count: 1, tier: 1, time: 45 },
+  { id: 'bag_kit', machine: 'workbench', inputs: { magi_alloy: 1, gear_part: 2, mana_iron: 1 }, output: 'bag_kit', count: 1, tier: 5, time: 120 },
+  { id: 'resonator', machine: 'workbench', inputs: { dim_ingot: 3, orichalcum_ingot: 2, mana_titanium: 2 }, output: 'resonator', count: 1, tier: 7, time: 300 },
   { id: 'potion_mid', machine: 'alchemy', inputs: { potion: 1, essence_mid: 1 }, output: 'potion_mid', count: 1, tier: 3, time: 40 },
   { id: 'potion_high', machine: 'alchemy', inputs: { potion_mid: 1, essence_high: 1 }, output: 'potion_high', count: 1, tier: 6, time: 60 },
 ];
@@ -89,7 +88,7 @@ export const OFFLINE_CAP_HOURS = 8;
 // ---- 건물 레벨 (세라의 강화 도면) ----
 export const MAX_BUILDING_LEVEL = 7;
 /** 레벨을 올릴 수 있는 건물 */
-export const UPGRADABLE: BuildingType[] = ['generator', 'smelter', 'crusher', 'infuser', 'assembler', 'alchemy'];
+export const UPGRADABLE: BuildingType[] = ['generator', 'smelter', 'crusher', 'infuser', 'alchemy'];
 
 const LEVEL_INGOT = ['copper_ingot', 'iron_ingot', 'gold_ingot', 'diamond', 'titanium_ingot', 'orichalcum_ingot', 'dim_ingot'];
 
@@ -98,13 +97,13 @@ const LEVEL_INGOT = ['copper_ingot', 'iron_ingot', 'gold_ingot', 'diamond', 'tit
  * 새 단계 재료는 새 단계 건물이 있어야 만들 수 있으므로, 이전 단계 재료로 계단을 오른다.
  */
 export function upgradeBlueprintCost(type: BuildingType, level: number): { gold: number; items: Record<string, number> } {
-  const heavy = type === 'assembler' || type === 'generator' ? 2 : 1;
+  const heavy = type === 'generator' ? 2 : 1;
   return { gold: 400 * level * heavy, items: { [LEVEL_INGOT[level - 2]]: 4 * heavy, [PLANKS[level - 2]]: 4 * heavy } };
 }
 
 /** 설치된 건물을 Lv.L로 올리는 비용: 역시 한 단계 아래 재료 */
 export function buildingUpgradeCost(type: BuildingType, level: number): Record<string, number> {
-  const heavy = type === 'assembler' || type === 'generator' ? 2 : 1;
+  const heavy = type === 'generator' ? 2 : 1;
   return { [LEVEL_INGOT[level - 2]]: 6 * heavy, [PLANKS[level - 2]]: 6 * heavy };
 }
 

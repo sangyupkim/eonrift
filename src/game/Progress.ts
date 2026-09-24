@@ -3,7 +3,7 @@ import { equipStats, type Equip, type EquipSlot } from '../data/equipment';
 import { newTool, type ToolKind, type ToolState } from '../data/tools';
 import { FACTORY_SIZES, RECIPES, RECIPE_RENAMES } from '../data/factory';
 import { ITEM_RENAMES } from '../data/items';
-import type { FactoryState } from '../factory/sim';
+import type { BuildingState, FactoryState } from '../factory/sim';
 import { Bag, type Slot } from './Bag';
 import { BAG_SLOTS } from '../config';
 import { newQuestState, type QuestState } from './Quests';
@@ -177,6 +177,34 @@ function migrate(d: SaveData & { maxTier?: number }): SaveData {
     }
     if (b.type === 'generator') b.buffer ??= {};
   }
+  // 조립기는 제작대로 합쳐졌다: 지어 둔 조립기는 제작대로 바꾸고, 산 도면 값은 골드로 돌려준다
+  for (const b of d.factory.buildings as (Omit<BuildingState, 'type'> & { type: string; energy?: number })[]) {
+    if (b.type === 'assembler') {
+      for (const [id, n] of Object.entries(b.buffer ?? {})) if (n > 0) d.storage[id] = (d.storage[id] ?? 0) + n;
+      if (b.crafting) for (const [id, n] of Object.entries(RECIPES.find((r) => r.id === b.crafting)?.inputs ?? {})) d.storage[id] = (d.storage[id] ?? 0) + n;
+      b.type = 'workbench';
+      b.level = 1;
+      b.buffer = undefined;
+      b.crafting = null;
+      b.recipe = null;
+    }
+    if (b.type === 'workbench') {
+      delete b.energy;
+      b.job ??= null;
+      b.out ??= [];
+      b.ready ??= [];
+      b.progress ??= 0;
+    }
+  }
+  if (d.flags.bp_assembler) {
+    d.gold += 1200;
+    delete d.flags.bp_assembler;
+  }
+  for (let lv = 2; lv <= 7; lv++)
+    if (d.flags[`bp_assembler_lv${lv}`]) {
+      d.gold += 800 * lv;
+      delete d.flags[`bp_assembler_lv${lv}`];
+    }
   // 광석·나무 개편 전 아이템 id를 새 id로 옮긴다
   const re = (id: string) => ITEM_RENAMES[id] ?? id;
   const reRecord = (r: Record<string, number>) => {
