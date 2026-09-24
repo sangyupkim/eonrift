@@ -1,7 +1,7 @@
 import { bustUrl, itemIconUrl, skillIconUrl } from '../ui/itemIcons';
 import { decodeSave, encodeSave } from './saveCode';
 import { gearLook } from '../models/items';
-import { BOSS_TIME_LIMIT } from '../data/monsters';
+import { BOSS_RESPAWN_MS, BOSS_TIME_LIMIT } from '../data/monsters';
 import { newTool, TOOL_KIND_NAMES, TOOL_TIER_NAMES, toolBonusChance, toolName, toolSpeed, toolWear, type ToolKind } from '../data/tools';
 import { MeshLambertMaterial, OrthographicCamera, PCFShadowMap, Plane, Raycaster, Vector2, Vector3, WebGLRenderer } from 'three';
 import { BAG_SLOTS, CAMERA_OFFSET, PLAYER, SCREEN_UP, TILE, VIEW_HEIGHT } from '../config';
@@ -22,7 +22,7 @@ import { BuildBar } from '../ui/buildbar';
 import { Dialogue } from '../ui/dialogue';
 import { Hud } from '../ui/hud';
 import { Minimap, type MapMarker } from '../ui/minimap';
-import { hex, Screens, workJobEquip, workJobIconUrl } from '../ui/screens';
+import { formatWait, hex, Screens, workJobEquip, workJobIconUrl } from '../ui/screens';
 import { Bag } from './Bag';
 import { Combat } from './Combat';
 import type { Monster } from './Monster';
@@ -408,7 +408,8 @@ export class Game {
 
   /** 던전 입장. run이 있으면 가방을 들고 다음 방으로 이어 간다 */
   private enterDungeon(tier: number, stage: number, background = false): void {
-    const data = generateDungeon(randomSeed(), tier, stage);
+    const wait = this.progress.bossWait(tier, stage);
+    const data = generateDungeon(randomSeed(), tier, stage, wait === 0);
     const dungeon = new DungeonScene(data, this.progress.data.ngPlus, {
       player: () => this.player.position,
       cameraQuat: () => this.camera.quaternion,
@@ -476,7 +477,8 @@ export class Game {
     this.audio.play('portal');
     this.mode = 'play';
     this.hud.setVisible(true);
-    const note = stage === 10 ? ' — 차원석을 지닌 수호자가 기다립니다' : stage === 5 ? ' — 파수꾼이 지키고 있습니다' : '';
+    const note =
+      wait > 0 ? ` — ${stage === 10 ? '수호자' : '파수꾼'}는 ${formatWait(wait)} 뒤 다시 나타납니다 (지금은 정예가 지킴)` : stage === 10 ? ' — 차원석을 지닌 수호자가 기다립니다' : stage === 5 ? ' — 파수꾼이 지키고 있습니다' : '';
     this.hud.toast(`${tier}-${stage} · ${dungeon.theme.name}${note}`, 3000);
     this.refreshHud();
     // 방에 들어올 때마다 체크포인트 저장
@@ -1160,6 +1162,11 @@ export class Game {
       const e = rollEquip(rng, tier, this.progress.data.currentClass, bonus);
       if (run.bag.addEquip(e)) loot(`${GRADES[e.grade].name} ${equipName(e)}`, hex(GRADES[e.grade].color));
       else this.hud.toast('가방이 가득 차서 장비를 줍지 못했습니다');
+    }
+    // 보스는 쓰러뜨리면 한동안 다시 나오지 않는다 (파수꾼 1시간, 수호자 4시간)
+    if (m.kind === 'midboss' || m.kind === 'boss') {
+      this.progress.bossDefeated(tier, run.stage, BOSS_RESPAWN_MS[m.kind]);
+      this.hud.toast(`${m.name}은(는) ${formatWait(BOSS_RESPAWN_MS[m.kind])} 뒤 다시 나타납니다`, 3000);
     }
     if (m.kind === 'midboss') {
       const plate = TIER_PLATE[tier - 1];

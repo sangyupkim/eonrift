@@ -65,6 +65,8 @@ export function hasStory(npc: NpcId, p: Progress): boolean {
 export function resetForNewCycle(p: Progress): void {
   const keep = new Set(['intro', 'returned', 'legend', 'home', 'factoryBuilt', 'endingA', 'endingB', 'tool_pickaxe', 'tool_axe', 'stone1Talk']);
   for (const k of Object.keys(p.data.flags)) if (!keep.has(k) && !k.startsWith('bp_')) delete p.data.flags[k];
+  // 새 회차에서는 보스가 모두 다시 나타난다
+  delete p.data.bossReadyAt;
 }
 
 /** 던전 HUD용: 진행 중인 퀘스트의 남은 목표 (최대 3줄) */

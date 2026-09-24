@@ -76,17 +76,18 @@ export function isFloor(d: Pick<DungeonData, 'width' | 'height' | 'cells'>, x: n
 
 const roomCenter = (r: Room) => ({ x: Math.floor(r.x + r.w / 2), y: Math.floor(r.y + r.h / 2) });
 
-export function generateDungeon(seed: number, tier: number, stage = 1): DungeonData {
+/** bossReady: 5·10번째 방의 보스가 지금 있는지 (쓰러뜨린 뒤 재등장 대기 중이면 false) */
+export function generateDungeon(seed: number, tier: number, stage = 1, bossReady = true): DungeonData {
   const rng = new Rng(seed);
   // 방 배치가 너무 적게 나오면 같은 난수 흐름으로 다시 시도한다 (시드가 같으면 결과도 같다)
   for (let attempt = 0; attempt < 20; attempt++) {
-    const result = tryGenerate(rng, seed, tier, stage);
+    const result = tryGenerate(rng, seed, tier, stage, bossReady);
     if (result) return result;
   }
   throw new Error(`던전 생성 실패 (seed=${seed})`);
 }
 
-function tryGenerate(rng: Rng, seed: number, tier: number, stage: number): DungeonData | null {
+function tryGenerate(rng: Rng, seed: number, tier: number, stage: number, bossReady: boolean): DungeonData | null {
   const width = MAP_WIDTH;
   const height = MAP_HEIGHT;
   const cells = new Uint8Array(width * height);
@@ -304,9 +305,20 @@ function tryGenerate(rng: Rng, seed: number, tier: number, stage: number): Dunge
         if (c) monsters.push({ ...c, kind: 'normal' });
       }
     } else if (r.type === 'exit') {
-      if (stage === 10) monsters.push({ x: exit.x, y: exit.y - 2, kind: 'boss' });
-      else if (stage === 5) monsters.push({ x: exit.x, y: exit.y - 2, kind: 'midboss' });
-      else {
+      if (stage === 10 && bossReady) monsters.push({ x: exit.x, y: exit.y - 2, kind: 'boss' });
+      else if (stage === 5 && bossReady) monsters.push({ x: exit.x, y: exit.y - 2, kind: 'midboss' });
+      else if (stage === 5 || stage === 10) {
+        // 보스가 재등장을 기다리는 동안: 빈 보스 방 대신 정예 무리가 지킨다 (보스 보상 없음)
+        monsters.push({ x: exit.x, y: exit.y - 2, kind: 'elite' });
+        for (let i = 0; i < (stage === 10 ? 2 : 1); i++) {
+          const c = pickInteriorCell(r, 0);
+          if (c) monsters.push({ ...c, kind: 'elite' });
+        }
+        for (let i = 0; i < 5; i++) {
+          const c = pickInteriorCell(r, 0);
+          if (c) monsters.push({ ...c, kind: 'normal' });
+        }
+      } else {
         for (let i = 0; i < rng.int(4, 6); i++) {
           const cell = pickInteriorCell(r, 0);
           if (cell) monsters.push({ ...cell, kind: 'normal' });

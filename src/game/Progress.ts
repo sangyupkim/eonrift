@@ -61,6 +61,8 @@ export interface SaveData {
   hp?: number;
   /** 던전 진행 중 체크포인트 (게임이 꺼지면 이 방으로 돌아온다) */
   run?: RunCheckpoint;
+  /** 보스가 다시 나타나는 시각 (키: "단계-방", 값: ms) */
+  bossReadyAt?: Record<string, number>;
   settings: { shadows: boolean; sound: boolean; music?: number; sfx?: number; autoAim?: boolean };
   /** 곡괭이·도끼 내구도 */
   tools: Record<ToolKind, ToolState>;
@@ -433,6 +435,17 @@ export class Progress {
 
   get stoneCount(): number {
     return this.data.dimStones.length;
+  }
+
+  /** 보스(5·10번째 방)가 다시 나타날 때까지 남은 시간(ms). 0이면 지금 있다 */
+  bossWait(tier: number, stage: number, now = Date.now()): number {
+    if (stage !== 5 && stage !== 10) return 0;
+    return Math.max(0, (this.data.bossReadyAt?.[`${tier}-${stage}`] ?? 0) - now);
+  }
+
+  /** 보스를 쓰러뜨렸다: 재등장 시각을 기록한다 */
+  bossDefeated(tier: number, stage: number, respawnMs: number, now = Date.now()): void {
+    (this.data.bossReadyAt ??= {})[`${tier}-${stage}`] = now + respawnMs;
   }
 
   flag(name: string): number {

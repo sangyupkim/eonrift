@@ -59,6 +59,16 @@ const inlineGem = (id: string) => {
   return url ? `<img class="gem-inline ico" src="${url}" alt="">` : `<i class="gem-inline" style="--c:${hex(ITEMS[id]?.color ?? 0xffffff)}"></i>`;
 };
 
+/** 남은 시간 글자: "1시간 20분", "42분", "30초" */
+export function formatWait(ms: number): string {
+  const sec = Math.ceil(ms / 1000);
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  if (h > 0) return `${h}시간${m ? ` ${m}분` : ''}`;
+  if (m > 0) return `${m}분`;
+  return `${sec}초`;
+}
+
 /** 제작대 작업 이름과 아이콘 (창·말풍선 공용) */
 export function workJobName(j: WorkJob): string {
   if (j.kind === 'item') return ITEMS[j.id].name;
@@ -235,8 +245,10 @@ export class Screens {
       const open = g <= p.data.cleared + 1;
       const done = g <= p.data.cleared;
       const mark = st === 10 ? '수호자' : st === 5 ? '파수꾼' : '';
-      return `<button class="stage-btn ${done ? 'done' : ''} ${mark ? 'boss' : ''}" data-stage="${st}" ${open ? '' : 'disabled'}>
-          <b>${tier}-${st}</b><small>${!open ? '봉인' : mark || (done ? '클리어' : '도전')}</small></button>`;
+      const wait = p.bossWait(tier, st);
+      const sub = !open ? '봉인' : mark ? (wait > 0 ? `${mark} ${formatWait(wait)}` : mark) : done ? '클리어' : '도전';
+      return `<button class="stage-btn ${done ? 'done' : ''} ${mark ? 'boss' : ''} ${wait > 0 ? 'waiting' : ''}" data-stage="${st}" ${open ? '' : 'disabled'}>
+          <b>${tier}-${st}</b><small>${sub}</small></button>`;
     }).join('');
     const s = this.open(
       'select',
@@ -244,7 +256,7 @@ export class Screens {
          <button class="close">${ICONS.close}</button>
          <h2>차원문 광장 <small>${theme.name}${p.data.ngPlus ? ` · ${p.data.ngPlus + 1}회차` : ''}</small></h2>
          <div class="tier-tabs">${tiers}</div>
-         <p class="hint">방의 몬스터를 모두 쓰러뜨리면 워프 게이트가 열립니다. 5번째 방은 파수꾼(좋은 보상), 10번째 방은 차원석을 지닌 수호자.</p>
+         <p class="hint">방의 몬스터를 모두 쓰러뜨리면 워프 게이트가 열립니다. 5번째 방은 파수꾼(좋은 보상), 10번째 방은 차원석을 지닌 수호자. 쓰러뜨린 파수꾼은 1시간, 수호자는 4시간 뒤 다시 나타나고, 그동안은 정예 무리가 지킵니다.</p>
          <div class="stage-grid">${stages}</div>
        </div>`,
       onClose,

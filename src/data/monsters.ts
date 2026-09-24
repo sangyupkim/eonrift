@@ -67,3 +67,5 @@ export function tierScale(tier: number, stage: number, ngPlus: number): { hp: nu
 
 /** 보스 제한 시간 (초) */
 export const BOSS_TIME_LIMIT = 300;
+/** 보스를 쓰러뜨린 뒤 다시 나타나기까지 (밀리초): 파수꾼 1시간, 챕터 수호자 4시간 */
+export const BOSS_RESPAWN_MS = { midboss: 60 * 60 * 1000, boss: 4 * 60 * 60 * 1000 };
