@@ -1,4 +1,4 @@
-import { bustUrl, itemIconUrl } from '../ui/itemIcons';
+import { bustUrl, itemIconUrl, skillIconUrl } from '../ui/itemIcons';
 import { decodeSave, encodeSave } from './saveCode';
 import { gearLook } from '../models/items';
 import { BOSS_TIME_LIMIT } from '../data/monsters';
@@ -1907,6 +1907,8 @@ export class Game {
       quick.map((i) => (i >= 0 ? (this.combat.cooldowns[i] ?? 0) / skills[i].cooldown : 0)),
       quick.map((i) => i < 0 || pl.mp >= skills[i].mp),
       quick.map((i) => (i >= 0 ? skills[i].name : null)),
+      quick.map((i) => (i >= 0 ? skillIconUrl(pl.cls.id, i) : '')),
+      quick.map((i) => (i >= 0 ? (this.combat.cooldowns[i] ?? 0) : 0)),
     );
     const inv = this.run ? this.run.bag : this.progress.invBag;
     this.hud.setBagCount(inv.used, BAG_SLOTS);

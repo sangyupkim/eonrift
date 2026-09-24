@@ -45,6 +45,13 @@ export interface HeroGear {
   necklace?: number;
   pickaxe?: number;
   axe?: number;
+  /** 강화 빛: 무기 강화 단계, 방어구(투구·갑옷·각반·장화) 중 가장 높은 강화 단계 */
+  glow?: { weapon: number; body: number };
+}
+
+/** 강화 단계별 빛 색: +1~3 파랑 · +4~6 초록 · +7~9 금빛 · +10 붉은 빛 */
+export function glowColor(plus: number): number {
+  return plus >= 10 ? 0xff4a4a : plus >= 7 ? 0xffd23a : plus >= 4 ? 0x4aff8a : 0x4aa8ff;
 }
 
 const darken = (c: number, k = 0.65) => (Math.round(((c >> 16) & 255) * k) << 16) | (Math.round(((c >> 8) & 255) * k) << 8) | Math.round((c & 255) * k);

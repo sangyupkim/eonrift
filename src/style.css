@@ -2266,3 +2266,66 @@ textarea.code {
   text-align: center;
   line-height: 1.4;
 }
+/* ---- 스킬 버튼: 3D 아이콘 · 빨간 재사용 대기 · 준비되면 번쩍 ---- */
+.act.skill .skill-icon {
+  position: absolute;
+  inset: 8% 12% 26%;
+  width: 76%;
+  height: 66%;
+  object-fit: contain;
+  pointer-events: none;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.7));
+}
+.act.skill .skill-name {
+  position: absolute;
+  bottom: 3px;
+  left: 0;
+  right: 0;
+  font-size: 9px;
+  text-shadow: 0 1px 2px #000;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.act.skill.locked .skill-name {
+  position: static;
+  font-size: 10px;
+  white-space: normal;
+}
+.act.skill .cooldown {
+  background: rgba(200, 30, 40, 0.62);
+  z-index: 2;
+}
+.act.skill.cooling {
+  border-color: rgba(255, 90, 90, 0.9);
+}
+.act.skill.cooling .skill-icon {
+  filter: grayscale(0.8) brightness(0.7);
+}
+.act.skill .cd-sec {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  z-index: 3;
+  font-size: 20px;
+  font-weight: 900;
+  color: #fff;
+  text-shadow: 0 0 4px #000, 0 1px 2px #000;
+  pointer-events: none;
+}
+.act.skill .cd-sec:empty {
+  display: none;
+}
+.act.skill.ready-flash {
+  animation: skillReady 0.55s ease-out;
+}
+@keyframes skillReady {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.95), inset 0 0 18px rgba(255, 255, 255, 0.9);
+    transform: scale(1.12);
+  }
+  100% {
+    box-shadow: 0 0 0 16px rgba(255, 255, 255, 0), inset 0 0 0 rgba(255, 255, 255, 0);
+    transform: scale(1);
+  }
+}

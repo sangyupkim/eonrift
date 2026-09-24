@@ -1,7 +1,7 @@
-import { Color, GreaterDepth, Material, Mesh, MeshBasicMaterial, MeshLambertMaterial } from 'three';
+import { AdditiveBlending, Color, GreaterDepth, Material, Mesh, MeshBasicMaterial, MeshLambertMaterial } from 'three';
 import { PLAYER, SCREEN_RIGHT, SCREEN_UP } from '../config';
 import type { ClassDef } from '../data/classes';
-import { buildHero, type HeroGear, type HeroRig } from '../models/hero';
+import { buildHero, glowColor, type HeroGear, type HeroRig } from '../models/hero';
 
 export type Pose = 'swing' | 'spin' | 'cast' | 'shoot' | 'thrust' | 'gather';
 export type DashPose = 'roll' | 'lunge' | 'leap';
@@ -89,6 +89,7 @@ export class Player {
       gear,
     });
     addSilhouette(this.rig.meshes);
+    if (gear?.glow) this.addGlow(gear.glow);
   }
 
   setPosition(x: number, z: number): void {
@@ -166,7 +167,27 @@ export class Player {
     }
   }
 
+  /** 강화 빛: 장비 모양을 살짝 크게 덧씌운 빛나는 껍질. 단계가 높을수록 진하고 색이 바뀐다 */
+  private glows: { mat: MeshBasicMaterial; base: number; speed: number }[] = [];
+  private addGlow(glow: { weapon: number; body: number }): void {
+    const add = (meshes: Mesh[], plus: number, scale: number) => {
+      if (plus <= 0) return;
+      const mat = new MeshBasicMaterial({ color: glowColor(plus), transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false });
+      for (const m of meshes) {
+        const shell = new Mesh(m.geometry, mat);
+        shell.scale.setScalar(scale);
+        m.add(shell);
+      }
+      this.glows.push({ mat, base: 0.1 + plus * 0.035, speed: 2 + plus * 0.25 });
+    };
+    const meshesOf = (g: { children: unknown[] }) => g.children.filter((c): c is Mesh => c instanceof Mesh);
+    add(meshesOf(this.rig.weapon), glow.weapon, 1.14);
+    add([...meshesOf(this.rig.torso), ...meshesOf(this.rig.head), ...meshesOf(this.rig.legL), ...meshesOf(this.rig.legR)], glow.body, 1.06);
+  }
+
   update(dt: number, ctx: MoveContext): void {
+    // 강화 빛은 천천히 숨 쉬듯 밝아졌다 어두워진다
+    for (const g of this.glows) g.mat.opacity = g.base * (0.65 + 0.35 * Math.sin(this.time * g.speed));
     this.time += dt;
     for (const b of this.buffs) b.t -= dt;
     this.buffs = this.buffs.filter((b) => b.t > 0 && (b.stacks === undefined || b.stacks > 0));

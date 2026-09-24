@@ -375,13 +375,53 @@ export class Hud {
   }
 
   /** 퀵슬롯 3칸. names[i]가 null이면 빈 칸 */
-  setSkills(cooldowns: number[], ready: boolean[], names: (string | null)[]): void {
+  private skillCdWas: boolean[] = [];
+  private skillIcons: (HTMLImageElement | null)[] = [];
+  private skillSecs: (HTMLSpanElement | null)[] = [];
+  /**
+   * 퀵슬롯 3칸. names[i]가 null이면 빈 칸.
+   * 재사용 대기 중에는 빨간 그늘 + 남은 초, 다시 쓸 수 있게 되면 한 번 번쩍인다
+   */
+  setSkills(cooldowns: number[], ready: boolean[], names: (string | null)[], icons: string[] = [], secs: number[] = []): void {
     cooldowns.forEach((r, i) => {
+      const btn = this.skillBtns[i];
+      const cooling = r > 0.001;
       this.skillShades[i].style.transform = `scaleY(${Math.min(1, r)})`;
-      this.skillBtns[i].classList.toggle('no-mp', !ready[i]);
-      this.skillBtns[i].classList.toggle('locked', names[i] === null);
+      btn.classList.toggle('cooling', cooling);
+      if (this.skillCdWas[i] && !cooling) {
+        btn.classList.remove('ready-flash');
+        void btn.offsetWidth;
+        btn.classList.add('ready-flash');
+      }
+      this.skillCdWas[i] = cooling;
+      btn.classList.toggle('no-mp', !ready[i]);
+      btn.classList.toggle('locked', names[i] === null);
       const label = names[i] ?? '비어 있음';
       if (this.skillLabels[i].textContent !== label) this.skillLabels[i].textContent = label;
+      // 3D 아이콘
+      let img = this.skillIcons[i];
+      if (!img) {
+        img = document.createElement('img');
+        img.className = 'skill-icon';
+        img.alt = '';
+        btn.insertBefore(img, btn.firstChild);
+        this.skillIcons[i] = img;
+      }
+      const url = icons[i] ?? '';
+      if (img.dataset.src !== url) {
+        img.dataset.src = url;
+        if (url) img.src = url;
+        img.style.display = url ? '' : 'none';
+      }
+      let sec = this.skillSecs[i];
+      if (!sec) {
+        sec = document.createElement('span');
+        sec.className = 'cd-sec';
+        btn.appendChild(sec);
+        this.skillSecs[i] = sec;
+      }
+      const t = cooling && secs[i] ? String(Math.ceil(secs[i])) : '';
+      if (sec.textContent !== t) sec.textContent = t;
     });
   }
 

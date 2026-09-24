@@ -16,7 +16,7 @@ import { objectiveNeed, objectiveProgress, objectiveText, type Quests } from '..
 import { ICONS } from './icons';
 import { buildingThumb } from './thumbs';
 import { gearLook } from '../models/items';
-import { equipIconUrl, heroPortraitUrl, itemIconUrl, toolIconUrl } from './itemIcons';
+import { equipIconUrl, heroPortraitUrl, itemIconUrl, skillIconUrl, toolIconUrl } from './itemIcons';
 import { canInstall, promptInstall } from './install';
 
 export const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
@@ -599,7 +599,7 @@ export class Screens {
         .map((sk, i) => {
           const lv = c.skills[i] ?? 0;
           const slot = c.quick.indexOf(i);
-          return `<li class="${selSkill === i ? 'sel' : ''} ${lv ? '' : 'locked'}" ${lv ? `data-skillpick="${i}"` : ''}><span class="key">${slot >= 0 ? slot + 1 : '·'}</span><div><b>${sk.name} ${lv ? `<span class="ok">Lv.${lv}</span>` : '<span class="dim">(미습득 · 교관 카엘)</span>'}</b><small>${sk.description} · MP ${sk.mp} · ${sk.cooldown}초</small></div></li>`;
+          return `<li class="${selSkill === i ? 'sel' : ''} ${lv ? '' : 'locked'}" ${lv ? `data-skillpick="${i}"` : ''}><img class="gem ico" src="${skillIconUrl(p.data.currentClass, i)}" alt=""><div><b class="slot-no">${slot >= 0 ? `[${slot + 1}번 칸]` : ''}</b><b>${sk.name} ${lv ? `<span class="ok">Lv.${lv}</span>` : '<span class="dim">(미습득 · 교관 카엘)</span>'}</b><small>${sk.description} · MP ${sk.mp} · ${sk.cooldown}초</small></div></li>`;
         })
         .join('');
       body = `<div class="scroll">
@@ -1167,7 +1167,7 @@ export class Screens {
           ? ' · ' + Object.entries(cost.items).map(([id, n]) => `<span class="${p.count(id) >= n ? '' : 'bad'}">${inlineGem(id)}${ITEMS[id].name} ${p.count(id)}/${n}</span>`).join(' · ')
           : '';
         const req = cost ? `필요 레벨 ${cost.level}${c.level < cost.level ? ' <span class="bad">(부족)</span>' : ''}${itemsTxt}` : '';
-        return `<li><span class="key">${i + 1}</span><div><b>${sk.name} ${lv ? `<span class="ok">Lv.${lv}</span>` : '<span class="dim">(미습득)</span>'}</b>
+        return `<li><img class="gem ico" src="${skillIconUrl(p.data.currentClass, i)}" alt=""><div><b>${sk.name} ${lv ? `<span class="ok">Lv.${lv}</span>` : '<span class="dim">(미습득)</span>'}</b>
           <small>${sk.description} · MP ${sk.mp} · ${sk.cooldown}초</small>
           <small class="dim">${lv ? `위력 +${(lv - 1) * 15}% · 재사용 -${(lv - 1) * 6}%` : ''} ${req}</small></div>
           <button data-skill="${i}" ${ok ? '' : 'disabled'}>${label}</button></li>`;

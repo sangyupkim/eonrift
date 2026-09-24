@@ -3,6 +3,7 @@ import { CLASSES, type ClassId } from '../data/classes';
 import type { Equip } from '../data/equipment';
 import { buildHero, type HeroGear, type HeroLook } from '../models/hero';
 import { buildEquipGeometry, buildItemGeometry, buildToolGeometry } from '../models/items';
+import { buildSkillGeometry } from '../models/skills';
 
 /**
  * 아이템 모델을 한 번 그려서 이미지로 만들어 두는 아이콘 공장.
@@ -69,6 +70,10 @@ function geoIcon(key: string, make: () => BufferGeometry): string {
 
 export function itemIconUrl(id: string): string {
   return geoIcon(`i:${id}`, () => buildItemGeometry(id));
+}
+
+export function skillIconUrl(cls: ClassId, index: number): string {
+  return geoIcon(`s:${cls}:${index}`, () => buildSkillGeometry(cls, index));
 }
 
 export function toolIconUrl(kind: 'pickaxe' | 'axe', tier: number): string {

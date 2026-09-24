@@ -269,6 +269,9 @@ export function gearLook(eq: Partial<Record<Equip['slot'], Equip>>, tools?: { pi
   if (eq.pants) g.pants = metal(eq.pants);
   if (eq.boots) g.boots = metal(eq.boots);
   if (eq.necklace) g.necklace = gem(eq.necklace);
+  const bodyPlus = Math.max(0, ...(['helmet', 'armor', 'pants', 'boots'] as const).map((k) => eq[k]?.plus ?? 0));
+  const weaponPlus = eq.weapon?.plus ?? 0;
+  if (weaponPlus > 0 || bodyPlus > 0) g.glow = { weapon: weaponPlus, body: bodyPlus };
   if (tools) {
     g.pickaxe = TIER_METAL[Math.min(6, tools.pickaxe.tier - 1)];
     g.axe = TIER_METAL[Math.min(6, tools.axe.tier - 1)];
