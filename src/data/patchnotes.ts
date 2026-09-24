@@ -7,6 +7,14 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '4.0',
+    date: '2026-09-24',
+    items: [
+      '강화 빛이 온몸이 아니라 강화한 부위(무기·투구·갑옷·각반·장화)에만 표시',
+      '부위마다 자기 강화 수치의 색으로 빛남 (파랑 → 초록 +4 → 금 +7 → 빨강 +10)',
+    ],
+  },
+  {
     version: '3.9',
     date: '2026-09-24',
     items: [

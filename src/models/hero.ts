@@ -17,7 +17,11 @@ export interface HeroRig {
   pickaxe: Group;
   axe: Group;
   meshes: Mesh[];
+  /** 부위별 장비 조각 (강화 빛을 그 부위에만 씌운다) */
+  gearMeshes: Record<GlowPart, Mesh[]>;
 }
+
+export type GlowPart = 'weapon' | 'helmet' | 'armor' | 'pants' | 'boots';
 
 export type WeaponKind = 'sword' | 'staff' | 'bow' | 'hammer' | 'none';
 
@@ -45,8 +49,8 @@ export interface HeroGear {
   necklace?: number;
   pickaxe?: number;
   axe?: number;
-  /** 강화 빛: 무기 강화 단계, 방어구(투구·갑옷·각반·장화) 중 가장 높은 강화 단계 */
-  glow?: { weapon: number; body: number };
+  /** 강화 빛: 부위별 강화 단계 */
+  glow?: Partial<Record<GlowPart, number>>;
 }
 
 /** 강화 단계별 빛 색: +1~3 파랑 · +4~6 초록 · +7~9 금빛 · +10 붉은 빛 */
@@ -84,6 +88,13 @@ export function buildHero(material: Material, look: HeroLook): HeroRig {
     return m;
   };
 
+  const gearMeshes: Record<GlowPart, Mesh[]> = { weapon: [], helmet: [], armor: [], pants: [], boots: [] };
+  const gearMesh = (slot: GlowPart, parts: Parameters<typeof merge>[0]) => {
+    const m = mesh(parts);
+    gearMeshes[slot].push(m);
+    return m;
+  };
+
   const root = new Group();
   const body = new Group();
   body.position.y = HIP_HEIGHT;
@@ -93,16 +104,16 @@ export function buildHero(material: Material, look: HeroLook): HeroRig {
   const makeLeg = (x: number) => {
     const leg = new Group();
     leg.position.set(x, 0, 0);
+    leg.add(mesh([part(new BoxGeometry(0.17, 0.44, 0.19), look.pants ?? C.pants, { pos: [0, -0.22, 0] })]));
+    // 신발 (장화를 신으면 재질 색 + 발목 보호대)
     leg.add(
-      mesh([
-        part(new BoxGeometry(0.17, 0.44, 0.19), look.pants ?? C.pants, { pos: [0, -0.22, 0] }),
+      gearMesh('boots', [
         part(new BoxGeometry(0.19, 0.16, 0.27), bootColor, { pos: [0, -0.52, 0.03] }),
         ...(gear.boots !== undefined ? [part(new BoxGeometry(0.2, 0.08, 0.2), darken(gear.boots), { pos: [0, -0.4, 0] })] : []),
-        ...(gear.pants !== undefined
-          ? [part(new BoxGeometry(0.19, 0.22, 0.05), gear.pants, { pos: [0, -0.28, 0.1] }), part(new BoxGeometry(0.19, 0.06, 0.21), darken(gear.pants), { pos: [0, -0.05, 0] })]
-          : []),
       ]),
     );
+    if (gear.pants !== undefined)
+      leg.add(gearMesh('pants', [part(new BoxGeometry(0.19, 0.22, 0.05), gear.pants, { pos: [0, -0.28, 0.1] }), part(new BoxGeometry(0.19, 0.06, 0.21), darken(gear.pants), { pos: [0, -0.05, 0] })]));
     body.add(leg);
     return leg;
   };
@@ -134,19 +145,19 @@ export function buildHero(material: Material, look: HeroLook): HeroRig {
     torsoParts.push(part(new CylinderGeometry(0.09, 0.08, 0.5, 6), C.belt, { pos: [0.12, 0.35, -0.22], rot: [0, 0, -0.35] }));
     torsoParts.push(part(new BoxGeometry(0.14, 0.08, 0.1), 0xe8e0d0, { pos: [0.21, 0.62, -0.22], rot: [0, 0, -0.35] }));
   }
-  if (gear.armor) {
-    const a = gear.armor;
-    torsoParts.push(
-      part(new BoxGeometry(0.44, 0.36, 0.05), a.metal, { pos: [0, 0.3, 0.17] }),
-      part(new BoxGeometry(0.44, 0.3, 0.05), darken(a.metal), { pos: [0, 0.3, -0.17] }),
-      part(new BoxGeometry(0.22, 0.12, 0.28), a.metal, { pos: [0.3, 0.5, 0] }),
-      part(new BoxGeometry(0.22, 0.12, 0.28), a.metal, { pos: [-0.3, 0.5, 0] }),
-      part(new OctahedronGeometry(0.05), a.gem, { pos: [0, 0.34, 0.2] }),
-    );
-  }
+  const armorParts = gear.armor
+    ? [
+        part(new BoxGeometry(0.44, 0.36, 0.05), gear.armor.metal, { pos: [0, 0.3, 0.17] }),
+        part(new BoxGeometry(0.44, 0.3, 0.05), darken(gear.armor.metal), { pos: [0, 0.3, -0.17] }),
+        part(new BoxGeometry(0.22, 0.12, 0.28), gear.armor.metal, { pos: [0.3, 0.5, 0] }),
+        part(new BoxGeometry(0.22, 0.12, 0.28), gear.armor.metal, { pos: [-0.3, 0.5, 0] }),
+        part(new OctahedronGeometry(0.05), gear.armor.gem, { pos: [0, 0.34, 0.2] }),
+      ]
+    : null;
   if (gear.necklace !== undefined) torsoParts.push(part(new OctahedronGeometry(0.045), gear.necklace, { pos: [0, 0.44, 0.19] }));
   if (look.apron) torsoParts.push(part(new BoxGeometry(0.44, 0.6, 0.04), look.apron, { pos: [0, 0.12, 0.17] }));
   torso.add(mesh(torsoParts));
+  if (armorParts) torso.add(gearMesh('armor', armorParts));
 
   // 머리 (2~2.5등신이 되도록 크게)
   const head = new Group();
@@ -163,15 +174,15 @@ export function buildHero(material: Material, look: HeroLook): HeroRig {
     part(new BoxGeometry(0.07, 0.11, 0.02), C.eye, { pos: [0.11, 0.24, 0.235] }),
     part(new BoxGeometry(0.07, 0.11, 0.02), C.eye, { pos: [-0.11, 0.24, 0.235] }),
   ];
-  if (gear.helmet) {
-    const h = gear.helmet;
-    headParts.push(
-      part(new BoxGeometry(0.6, 0.2, 0.55), h.metal, { pos: [0, 0.57, -0.01] }),
-      part(new BoxGeometry(0.62, 0.06, 0.57), darken(h.metal), { pos: [0, 0.46, -0.01] }),
-      part(new BoxGeometry(0.07, 0.26, 0.07), darken(h.metal), { pos: [0, 0.3, 0.26] }),
-      part(new ConeGeometry(0.06, 0.18, 5), h.gem, { pos: [0, 0.76, 0] }),
-    );
-  } else if (look.hat === 'wizard') {
+  const helmetParts = gear.helmet
+    ? [
+        part(new BoxGeometry(0.6, 0.2, 0.55), gear.helmet.metal, { pos: [0, 0.57, -0.01] }),
+        part(new BoxGeometry(0.62, 0.06, 0.57), darken(gear.helmet.metal), { pos: [0, 0.46, -0.01] }),
+        part(new BoxGeometry(0.07, 0.26, 0.07), darken(gear.helmet.metal), { pos: [0, 0.3, 0.26] }),
+        part(new ConeGeometry(0.06, 0.18, 5), gear.helmet.gem, { pos: [0, 0.76, 0] }),
+      ]
+    : null;
+  if (!helmetParts && look.hat === 'wizard') {
     headParts.push(part(new CylinderGeometry(0.46, 0.46, 0.05, 8), look.tunicDark, { pos: [0, 0.6, 0] }));
     headParts.push(part(new ConeGeometry(0.3, 0.6, 8), look.tunic, { pos: [0, 0.9, -0.04], rot: [-0.2, 0, 0] }));
   }
@@ -179,6 +190,7 @@ export function buildHero(material: Material, look: HeroLook): HeroRig {
     headParts.push(part(new BoxGeometry(0.44, 0.26, 0.1), look.beard, { pos: [0, 0.06, 0.22] }));
   }
   head.add(mesh(headParts));
+  if (helmetParts) head.add(gearMesh('helmet', helmetParts));
 
   // 팔
   const makeArm = (x: number) => {
@@ -283,5 +295,6 @@ export function buildHero(material: Material, look: HeroLook): HeroRig {
   pickaxe.visible = axe.visible = false;
   armR.add(pickaxe, axe);
 
-  return { root, body, torso, head, armL, armR, legL, legR, weapon, pickaxe, axe, meshes };
+  for (const c of weapon.children) if (c instanceof Mesh) gearMeshes.weapon.push(c);
+  return { root, body, torso, head, armL, armR, legL, legR, weapon, pickaxe, axe, meshes, gearMeshes };
 }

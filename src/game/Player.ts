@@ -169,7 +169,7 @@ export class Player {
 
   /** 강화 빛: 장비 모양을 살짝 크게 덧씌운 빛나는 껍질. 단계가 높을수록 진하고 색이 바뀐다 */
   private glows: { mat: MeshBasicMaterial; base: number; speed: number }[] = [];
-  private addGlow(glow: { weapon: number; body: number }): void {
+  private addGlow(glow: NonNullable<HeroGear['glow']>): void {
     const add = (meshes: Mesh[], plus: number, scale: number) => {
       if (plus <= 0) return;
       const mat = new MeshBasicMaterial({ color: glowColor(plus), transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false });
@@ -180,9 +180,8 @@ export class Player {
       }
       this.glows.push({ mat, base: 0.1 + plus * 0.035, speed: 2 + plus * 0.25 });
     };
-    const meshesOf = (g: { children: unknown[] }) => g.children.filter((c): c is Mesh => c instanceof Mesh);
-    add(meshesOf(this.rig.weapon), glow.weapon, 1.14);
-    add([...meshesOf(this.rig.torso), ...meshesOf(this.rig.head), ...meshesOf(this.rig.legL), ...meshesOf(this.rig.legR)], glow.body, 1.06);
+    // 강화한 부위의 장비 조각에만 빛을 씌운다
+    for (const [slot, plus] of Object.entries(glow) as [keyof typeof glow, number][]) add(this.rig.gearMeshes[slot], plus, slot === 'weapon' ? 1.14 : 1.08);
   }
 
   update(dt: number, ctx: MoveContext): void {
