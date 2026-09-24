@@ -312,7 +312,13 @@ function tryGenerate(rng: Rng, seed: number, tier: number, stage: number, opts: 
       // 깊은 방일수록 몬스터가 많다
       // 핵앤슬래시: 방마다 한 무리씩 몰려 있다
       const extra = Math.floor(stage / 3);
-      const count = farm ? rng.int(1, 3) : r.type === 'combat' ? rng.int(9, 12) + extra : rng.int(2, 4) + (stage > 5 ? 1 : 0);
+      let count = farm ? rng.int(1, 3) : r.type === 'combat' ? rng.int(9, 12) + extra : rng.int(2, 4) + (stage > 5 ? 1 : 0);
+      // 전투 방 크기에 변화: 가끔 몬스터가 우글거리는 소굴, 가끔 조용한 방
+      if (!farm && r.type === 'combat') {
+        const roll = rng.next();
+        if (roll < 0.2) count = Math.round(count * 1.6);
+        else if (roll < 0.35) count = Math.round(count * 0.55);
+      }
       for (let i = 0; i < count; i++) {
         const cell = pickInteriorCell(r, 0);
         if (cell) monsters.push({ ...cell, kind: 'normal' });

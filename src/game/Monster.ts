@@ -10,9 +10,11 @@ import {
   Quaternion,
   Scene,
 } from 'three';
-import { ARCHETYPES, BOSS_NAMES, MIDBOSS_NAMES, MONSTER_NAMES, tierScale, type Archetype, type ArchetypeDef } from '../data/monsters';
+import { ARCHETYPES, tierScale, type Archetype, type ArchetypeDef } from '../data/monsters';
+import { BOSS_SPECIES, MIDBOSS_SPECIES, type SpeciesDef } from '../data/species';
 import { moveWithCollision, type CircleObstacle } from '../dungeon/collision';
-import type { DungeonData } from '../dungeon/generator';
+import { TILE } from '../config';
+import { isFloor, type DungeonData } from '../dungeon/generator';
 import { buildMonster, MONSTER_COLORS, type MonsterRig } from '../models/monsters';
 import { Telegraph, type Effects, type TelegraphShape } from './Effects';
 
@@ -20,7 +22,8 @@ export type MonsterKind = 'normal' | 'elite' | 'midboss' | 'boss';
 
 type State = 'idle' | 'chase' | 'windup' | 'dash' | 'recover' | 'dead';
 
-type BossPattern = 'slam' | 'cone' | 'volley' | 'charge' | 'summon' | 'rain' | 'cross' | 'nova' | 'barrage' | 'doom';
+/** 보스 패턴 + 일반 몬스터가 쓰는 공격 이름 */
+type BossPattern = 'slam' | 'cone' | 'volley' | 'charge' | 'summon' | 'rain' | 'cross' | 'nova' | 'barrage' | 'doom' | 'spin' | 'bolt' | 'aoe' | 'thrust';
 
 export interface ProjectileSpec {
   x: number;
@@ -42,7 +45,10 @@ export interface MonsterWorld {
   monsters: Monster[];
   hurtPlayer(dmg: number, fromX: number, fromZ: number): void;
   fireEnemyProjectile(spec: ProjectileSpec): void;
-  summon(arch: Archetype, x: number, z: number): Monster;
+  /** 종족 id나 행동 유형으로 몬스터를 불러낸다 */
+  summon(what: string, x: number, z: number): Monster;
+  /** 바닥에 한동안 남아 밟으면 피해를 주는 장판 (독 웅덩이 등) */
+  hazard(x: number, z: number, r: number, duration: number, dps: number, color: number): void;
   announce(text: string): void;
   /** 피할 수 없는 즉사 */
   killPlayer(): void;
@@ -50,7 +56,6 @@ export interface MonsterWorld {
   shake(amount: number): void;
 }
 
-const BOSS_ARCH: Archetype[] = ['tank', 'charger', 'ranged', 'bomber', 'tank', 'melee', 'ranged'];
 /** 앞의 세 패턴은 중간보스도 쓰고, 수호자는 전부 쓴다 */
 const BOSS_PATTERNS: BossPattern[][] = [
   ['slam', 'cone', 'cross', 'summon', 'nova'],
@@ -63,6 +68,10 @@ const BOSS_PATTERNS: BossPattern[][] = [
 ];
 
 const HIT_TINT = new Color(0xffffff);
+/** 가까이 붙지 않고 거리를 벌리는 행동 유형 */
+const KEEP_DIST: Partial<Record<Archetype, number>> = { ranged: 5.5, archer: 6, necro: 7, shaman: 6, caster: 6.5, spitter: 5 };
+/** 예고 중에도 플레이어를 따라 조준하는 행동 유형 */
+const AIMED = new Set<Archetype>(['ranged', 'archer', 'necro']);
 
 export class Monster {
   readonly rig: MonsterRig;
@@ -108,9 +117,19 @@ export class Monster {
   readonly obstacle: CircleObstacle;
   readonly exp: number;
   deathTime = 0;
+  readonly arch: Archetype;
+  readonly species: SpeciesDef;
+  /** 특수 행동용 타이머 (치유·소환·순간이동) */
+  private skillT = 0;
+  private attackCount = 0;
+  private summoned: Monster[] = [];
+  /** 격노 (광전사: 체력이 절반 아래) */
+  private enraged = false;
+  /** 방패로 막았을 때 불꽃 */
+  private blockFx = 0;
 
   constructor(
-    readonly arch: Archetype,
+    species: SpeciesDef,
     readonly kind: MonsterKind,
     readonly tier: number,
     stage: number,
@@ -120,7 +139,8 @@ export class Monster {
     readonly homeRoom: number,
   ) {
     const boss = kind === 'boss' || kind === 'midboss';
-    const archetype = kind === 'boss' ? BOSS_ARCH[tier - 1] : kind === 'midboss' ? BOSS_ARCH[(tier + 2) % 7] : arch;
+    this.species = kind === 'boss' ? BOSS_SPECIES[tier - 1] : kind === 'midboss' ? MIDBOSS_SPECIES[tier - 1] : species;
+    const archetype = this.species.arch;
     this.arch = archetype;
     this.def = ARCHETYPES[archetype];
     const scale = tierScale(tier, stage, ngPlus);
@@ -137,12 +157,12 @@ export class Monster {
     this.radius = this.def.radius * mult.size;
     this.x = x;
     this.z = z;
-    this.name = kind === 'boss' ? BOSS_NAMES[tier - 1] : kind === 'midboss' ? MIDBOSS_NAMES[tier - 1] : (kind === 'elite' ? '정예 ' : '') + MONSTER_NAMES[tier][archetype];
+    this.name = (kind === 'elite' ? '정예 ' : '') + this.species.name;
     this.exp = Math.round(this.def.exp * Math.pow(tier, 1.6) * (1 + (stage - 1) * 0.15) * (kind === 'boss' ? 30 : kind === 'midboss' ? 15 : kind === 'elite' ? 3 : 0.3));
 
     this.material = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
-    const colors = MONSTER_COLORS[tier - 1];
-    this.rig = buildMonster(this.material, archetype, kind === 'elite' ? { ...colors, accent: 0xffd23a } : colors, boss);
+    const colors = this.species.colors ?? MONSTER_COLORS[tier - 1];
+    this.rig = buildMonster(this.material, this.species.model, kind === 'elite' ? { ...colors, accent: 0xffd23a } : colors, boss, kind === 'elite' ? 0xffd23a : this.species.glow);
     this.rig.root.scale.setScalar(mult.size);
     if (kind === 'elite') this.material.emissive.setHex(0x3a2a00);
     this.rig.root.position.set(x, 0, z);
@@ -206,6 +226,15 @@ export class Monster {
     if (this.shielded || this.dooming) {
       this.flash = 0.5;
       return false;
+    }
+    // 방패병: 정면에서 들어온 공격은 대부분 막는다 (등 뒤나 옆을 노려야 한다)
+    if (this.arch === 'knight' && !this.isBoss && this.state !== 'recover' && this.state !== 'dash') {
+      const a = Math.atan2(fromX - this.x, fromZ - this.z);
+      let d = Math.abs(((a - this.facing + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+      if (d < 1.0) {
+        amount *= 0.3;
+        this.blockFx = 0.25;
+      }
     }
     this.hp -= amount;
     // 기믹 줄에 닿으면 그 줄에서 멈추고 기믹을 준비한다
@@ -329,6 +358,19 @@ export class Monster {
       this.knockZ *= Math.exp(-dt * 10);
     }
 
+    this.skillT += dt;
+    if (this.blockFx > 0) {
+      if (this.blockFx >= 0.25) world.effects.sparks(this.x + Math.sin(this.facing) * 0.6, 1.1, this.z + Math.cos(this.facing) * 0.6, 0xffe08a, 6, { speed: 4 });
+      this.blockFx = Math.max(0, this.blockFx - dt);
+    }
+    // 광전사: 체력이 절반 아래로 내려가면 격노 (빨라지고 붉게 달아오른다)
+    if (this.arch === 'brute' && !this.isBoss && !this.enraged && this.hp < this.maxHp * 0.5) {
+      this.enraged = true;
+      this.speed *= 1.35;
+      world.effects.ring(this.x, this.z, 2, 0xff3a1a, 0.4);
+      world.effects.sparks(this.x, 1.2, this.z, 0xff5a2a, 12, { up: true, spread: 0.5 });
+    }
+
     const turn = (target: number, rate: number) => {
       let d = ((target - this.facing + Math.PI) % (Math.PI * 2)) - Math.PI;
       if (d < -Math.PI) d += Math.PI * 2;
@@ -344,7 +386,8 @@ export class Monster {
         break;
       case 'chase': {
         turn(toPlayer, 8);
-        const wantDist = this.arch === 'ranged' && !this.isBoss ? 5.5 : 0;
+        const wantDist = this.isBoss ? 0 : KEEP_DIST[this.arch] ?? 0;
+        if (!this.isBoss && this.special(world, dist, toPlayer)) break;
         if (this.isBoss) {
           if (this.t > (this.phase2 ? 0.5 : 0.9)) this.beginBossPattern(world, dist, toPlayer);
           else if (dist > 3) {
@@ -367,7 +410,7 @@ export class Monster {
       case 'windup': {
         const tel = this.telegraph;
         // 원거리 몬스터는 조준하는 동안 방향을 따라간다
-        if (tel && (this.arch === 'ranged' || this.pattern === 'volley') && tel.t < tel.duration * 0.7) {
+        if (tel && (AIMED.has(this.arch) || this.pattern === 'volley') && this.pattern !== 'aoe' && this.pattern !== 'summon' && tel.t < tel.duration * 0.7) {
           turn(toPlayer, 6);
           tel.facing = this.facing;
           tel.x = this.x;
@@ -449,8 +492,105 @@ export class Monster {
       case 'tank':
         this.startTelegraph(world, { kind: 'circle', r: 2.9 }, this.x, this.z, 0, w);
         break;
+      case 'brute':
+        // 두 번 베고, 세 번째는 회전 베기
+        if (this.attackCount % 3 === 2) {
+          this.pattern = 'spin';
+          this.startTelegraph(world, { kind: 'circle', r: 2.7 }, this.x, this.z, 0, w * (this.enraged ? 0.7 : 1.1));
+        } else {
+          this.pattern = 'cone';
+          this.startTelegraph(world, { kind: 'cone', r: 2.6, angle: 2 }, this.x, this.z, this.facing, w * (this.enraged ? 0.7 : 1));
+        }
+        break;
+      case 'archer':
+        this.startTelegraph(world, { kind: 'line', length: Math.min(dist + 2, 12), width: 1.5 }, this.x, this.z, this.facing, w);
+        break;
+      case 'assassin':
+      case 'swarm':
+        this.startTelegraph(world, { kind: 'cone', r: this.arch === 'swarm' ? 1.7 : 2.3, angle: 1.6 }, this.x, this.z, this.facing, w);
+        break;
+      case 'necro':
+        if (this.attackCount % 3 === 0 && this.summoned.filter((m) => m.alive).length < 4) {
+          this.pattern = 'summon';
+          this.startTelegraph(world, { kind: 'circle', r: 1.6 }, this.x, this.z, 0, w * 1.2);
+        } else {
+          this.pattern = 'bolt';
+          this.startTelegraph(world, { kind: 'line', length: Math.min(dist + 2, 11), width: 0.6 }, this.x, this.z, this.facing, w);
+        }
+        break;
+      case 'shaman':
+      case 'spitter':
+        // 플레이어 발밑에 떨어지는 마법·독
+        this.pattern = 'aoe';
+        this.startTelegraph(world, { kind: 'circle', r: this.arch === 'spitter' ? 1.8 : 2.2 }, world.player.x, world.player.z, 0, w);
+        break;
+      case 'caster': {
+        // 플레이어와 그 둘레 세 곳에 마법이 떨어진다
+        this.clearTelegraph(world.scene);
+        this.pattern = 'rain';
+        for (let i = 0; i < 3; i++) {
+          const a = Math.random() * Math.PI * 2;
+          const r = i === 0 ? 0 : 1.8 + Math.random() * 1.5;
+          const t = new Telegraph({ kind: 'circle', r: 1.7 }, world.player.x + Math.cos(a) * r, world.player.z + Math.sin(a) * r, 0, w + i * 0.12);
+          world.scene.add(t.group);
+          this.rainSpots.push(t);
+        }
+        break;
+      }
+      case 'knight':
+        if (this.attackCount % 3 === 2 && dist > 2.2) {
+          // 방패 밀치기 돌진
+          this.pattern = 'charge';
+          this.startTelegraph(world, { kind: 'line', length: 5, width: 1.4 }, this.x, this.z, this.facing, w);
+        } else {
+          this.pattern = 'thrust';
+          this.startTelegraph(world, { kind: 'line', length: 3.4, width: 1.1 }, this.x, this.z, this.facing, w);
+        }
+        break;
     }
+    this.attackCount++;
     this.setState('windup');
+  }
+
+  /**
+   * 종족 고유 행동 (쫓아가는 중에). 행동을 했으면 true
+   * - 주술사: 다친 동료 치유
+   * - 암살자: 플레이어 뒤로 순간이동
+   */
+  private special(world: MonsterWorld, dist: number, toPlayer: number): boolean {
+    if (this.arch === 'shaman' && this.skillT > 5) {
+      const hurt = world.monsters.filter((m) => m !== this && m.alive && !m.isBoss && m.hp < m.maxHp && Math.hypot(m.x - this.x, m.z - this.z) < 7);
+      if (hurt.length) {
+        this.skillT = 0;
+        for (const m of hurt) {
+          m.hp = Math.min(m.maxHp, m.hp + m.maxHp * 0.2);
+          m.hpFill.scale.x = Math.max(0.001, m.hp / m.maxHp);
+          world.effects.sparks(m.x, 0.6, m.z, 0x7aff6a, 8, { up: true, spread: 0.4 });
+        }
+        world.effects.glyph(this.x, this.z, 1.4, 0x7aff6a, 0.7);
+        world.effects.ring(this.x, this.z, 7, 0x7aff6a, 0.5);
+        return true;
+      }
+    }
+    if (this.arch === 'assassin' && this.skillT > 4.5 && dist > 3 && dist < 10) {
+      this.skillT = 0;
+      // 플레이어 너머 1.6만큼 떨어진 곳 (막혀 있으면 가능한 만큼)
+      const nx = world.player.x + Math.sin(toPlayer) * 1.6;
+      const nz = world.player.z + Math.cos(toPlayer) * 1.6;
+      const c = this.species.glow ?? MONSTER_COLORS[this.tier - 1].accent;
+      world.effects.sparks(this.x, 1, this.z, c, 14, { up: true, spread: 0.4 });
+      if (isFloor(world.grid, Math.floor(nx / TILE), Math.floor(nz / TILE))) {
+        this.x = nx;
+        this.z = nz;
+      }
+      world.effects.ring(this.x, this.z, 1.6, c, 0.3);
+      world.effects.sparks(this.x, 1, this.z, c, 14, { speed: 4 });
+      this.facing = Math.atan2(world.player.x - this.x, world.player.z - this.z);
+      this.startTelegraph(world, { kind: 'cone', r: 2.3, angle: 1.8 }, this.x, this.z, this.facing, 0.45);
+      this.setState('windup');
+      return true;
+    }
+    return false;
   }
 
   private beginBossPattern(world: MonsterWorld, dist: number, toPlayer: number): void {
@@ -652,6 +792,81 @@ export class Monster {
         world.effects.ring(this.x, this.z, 2.9, 0xe0d0b0, 0.35);
         world.shake(0.2);
         break;
+      case 'brute':
+        hitIf(tel, this.pattern === 'spin' ? 1.2 : 1);
+        if (this.pattern === 'spin') {
+          world.effects.slash(this.x, this.z, this.facing, 2.7, this.enraged ? 0xff4a2a : 0xffc08a, Math.PI * 2, 0.8);
+          world.shake(0.2);
+        } else {
+          world.effects.slash(this.x, this.z, this.facing, 2.6, this.enraged ? 0xff4a2a : 0xffe0c0, 2, 0.8);
+          // 격노 중에는 쉬지 않고 이어서 벤다
+          if (this.enraged && Math.random() < 0.5) {
+            this.clearTelegraph(world.scene);
+            this.facing = Math.atan2(p.x - this.x, p.z - this.z);
+            this.pattern = 'cone';
+            this.startTelegraph(world, { kind: 'cone', r: 2.6, angle: 2 }, this.x, this.z, this.facing, 0.35);
+            this.setState('windup');
+            return;
+          }
+        }
+        break;
+      case 'archer': {
+        const c = this.species.glow ?? 0xffe08a;
+        for (const off of [-0.18, 0, 0.18]) world.fireEnemyProjectile({ x: this.x, z: this.z, angle: this.facing + off, speed: 14, damage: this.atk * 0.8, color: c, kind: 'arrow', radius: 0.3 });
+        break;
+      }
+      case 'assassin':
+      case 'swarm':
+        hitIf(tel, this.arch === 'assassin' ? 1.2 : 1);
+        world.effects.slash(this.x, this.z, this.facing, this.arch === 'swarm' ? 1.6 : 2.3, this.species.glow ?? 0xffffff, 1.6, 0.8);
+        break;
+      case 'necro': {
+        const c = this.species.glow ?? 0x9aff5a;
+        if (this.pattern === 'summon') {
+          for (let i = 0; i < 2; i++) {
+            const a = this.facing + (i ? 1 : -1) * 1.2;
+            const m = world.summon('skel_warrior', this.x + Math.sin(a) * 2, this.z + Math.cos(a) * 2);
+            this.summoned.push(m);
+            world.effects.pillar(m.x, m.z, c, 2.5);
+          }
+          world.effects.glyph(this.x, this.z, 1.8, c, 0.8);
+        } else world.fireEnemyProjectile({ x: this.x, z: this.z, angle: this.facing, speed: 9, damage: this.atk * 1.1, color: c, radius: 0.4 });
+        break;
+      }
+      case 'shaman':
+        hitIf(tel, 1.1);
+        if (tel) world.effects.explosion(tel.x, tel.z, 2.2, this.species.glow ?? 0x7aff6a);
+        break;
+      case 'spitter':
+        hitIf(tel, 0.6);
+        if (tel) {
+          const c = this.species.colors?.accent ?? 0x9aff4a;
+          world.hazard(tel.x, tel.z, 1.8, 3.5, this.atk * 0.45, c);
+          world.effects.sparks(tel.x, 0.3, tel.z, c, 12, { speed: 3 });
+        }
+        break;
+      case 'caster': {
+        const c = this.species.glow ?? 0xff5aff;
+        for (const r of this.rainSpots) {
+          if (r.contains(p.x, p.z, 0.35)) {
+            world.hurtPlayer(this.atk * 0.9, r.x, r.z);
+            break;
+          }
+        }
+        for (const r of this.rainSpots) world.effects.explosion(r.x, r.z, 1.7, c);
+        break;
+      }
+      case 'knight':
+        if (this.pattern === 'charge') {
+          this.clearTelegraph(world.scene);
+          this.dashLeft = 5;
+          this.dashHit = false;
+          this.setState('dash');
+          return;
+        }
+        hitIf(tel, 1.1);
+        world.effects.slash(this.x, this.z, this.facing, 3.2, this.species.glow ?? 0xffffff, 0.7, 1);
+        break;
     }
     this.clearTelegraph(world.scene);
     this.setState('recover');
@@ -674,18 +889,68 @@ export class Monster {
     else if (this.state === 'dash') lean = 0.35;
     r.body.rotation.x += (lean - r.body.rotation.x) * Math.min(1, dt * 12);
 
-    if (this.arch === 'bomber') {
-      const bounce = Math.abs(Math.sin(this.walkPhase * 1.4)) * 0.3;
-      r.body.position.y = bounce;
-      if (this.state === 'windup') r.body.scale.setScalar(1 + Math.sin(this.t * 30) * 0.08 + this.t * 0.2);
-    } else if (this.arch === 'ranged') {
-      r.body.position.y = 0.15 + Math.sin(this.walkPhase * 0.5 + this.t) * 0.08;
-      if (r.arms[0]) r.arms[0].rotation.y += dt * 4;
-    } else if (this.arch === 'tank' && r.arms.length) {
-      const raise = this.state === 'windup' ? -2.4 * Math.min(1, this.t * 2) : moving ? swing * 0.5 : 0;
-      r.arms[0].rotation.x += (raise - r.arms[0].rotation.x) * Math.min(1, dt * 10);
-      r.arms[1].rotation.x += (raise - r.arms[1].rotation.x) * Math.min(1, dt * 10);
+    const ease = (g: Group | undefined, prop: 'x' | 'y' | 'z', v: number, rate = 10) => {
+      if (g) g.rotation[prop] += (v - g.rotation[prop]) * Math.min(1, dt * rate);
+    };
+    const windK = this.state === 'windup' ? Math.min(1, this.t * 3) : 0;
+    const striking = this.state === 'recover' && this.t < 0.25;
+    switch (r.style) {
+      case 'bounce': {
+        const bounce = Math.abs(Math.sin(this.walkPhase * 1.4)) * 0.3;
+        r.body.position.y = bounce;
+        if (this.state === 'windup') r.body.scale.setScalar(1 + Math.sin(this.t * 30) * 0.08 + this.t * 0.2);
+        else r.body.scale.set(1 + bounce * 0.3, 1 - bounce * 0.3, 1 + bounce * 0.3);
+        break;
+      }
+      case 'float':
+        r.body.position.y = 0.15 + Math.sin(this.walkPhase * 0.5 + this.t) * 0.08;
+        if (r.arms.length === 1) r.arms[0].rotation.y += dt * 4;
+        else for (const a of r.arms) ease(a, 'x', this.state === 'windup' ? -2 * windK : striking ? 0.6 : Math.sin(this.t * 2) * 0.2);
+        break;
+      case 'golem': {
+        const raise = this.state === 'windup' ? -2.4 * Math.min(1, this.t * 2) : moving ? swing * 0.5 : 0;
+        ease(r.arms[0], 'x', raise);
+        ease(r.arms[1], 'x', raise);
+        break;
+      }
+      case 'bat':
+        r.body.position.y = 0.2 + Math.sin(this.t * 3 + this.walkPhase) * 0.12;
+        r.arms.forEach((a, i) => (a.rotation.z = Math.sin(this.t * 22) * 0.7 * (i ? -1 : 1)));
+        break;
+      case 'spider':
+        r.legs.forEach((l, i) => (l.rotation.x = moving ? Math.sin(this.walkPhase * 2 + i) * 0.35 : 0));
+        break;
+      case 'humanoid': {
+        // 팔: 걸을 때 흔들고, 예고 때 무기를 치켜들었다가 내려친다
+        const both = ['axes', 'daggers', 'claws', 'club'].includes((this.species.model as { weapon?: string }).weapon ?? '');
+        const bow = (this.species.model as { weapon?: string }).weapon === 'bow';
+        const cast = this.arch === 'necro' || this.arch === 'shaman' || this.arch === 'caster';
+        let right = moving ? -swing * 0.6 : 0;
+        let left = moving ? swing * 0.6 : 0;
+        if (this.state === 'windup') {
+          if (bow) {
+            right = -1.5 * windK;
+            left = -1.55 * windK;
+          } else if (cast) {
+            right = -2.6 * windK;
+            left = -0.8 * windK;
+          } else {
+            right = -2.5 * windK;
+            if (both) left = -2.5 * windK;
+          }
+        } else if (striking && !bow && !cast) {
+          right = 0.7;
+          if (both) left = 0.7;
+        } else if (this.state === 'dash') {
+          right = -1.4;
+          left = -1.2;
+        }
+        ease(r.arms[0], 'x', right, 14);
+        ease(r.arms[1], 'x', left, 14);
+        break;
+      }
     }
+    if (this.enraged) this.material.emissive.setRGB(0.25 + Math.sin(this.t * 8) * 0.08, 0.02, 0);
 
     // 맞았을 때 하얗게 번쩍
     if (this.flash > 0) {

@@ -1,5 +1,28 @@
-/** 몬스터 유형과 단계별 이름 */
-export type Archetype = 'melee' | 'ranged' | 'charger' | 'bomber' | 'tank';
+/** 몬스터 행동 유형 (공격 패턴) */
+export type Archetype =
+  | 'melee'
+  | 'ranged'
+  | 'charger'
+  | 'bomber'
+  | 'tank'
+  /** 광전사: 두 번 베고 회전 베기, 피가 적으면 격노 */
+  | 'brute'
+  /** 궁수: 세 발씩 흩어 쏘기, 거리를 벌린다 */
+  | 'archer'
+  /** 암살자: 뒤로 순간이동해 빠르게 벤다 */
+  | 'assassin'
+  /** 강령술사: 해골을 불러내고 저주 구슬을 쏜다 */
+  | 'necro'
+  /** 주술사: 주변 몬스터를 치유하고 발밑에 마법을 떨어뜨린다 */
+  | 'shaman'
+  /** 마녀: 플레이어 주변 여러 곳에 마법을 떨어뜨린다 */
+  | 'caster'
+  /** 떼: 약하고 빠르며 무리로 몰려온다 */
+  | 'swarm'
+  /** 독 뱉기: 바닥에 한동안 남는 독 웅덩이 */
+  | 'spitter'
+  /** 방패병: 정면 공격을 막고 찌르기·방패 밀치기 */
+  | 'knight';
 
 export interface ArchetypeDef {
   hp: number;
@@ -21,16 +44,15 @@ export const ARCHETYPES: Record<Archetype, ArchetypeDef> = {
   charger: { hp: 92, atk: 12, def: 2, speed: 3.2, radius: 0.55, range: 7, windup: 0.9, recover: 1.1, exp: 8 },
   bomber: { hp: 36, atk: 22, def: 0, speed: 4.4, radius: 0.45, range: 1.8, windup: 0.9, recover: 0, exp: 5 },
   tank: { hp: 220, atk: 16, def: 6, speed: 2.1, radius: 0.8, range: 2.6, windup: 1.1, recover: 1.2, exp: 12 },
-};
-
-export const MONSTER_NAMES: Record<number, Record<Archetype, string>> = {
-  1: { melee: '이끼 늑대', ranged: '숲 정령술사', charger: '뿔 멧돼지', bomber: '포자 버섯', tank: '이끼 골렘' },
-  2: { melee: '협곡 하이에나', ranged: '모래 주술사', charger: '붉은 들소', bomber: '폭발 선인장', tank: '사암 골렘' },
-  3: { melee: '서리 늑대', ranged: '빙결 마녀', charger: '얼음 뿔소', bomber: '서리 정령', tank: '빙하 골렘' },
-  4: { melee: '수정 도마뱀', ranged: '수정 현자', charger: '수정 멧돼지', bomber: '불안정한 수정', tank: '수정 거인' },
-  5: { melee: '폭주 경비병', ranged: '마공 포탑', charger: '돌격 기계', bomber: '자폭 드론', tank: '마공 골렘' },
-  6: { melee: '용암 사냥개', ranged: '화염 주술사', charger: '불꽃 황소', bomber: '마그마 방울', tank: '흑요석 골렘' },
-  7: { melee: '공허 추적자', ranged: '차원 관찰자', charger: '균열 돌진자', bomber: '공허 파편', tank: '차원 수호자' },
+  brute: { hp: 130, atk: 13, def: 3, speed: 3.3, radius: 0.6, range: 2.3, windup: 0.55, recover: 0.8, exp: 10 },
+  archer: { hp: 50, atk: 7, def: 1, speed: 3.0, radius: 0.45, range: 10, windup: 0.75, recover: 1.1, exp: 7 },
+  assassin: { hp: 60, atk: 11, def: 1, speed: 4.4, radius: 0.45, range: 1.9, windup: 0.4, recover: 0.9, exp: 9 },
+  necro: { hp: 70, atk: 8, def: 1, speed: 2.6, radius: 0.5, range: 9, windup: 0.9, recover: 1.4, exp: 11 },
+  shaman: { hp: 72, atk: 9, def: 2, speed: 2.7, radius: 0.5, range: 8, windup: 1.0, recover: 1.4, exp: 10 },
+  caster: { hp: 58, atk: 9, def: 1, speed: 2.8, radius: 0.45, range: 9, windup: 1.1, recover: 1.6, exp: 9 },
+  swarm: { hp: 24, atk: 5, def: 0, speed: 5.0, radius: 0.35, range: 1.4, windup: 0.35, recover: 0.6, exp: 2 },
+  spitter: { hp: 66, atk: 8, def: 1, speed: 3.2, radius: 0.6, range: 7, windup: 0.9, recover: 1.3, exp: 8 },
+  knight: { hp: 150, atk: 12, def: 5, speed: 2.6, radius: 0.55, range: 3.2, windup: 0.75, recover: 1.0, exp: 12 },
 };
 
 export const BOSS_NAMES = [

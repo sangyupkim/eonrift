@@ -15,7 +15,7 @@ import {
 import { TILE } from '../../config';
 import { Rng } from '../../core/rng';
 import { ITEMS, ORE_TIERS, WOOD_TIERS } from '../../data/items';
-import type { Archetype } from '../../data/monsters';
+import { pickSpecies, resolveSpecies, tierFactions, type Faction, type SpeciesDef } from '../../data/species';
 import { isFloor } from '../../dungeon/generator';
 import { NODES, resourceTier, type NodeDef } from '../../data/nodes';
 import { themeForTier, type DungeonTheme } from '../../data/themes';
@@ -70,7 +70,6 @@ export interface DungeonHooks {
   killPlayer: () => void;
 }
 
-const ARCH_WEIGHTS: Archetype[] = ['melee', 'melee', 'melee', 'ranged', 'ranged', 'charger', 'bomber', 'tank'];
 
 /** 던전 한 판: 지형, 채집물, 몬스터, 투사체, 차원문 */
 export class DungeonScene extends Level {
@@ -116,7 +115,8 @@ export class DungeonScene extends Level {
       hurtPlayer: (d, x, z) => hooks.hurtPlayer(d, x, z),
       fireEnemyProjectile: (spec: ProjectileSpec) =>
         self.projectiles.spawn({ ...spec, fromPlayer: false, kind: spec.kind ?? 'orb', life: 2.2 }),
-      summon: (arch, x, z) => self.spawnMonster(arch, 'normal', x, z, -1, true),
+      summon: (what, x, z) => self.spawnMonster(resolveSpecies(self.grid.tier, what, () => self.rng.next()), 'normal', x, z, -1, true),
+      hazard: (x, z, r, duration, dps, color) => self.addHazard(x, z, r, duration, dps, color),
       burst: (x, y, z, c, n, p) => self.particles.burst(x, y, z, c, n, p),
       shake: (a) => hooks.shake(a),
       announce: (t) => hooks.announce(t),
@@ -124,13 +124,28 @@ export class DungeonScene extends Level {
     };
 
     this.ngPlus = ngPlus;
-    // 몬스터 배치 (방마다 정해진 위치)
+    // 몬스터 배치 (방마다 정해진 위치).
+    // 방마다 절반쯤은 한 세력(언데드·오크·다크엘프…)이 차지하고, 떼로 다니는 종족은 무리로 나온다
+    const factions = tierFactions(grid.tier);
+    const roomFavor = new Map<number, Faction | undefined>();
+    const rand = () => this.rng.next();
     grid.monsters.forEach((m) => {
       const p = DungeonScene.toWorld(m.x, m.y);
-      const arch = this.rng.pick(ARCH_WEIGHTS);
       const room = grid.roomIndex[m.y * grid.width + m.x];
-      const mon = this.spawnMonster(arch, m.kind, p.x, p.z, room, false);
-      if (m.kind === 'boss' || m.kind === 'midboss') this.boss = mon;
+      if (!roomFavor.has(room)) roomFavor.set(room, this.rng.chance(0.5) ? this.rng.pick(factions) : undefined);
+      const boss = m.kind === 'boss' || m.kind === 'midboss';
+      // 정예는 떼 종족이 아닌 것 중에서
+      const sp = pickSpecies(grid.tier, rand, m.kind === 'elite' ? (d) => d.arch !== 'swarm' : undefined, roomFavor.get(room));
+      const mon = this.spawnMonster(sp, m.kind, p.x, p.z, room, false);
+      if (boss) this.boss = mon;
+      if (m.kind === 'normal' && sp.pack) {
+        for (let i = 1; i < sp.pack; i++) {
+          const a = rand() * Math.PI * 2;
+          const px = p.x + Math.cos(a) * 1.1;
+          const pz = p.z + Math.sin(a) * 1.1;
+          if (isFloor(grid, Math.floor(px / TILE), Math.floor(pz / TILE))) this.spawnMonster(sp, 'normal', px, pz, room, false);
+        }
+      }
     });
 
     const exit = this.portals.find((p) => p.kind === 'exit')!;
@@ -175,20 +190,42 @@ export class DungeonScene extends Level {
       const pz = z + Math.sin(a) * r;
       if (!isFloor(this.grid, Math.floor(px / TILE), Math.floor(pz / TILE))) continue;
       const kind = i % 6 === 5 ? 'elite' : 'normal';
-      out.push(this.spawnMonster(this.rng.pick(ARCH_WEIGHTS), kind, px, pz, -1, true));
+      out.push(this.spawnMonster(pickSpecies(this.grid.tier, () => this.rng.next(), kind === 'elite' ? (d) => d.arch !== 'swarm' : undefined), kind, px, pz, -1, true));
       this.particles.burst(px, 0.6, pz, 0xffd23a, 8, 1);
       i++;
     }
     return out;
   }
 
-  spawnMonster(arch: Archetype, kind: Monster['kind'], x: number, z: number, room: number, aggro: boolean): Monster {
-    const m = new Monster(arch, kind, this.grid.tier, this.grid.stage, this.ngPlus, x, z, room);
+  spawnMonster(species: SpeciesDef, kind: Monster['kind'], x: number, z: number, room: number, aggro: boolean): Monster {
+    const m = new Monster(species, kind, this.grid.tier, this.grid.stage, this.ngPlus, x, z, room);
     m.aggro = aggro;
     m.addTo(this.scene);
     this.monsters.push(m);
     if (aggro) this.effects.ring(x, z, 1.5, 0xb080ff, 0.4);
     return m;
+  }
+
+  /** 독 웅덩이 같은 바닥 장판: 안에 서 있으면 0.5초마다 피해 */
+  private hazards: { x: number; z: number; r: number; left: number; tick: number; dps: number }[] = [];
+
+  private addHazard(x: number, z: number, r: number, duration: number, dps: number, color: number): void {
+    this.hazards.push({ x, z, r, left: duration, tick: 0.3, dps });
+    this.effects.zone(x, z, r, color, duration);
+  }
+
+  private updateHazards(dt: number): void {
+    const p = this.hooks.player();
+    for (let i = this.hazards.length - 1; i >= 0; i--) {
+      const h = this.hazards[i];
+      h.left -= dt;
+      h.tick -= dt;
+      if (h.tick <= 0) {
+        h.tick = 0.5;
+        if (Math.hypot(p.x - h.x, p.z - h.z) < h.r + 0.3) this.hooks.hurtPlayer(h.dps * 0.5, h.x, h.z);
+      }
+      if (h.left <= 0) this.hazards.splice(i, 1);
+    }
   }
 
   private buildDecor(): void {
@@ -329,6 +366,7 @@ export class DungeonScene extends Level {
       }
     }
 
+    this.updateHazards(dt);
     this.projectiles.update(dt, {
       grid: this.grid,
       monsters: this.monsters,
