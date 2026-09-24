@@ -26,7 +26,7 @@ import { Bag } from './Bag';
 import { Combat } from './Combat';
 import type { Monster } from './Monster';
 import { Player } from './Player';
-import { DIM_BAG_MAX, deleteSave, hasSave, loadSave, newSave, Progress, stageIndex, stageOf, type SaveData } from './Progress';
+import { DIM_BAG_MAX, deleteSave, hasSave, loadSave, newSave, Progress, stageIndex, stageOf, type SaveData, type Stats } from './Progress';
 import { objectiveNeed, objectiveProgress, Quests } from './Quests';
 import { hasStory, objective, questLines, resetForNewCycle, scriptFor } from './Story';
 import { DungeonScene, type NodeInstance } from './scenes/DungeonScene';
@@ -301,7 +301,7 @@ export class Game {
       get player() {
         return game.player;
       },
-      stats: () => this.progress.stats(),
+      stats: () => this.buffedStats(),
       level: () => this.level,
       dungeon: () => (this.level instanceof DungeonScene && this.run ? this.level : null),
       damageMonster: (m, mult, knock, fx, fz) => this.damageMonster(m, mult, knock, fx, fz),
@@ -512,6 +512,26 @@ export class Game {
   }
 
   /** 장비·스탯이 바뀌면 최대 HP/MP를 다시 계산한다 */
+  /** 버프를 반영한 능력치 (공격·치명·속도·방어) */
+  private buffedStats(): Stats {
+    const st = { ...this.progress.stats() };
+    const pl = this.player;
+    if (!pl) return st;
+    let atk = 1;
+    if (pl.buff('warcry')) {
+      atk *= 1.25;
+      st.speed *= 1.15;
+    }
+    if (pl.buff('focus')) atk *= 1.2;
+    if (pl.buff('hunter')) {
+      atk *= 1.15;
+      st.crit += 30;
+    }
+    if (pl.buff('ironwall')) st.def = Math.round(st.def * 1.6);
+    st.atk = Math.round(st.atk * atk);
+    return st;
+  }
+
   private applyStats(): void {
     if (!this.player) return;
     const st = this.progress.stats();
@@ -711,8 +731,9 @@ export class Game {
           const c = p.cls;
           const lv = c.skills[i] ?? 0;
           const cost = lv === 0 ? SKILL_LEARN[i] : lv < MAX_SKILL_LEVEL ? skillUpgradeCost(i, lv) : null;
-          if (!cost || c.level < cost.level || p.data.gold < cost.gold) return;
+          if (!cost || c.level < cost.level || p.data.gold < cost.gold || !p.hasAll(cost.items ?? {})) return;
           p.data.gold -= cost.gold;
+          p.takeAll(cost.items ?? {});
           c.skills[i] = lv + 1;
           // 새로 배운 스킬은 빈 퀵슬롯에 자동으로 놓는다
           if (lv === 0 && !c.quick.includes(i)) {
@@ -877,7 +898,7 @@ export class Game {
       this.hud.floatText(s.x, s.y, '보호막', '#7fd6ff', 'small');
       return;
     }
-    const st = this.progress.stats();
+    const st = this.buffedStats();
     const crit = Math.random() * 100 < st.crit;
     const raw = st.atk * mult * (0.9 + Math.random() * 0.2) * (crit ? 1.6 : 1);
     const dmg = Math.max(1, Math.round(raw * (40 / (40 + m.defense))));
@@ -892,8 +913,38 @@ export class Game {
   private hurtPlayer(dmg: number, fx: number, fz: number): void {
     const pl = this.player;
     if (pl.isInvulnerable || this.mode !== 'play') return;
-    const st = this.progress.stats();
-    const final = Math.max(1, Math.round(dmg * (0.9 + Math.random() * 0.2) * (60 / (60 + st.def))));
+    const st = this.buffedStats();
+    const head = this.toScreen(pl.position.x, 2, pl.position.z);
+    // 수호의 방패: 공격을 통째로 막는다
+    const block = pl.buff('block');
+    if (block && block.stacks) {
+      block.stacks--;
+      pl.invulnFor(0.3);
+      this.hud.floatText(head.x, head.y, '막음!', '#ffe07a', 'small');
+      this.level.effects.ring(pl.position.x, pl.position.z, 1.4, 0xffe07a, 0.3);
+      this.audio.play('hit');
+      return;
+    }
+    // 바람 걸음: 확률 회피
+    if (pl.buff('windwalk') && Math.random() < 0.3) {
+      pl.invulnFor(0.3);
+      this.hud.floatText(head.x, head.y, '회피', '#c8ffb0', 'small');
+      return;
+    }
+    let final = Math.max(1, Math.round(dmg * (0.9 + Math.random() * 0.2) * (60 / (60 + st.def))));
+    if (pl.buff('ironwall')) final = Math.max(1, Math.round(final * 0.6));
+    if (pl.buff('smoke')) final = Math.max(1, Math.round(final * 0.5));
+    // 마나 실드: 피해의 60%를 MP로 받는다 (MP가 모자라면 남은 만큼만)
+    if (pl.buff('manashield')) {
+      const absorb = Math.min(Math.round(final * 0.6), Math.floor(pl.mp));
+      pl.mp -= absorb;
+      final -= absorb;
+      if (absorb > 0) this.hud.floatText(head.x + 24, head.y, `-${absorb} MP`, '#7fb4ff', 'small');
+      if (final <= 0) {
+        pl.invulnFor(0.3);
+        return;
+      }
+    }
     pl.hurt(final);
     this.gathering = null;
     // 맞을 때마다 가끔 방어구 하나가 닳는다
@@ -1626,6 +1677,7 @@ export class Game {
       const head = left > 0 ? `남은 몬스터 ${left}${boss} (M: 지도)` : '워프 게이트로 가자 (다음 방 / 마을)';
       this.hud.setObjective([head, ...questLines(p, this.quests)].join('\n'));
     } else this.hud.setObjective(objective(p, this.quests));
+    this.hud.setBuffs(pl.buffs.map((b) => `${b.name}${b.stacks !== undefined ? ` ${b.stacks}회` : ''} ${Math.ceil(b.t)}s`));
     this.hud.setPotions(p.count('potion') + p.count('potion_mid') + p.count('potion_high'));
     this.hud.setDodgeCooldown(pl.rollCooldown / (PLAYER.rollCooldown + PLAYER.rollTime));
     const skills = pl.cls.skills;

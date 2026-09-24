@@ -33,7 +33,7 @@ export interface ClassDef {
   attackTime: number;
   look: { tunic: number; tunicDark: number; hair: number; weapon: 'sword' | 'staff' | 'bow' };
   basic: string;
-  skills: [SkillDef, SkillDef, SkillDef];
+  skills: SkillDef[];
   weaponNoun: string;
 }
 
@@ -54,6 +54,9 @@ export const CLASSES: Record<ClassId, ClassDef> = {
       { name: '돌진 베기', mp: 12, cooldown: 4, description: '앞으로 돌진하며 지나가는 적을 벤다.' },
       { name: '회전 베기', mp: 16, cooldown: 6, description: '주변의 모든 적을 벤다.' },
       { name: '대지 가르기', mp: 22, cooldown: 8, description: '앞으로 뻗어 나가는 충격파를 날린다.' },
+      { name: '철벽 태세', mp: 18, cooldown: 18, description: '[방어] 8초 동안 받는 피해 -40%, 방어력 +60%.' },
+      { name: '수호의 방패', mp: 20, cooldown: 16, description: '[방어] 12초 동안 적의 공격을 3회 완전히 막는다.' },
+      { name: '전투 함성', mp: 24, cooldown: 24, description: '[보조] 10초 동안 공격력 +25%, 공격 속도 +15%. HP 15% 회복.' },
     ],
   },
   mage: {
@@ -72,6 +75,9 @@ export const CLASSES: Record<ClassId, ClassDef> = {
       { name: '화염구', mp: 16, cooldown: 3.5, description: '부딪히면 폭발하는 화염구를 던진다.' },
       { name: '얼음 장판', mp: 20, cooldown: 7, description: '적을 느리게 하고 계속 피해를 주는 얼음 장판을 깐다.' },
       { name: '번개 연쇄', mp: 24, cooldown: 6, description: '가까운 적들 사이로 번개가 튄다.' },
+      { name: '마나 실드', mp: 15, cooldown: 20, description: '[방어] 15초 동안 받는 피해의 60%를 체력 대신 MP로 받는다.' },
+      { name: '점멸', mp: 12, cooldown: 7, description: '[방어] 바라보는 방향으로 순간이동한다. 이동 중 무적.' },
+      { name: '마력 순환', mp: 0, cooldown: 30, description: '[보조] MP 40%와 HP 15%를 회복하고 10초 동안 공격력 +20%.' },
     ],
   },
   archer: {
@@ -90,6 +96,9 @@ export const CLASSES: Record<ClassId, ClassDef> = {
       { name: '관통 화살', mp: 12, cooldown: 3, description: '적을 꿰뚫는 강한 화살을 쏜다.' },
       { name: '부채꼴 연사', mp: 16, cooldown: 5, description: '다섯 발의 화살을 부채꼴로 쏜다.' },
       { name: '후방 도약', mp: 14, cooldown: 7, description: '뒤로 뛰며 그 자리에 폭발하는 덫을 남긴다.' },
+      { name: '바람 걸음', mp: 14, cooldown: 16, description: '[방어] 8초 동안 이동 속도 +40%, 적의 공격을 30% 확률로 회피.' },
+      { name: '연막탄', mp: 18, cooldown: 18, description: '[방어] 6초 동안 받는 피해 -50%, 주변 적을 느리게 만든다.' },
+      { name: '사냥꾼의 집중', mp: 20, cooldown: 24, description: '[보조] 10초 동안 치명타 +30%, 공격력 +15%.' },
     ],
   },
 };
@@ -99,16 +108,28 @@ export const CLASS_ORDER: ClassId[] = ['sword', 'mage', 'archer'];
 export const MAX_LEVEL = 99;
 export const MAX_SKILL_LEVEL = 5;
 
-/** 스킬 배우기: 필요 레벨과 골드 (첫 스킬은 처음부터 안다) */
-export const SKILL_LEARN = [
+export interface SkillCost {
+  gold: number;
+  level: number;
+  items?: Record<string, number>;
+}
+
+/** 스킬 배우기: 필요 레벨·골드, 상위 스킬은 상위 재료도 (첫 스킬은 처음부터 안다) */
+export const SKILL_LEARN: SkillCost[] = [
   { level: 1, gold: 0 },
   { level: 5, gold: 400 },
-  { level: 10, gold: 1200 },
+  { level: 10, gold: 1200, items: { copper_plate: 3 } },
+  { level: 15, gold: 2500, items: { copper_plate: 5, mana_copper: 5 } },
+  { level: 22, gold: 5000, items: { iron_plate: 5, mana_iron: 5 } },
+  { level: 30, gold: 9000, items: { gold_plate: 5, mana_gold: 5 } },
 ];
 
-/** 스킬 강화 비용 (현재 레벨 → 다음 레벨) */
-export function skillUpgradeCost(index: number, lv: number): { gold: number; level: number } {
-  return { gold: Math.round(250 * lv * lv * (index + 1)), level: SKILL_LEARN[index].level + lv * 4 };
+const PLATES = ['copper_plate', 'iron_plate', 'gold_plate', 'diamond_plate', 'titanium_plate', 'orichalcum_plate', 'dim_plate'];
+
+/** 스킬 강화 비용 (현재 레벨 → 다음 레벨). 높은 스킬·높은 레벨일수록 상위 판이 든다 */
+export function skillUpgradeCost(index: number, lv: number): SkillCost {
+  const tier = Math.min(7, 1 + Math.floor(index / 2) + Math.floor(lv / 2));
+  return { gold: Math.round(250 * lv * lv * (index + 1)), level: SKILL_LEARN[index].level + lv * 4, items: { [PLATES[tier - 1]]: 1 + lv } };
 }
 export const POINTS_PER_LEVEL = 5;
 

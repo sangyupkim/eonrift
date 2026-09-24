@@ -97,6 +97,8 @@ export class Hud {
     const infoRow = el('div', 'info-row');
     infoRow.append(this.locationEl, this.goldEl);
     status.appendChild(infoRow);
+    this.buffEl = el('div', 'buffs');
+    status.appendChild(this.buffEl);
     this.objectiveEl = el('div', 'objective');
     status.appendChild(this.objectiveEl);
     this.root.appendChild(status);
@@ -228,7 +230,7 @@ export class Hud {
   setClass(short: string, color: string, skillNames: string[]): void {
     this.portrait.textContent = short;
     this.portrait.style.background = `linear-gradient(160deg, ${color}, #1c2240)`;
-    skillNames.forEach((n, i) => (this.skillLabels[i].textContent = n));
+    skillNames.slice(0, this.skillLabels.length).forEach((n, i) => (this.skillLabels[i].textContent = n));
   }
 
   setBars(hp: number, maxHp: number, mp: number, maxMp: number, exp: number, expMax: number, level: number): void {
@@ -250,6 +252,13 @@ export class Hud {
 
   setLocation(text: string, color: number): void {
     this.locationEl.innerHTML = `<i style="background:#${color.toString(16).padStart(6, '0')}"></i>${text}`;
+  }
+
+  private buffEl!: HTMLDivElement;
+  /** 걸려 있는 버프 표시 */
+  setBuffs(list: string[]): void {
+    const html = list.map((t) => `<span>${t}</span>`).join('');
+    if (this.buffEl.innerHTML !== html) this.buffEl.innerHTML = html;
   }
 
   setObjective(text: string): void {

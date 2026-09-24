@@ -18,6 +18,15 @@ export interface ActionSpec {
   tool?: 'pickaxe' | 'axe';
 }
 
+export type BuffId = 'ironwall' | 'block' | 'warcry' | 'manashield' | 'focus' | 'windwalk' | 'smoke' | 'hunter';
+export interface Buff {
+  id: BuffId;
+  name: string;
+  t: number;
+  /** 막기 같은 횟수형 버프 */
+  stacks?: number;
+}
+
 export interface DashSpec {
   dirX: number;
   dirZ: number;
@@ -60,6 +69,8 @@ export class Player {
   private action: (ActionSpec & { t: number; done: boolean }) | null = null;
   private dash: (DashSpec & { t: number }) | null = null;
   rollCooldown = 0;
+  /** 걸려 있는 버프 (방어·보조 스킬) */
+  buffs: Buff[] = [];
   private material: MeshLambertMaterial;
 
   constructor(
@@ -84,6 +95,20 @@ export class Player {
     this.position.x = x;
     this.position.z = z;
     this.syncRoot();
+  }
+
+  /** 잠깐 무적 (막기·회피 직후 연속 피격 방지) */
+  invulnFor(t: number): void {
+    this.invuln = Math.max(this.invuln, t);
+  }
+
+  addBuff(id: BuffId, name: string, duration: number, stacks?: number): void {
+    this.buffs = this.buffs.filter((b) => b.id !== id);
+    this.buffs.push({ id, name, t: duration, stacks });
+  }
+
+  buff(id: BuffId): Buff | undefined {
+    return this.buffs.find((b) => b.id === id);
   }
 
   get canAct(): boolean {
@@ -143,6 +168,8 @@ export class Player {
 
   update(dt: number, ctx: MoveContext): void {
     this.time += dt;
+    for (const b of this.buffs) b.t -= dt;
+    this.buffs = this.buffs.filter((b) => b.t > 0 && (b.stacks === undefined || b.stacks > 0));
     this.rollCooldown = Math.max(0, this.rollCooldown - dt);
     this.invuln = Math.max(0, this.invuln - dt);
     this.mp = Math.min(this.maxMp, this.mp + dt * (2 + this.maxMp * 0.02));
@@ -184,7 +211,7 @@ export class Player {
         this.state = 'idle';
       }
     } else {
-      const targetSpeed = mag > 0.12 ? PLAYER.walkSpeed * mag : 0;
+      const targetSpeed = mag > 0.12 ? PLAYER.walkSpeed * mag * (this.buff('windwalk') ? 1.4 : 1) : 0;
       this.speed += (targetSpeed - this.speed) * Math.min(1, dt * 14);
       if (mag > 0.12) {
         this.facing = lerpAngle(this.facing, Math.atan2(d.x, d.z), Math.min(1, dt * 16));

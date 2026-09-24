@@ -54,7 +54,7 @@ export const DIM_BAG_START = 4;
 export const DIM_BAG_MAX = 12;
 
 export function newSave(): SaveData {
-  const cls = (id: ClassId): ClassState => ({ level: 1, exp: 0, equipment: { weapon: starterWeapon(id) }, alloc: zeroStats(), points: 0, skills: [1, 0, 0], quick: [0, -1, -1] });
+  const cls = (id: ClassId): ClassState => ({ level: 1, exp: 0, equipment: { weapon: starterWeapon(id) }, alloc: zeroStats(), points: 0, skills: [1, 0, 0, 0, 0, 0], quick: [0, -1, -1] });
   return {
     version: 1,
     gold: 100,
@@ -126,6 +126,7 @@ function migrate(d: SaveData & { maxTier?: number }): SaveData {
     c.alloc ??= zeroStats();
     // 스킬 상점 전의 저장은 이미 세 스킬을 다 쓰고 있었으므로 그대로 둔다
     c.skills ??= [1, 1, 1];
+    while (c.skills.length < 6) c.skills.push(0);
     c.quick ??= [0, 1, 2].map((i) => ((c.skills[i] ?? 0) > 0 ? i : -1));
     c.points ??= (c.level - 1) * POINTS_PER_LEVEL;
     const eq = c.equipment as Record<string, Equip | undefined>;

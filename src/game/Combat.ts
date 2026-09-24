@@ -29,7 +29,7 @@ export class Combat {
   private combo = 0;
   private comboTimer = 0;
   /** 스킬 번호별 재사용 대기 */
-  cooldowns: number[] = [0, 0, 0];
+  cooldowns: number[] = [0, 0, 0, 0, 0, 0];
 
   constructor(private host: CombatHost) {}
 
@@ -392,6 +392,61 @@ export class Combat {
         }, 1200);
         break;
       }
+
+      // ---- 방어·보조 스킬 ----
+      case 'sword:3':
+        player.addBuff('ironwall', '철벽', 8 + lv);
+        d.effects.ring(p.x, p.z, 2, 0x9fc4ff, 0.5);
+        this.host.sfx('level');
+        break;
+      case 'sword:4':
+        player.addBuff('block', '방패', 12, 3 + Math.floor((lv - 1) / 2));
+        d.effects.ring(p.x, p.z, 1.6, 0xffe07a, 0.5);
+        this.host.sfx('level');
+        break;
+      case 'sword:5':
+        player.addBuff('warcry', '함성', 10 + lv);
+        player.hp = Math.min(player.maxHp, player.hp + player.maxHp * 0.15);
+        d.effects.ring(p.x, p.z, 4, 0xff8a5a, 0.6);
+        this.host.shake(0.2);
+        this.host.sfx('boom');
+        break;
+      case 'mage:3':
+        player.addBuff('manashield', '마나 실드', 15 + lv * 2);
+        d.effects.ring(p.x, p.z, 1.8, 0x7fd6ff, 0.6);
+        this.host.sfx('level');
+        break;
+      case 'mage:4': {
+        // 점멸: 보는 방향으로 빠르게 미끄러지며 무적
+        const dir = target ? aim : player.facing;
+        d.particles.burst(p.x, 0.8, p.z, 0x9fe8ff, 14, 1);
+        player.startDash({ dirX: Math.sin(dir), dirZ: Math.cos(dir), speed: 40, duration: 0.14 + lv * 0.01, pose: 'leap', invuln: true });
+        this.host.sfx('dash');
+        break;
+      }
+      case 'mage:5':
+        player.mp = Math.min(player.maxMp, player.mp + player.maxMp * 0.4);
+        player.hp = Math.min(player.maxHp, player.hp + player.maxHp * 0.15);
+        player.addBuff('focus', '마력 순환', 10 + lv);
+        d.effects.pillar(p.x, p.z, 0x7fd6ff, 3);
+        this.host.sfx('level');
+        break;
+      case 'archer:3':
+        player.addBuff('windwalk', '바람 걸음', 8 + lv);
+        d.effects.ring(p.x, p.z, 1.6, 0xc8ffb0, 0.5);
+        this.host.sfx('dash');
+        break;
+      case 'archer:4':
+        player.addBuff('smoke', '연막', 6 + lv * 0.5);
+        d.effects.zone(p.x, p.z, 4, 0x9a9aaa, 6 + lv * 0.5);
+        for (const m of d.monsters) if (m.alive && Math.hypot(m.x - p.x, m.z - p.z) < 6) m.slow = Math.max(m.slow, 4);
+        this.host.sfx('boom');
+        break;
+      case 'archer:5':
+        player.addBuff('hunter', '집중', 10 + lv);
+        d.effects.ring(p.x, p.z, 2.2, 0xffd060, 0.5);
+        this.host.sfx('level');
+        break;
     }
     return null;
   }

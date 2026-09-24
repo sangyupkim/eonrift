@@ -1130,9 +1130,12 @@ export class Screens {
       .map((sk, i) => {
         const lv = c.skills[i] ?? 0;
         const cost = lv === 0 ? SKILL_LEARN[i] : lv < MAX_SKILL_LEVEL ? skillUpgradeCost(i, lv) : null;
-        const ok = cost && c.level >= cost.level && p.data.gold >= cost.gold;
+        const ok = cost && c.level >= cost.level && p.data.gold >= cost.gold && p.hasAll(cost.items ?? {});
         const label = !cost ? '최대' : lv === 0 ? `배우기 ${cost.gold} G` : `강화 ${cost.gold} G`;
-        const req = cost ? `필요 레벨 ${cost.level}${c.level < cost.level ? ' <span class="bad">(부족)</span>' : ''}` : '';
+        const itemsTxt = cost?.items
+          ? ' · ' + Object.entries(cost.items).map(([id, n]) => `<span class="${p.count(id) >= n ? '' : 'bad'}">${inlineGem(id)}${ITEMS[id].name} ${p.count(id)}/${n}</span>`).join(' · ')
+          : '';
+        const req = cost ? `필요 레벨 ${cost.level}${c.level < cost.level ? ' <span class="bad">(부족)</span>' : ''}${itemsTxt}` : '';
         return `<li><span class="key">${i + 1}</span><div><b>${sk.name} ${lv ? `<span class="ok">Lv.${lv}</span>` : '<span class="dim">(미습득)</span>'}</b>
           <small>${sk.description} · MP ${sk.mp} · ${sk.cooldown}초</small>
           <small class="dim">${lv ? `위력 +${(lv - 1) * 15}% · 재사용 -${(lv - 1) * 6}%` : ''} ${req}</small></div>
@@ -1141,12 +1144,12 @@ export class Screens {
       .join('');
     const s = this.open(
       'skills',
-      `<div class="panel wide">
+      `<div class="panel wide tall">
          <button class="close">${ICONS.close}</button>
          <h2>교관 카엘의 훈련장 <small>${cls.name} · <span class="gold">${p.data.gold} G</span></small></h2>
          ${message ? `<div class="notice">${message}</div>` : ''}
-         <p class="hint">스킬은 직업마다 따로 배웁니다. 강화할 때마다 위력 +15%, 재사용 대기 -6% (최대 Lv.${MAX_SKILL_LEVEL})</p>
-         <ul class="list">${rows}</ul>
+         <p class="hint">스킬은 직업마다 따로 배웁니다. 강화할 때마다 공격 스킬은 위력 +15%, 방어·보조 스킬은 지속 시간이 늘고, 재사용 대기 -6% (최대 Lv.${MAX_SKILL_LEVEL}). 상위 스킬은 판·마력 금속이 필요합니다. 배운 스킬은 캐릭터 → 스킬에서 퀵슬롯에 놓으세요.</p>
+         <ul class="list scroll">${rows}</ul>
        </div>`,
       onClose,
     );
