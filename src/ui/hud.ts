@@ -124,7 +124,8 @@ export class Hud {
     this.bagBtn.appendChild(this.bagCount);
     this.invBtn = this.button('icon-btn', ICONS.person, 'char');
     this.buildBtn = this.button('icon-btn build-btn', ICONS.hammer, 'build');
-    menuCol.append(this.button('icon-btn', ICONS.pause, 'pause'), this.bagBtn, this.invBtn, this.buildBtn);
+    const recipeBtn = this.button('icon-btn recipe-btn', ICONS.book, 'recipes');
+    menuCol.append(this.button('icon-btn', ICONS.pause, 'pause'), this.bagBtn, this.invBtn, this.buildBtn, recipeBtn);
     topRight.append(this.minimapSlot, menuCol);
     this.root.appendChild(topRight);
 

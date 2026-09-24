@@ -1,5 +1,5 @@
 /** 한 번 누를 때 한 번만 처리되는 입력 */
-export type Action = 'attack' | 'dodge' | 'interact' | 'bag' | 'char' | 'pause' | 'skill1' | 'skill2' | 'skill3' | 'potion' | 'build' | 'map';
+export type Action = 'attack' | 'dodge' | 'interact' | 'bag' | 'char' | 'recipes' | 'pause' | 'skill1' | 'skill2' | 'skill3' | 'potion' | 'build' | 'map';
 
 /**
  * 키보드, 가상 조이스틱, 화면 버튼 입력을 하나로 모은다.
@@ -87,6 +87,7 @@ const KEY_ACTIONS: Record<string, Action> = {
   e: 'interact',
   i: 'bag',
   c: 'char',
+  r: 'recipes',
   escape: 'pause',
   '1': 'skill1',
   '2': 'skill2',

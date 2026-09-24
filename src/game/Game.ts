@@ -1493,6 +1493,7 @@ export class Game {
     if (input.consume('build')) {
       if (this.level instanceof HomeScene) this.setBuilding(!this.building);
     }
+    if (input.consume('recipes') && this.level instanceof HomeScene && !this.building) return this.openMenu(() => this.screens.recipeBook(this.progress, 'smelter', () => this.resume()));
 
     // 연타한 공격 입력을 잠시 기억해 두었다가 쓸 수 있을 때 쓴다
     if (input.consume('attack')) this.attackBuffer = 0.35;

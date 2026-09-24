@@ -7,6 +7,11 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '2.6',
+    date: '2026-09-24',
+    items: ['차원집 오른쪽 위 메뉴에 📖 레시피북 버튼 추가 (PC: R키) — 기계별 레시피, 제작대 판 합성, 재료 얻는 곳을 한눈에'],
+  },
+  {
     version: '2.5',
     date: '2026-09-24',
     items: [

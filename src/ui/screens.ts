@@ -347,6 +347,66 @@ export class Screens {
     render();
   }
 
+  // ---------------- 레시피북 (차원집) ----------------
+  recipeBook(p: Progress, tab: string, onClose: () => void): void {
+    const tabs: [string, string][] = [
+      ['smelter', '제련로'],
+      ['crusher', '벌목소'],
+      ['infuser', '마력 주입기'],
+      ['assembler', '조립기'],
+      ['alchemy', '연금 솥'],
+      ['workbench', '제작대'],
+      ['source', '재료 얻는 곳'],
+    ];
+    const io = (items: Record<string, number>) =>
+      Object.entries(items)
+        .map(([id, n]) => `<span class="${p.count(id) >= n ? '' : 'dim'}">${inlineGem(id)}${ITEMS[id].name}×${n}</span>`)
+        .join(' + ');
+    const row = (out: string, count: number, inputs: Record<string, number>, note: string) =>
+      `<li>${itemGem(out)}<div><b>${ITEMS[out].name}${count > 1 ? ` ×${count}` : ''} <small class="dim">보유 ${p.count(out)}</small></b><small>${io(inputs)}</small><small class="dim">${note}</small></div></li>`;
+    let body = '';
+    if (tab === 'workbench') {
+      const rows: string[] = [];
+      for (let t = 1; t <= 7; t++) {
+        const c = plateCraftCost(t);
+        rows.push(row(TIER_PLATE[t - 1], 1, c.items, `제작대 Lv.${t} · 에너지 ${c.energy} · +1~+5 강화 재료`));
+        const m = manaPlateCraftCost(t);
+        rows.push(row(MANA_PLATE_OF(t), 1, m.items, `제작대 Lv.${t} · 에너지 ${m.energy} · +6~+10 강화 재료`));
+      }
+      body = `<p class="hint">제작대에서는 판 합성, 채집 도구(주괴 4 + 판자 3), 장비(주괴 + 판자 / ✨ 마력 판자)를 만듭니다. 제작대 레벨 = 만들 수 있는 최고 단계.</p><ul class="list">${rows.join('')}</ul>`;
+    } else if (tab === 'source') {
+      const src: [string, string][] = [
+        ['copper_ore', '1~2챕터 던전 광맥 (곡괭이)'],
+        ['iron_ore', '2~3챕터 던전 광맥 · 2챕터는 뒤쪽 방일수록 많음'],
+        ['gold_ore', '3~4챕터 던전 광맥'],
+        ['wood', '1~2챕터 던전 나무 (도끼) · 이후 단계 나무도 같은 방식'],
+        ['essence_low', '1~3챕터 몬스터 (일반 약 20%, 정예·보스 확정) · 퀘스트 보상'],
+        ['essence_mid', '4~5챕터 몬스터'],
+        ['essence_high', '6~7챕터 몬스터'],
+        ['gear_part', '5챕터 톱니 잔해'],
+        ['magi_alloy', '5챕터 합금 잔해'],
+        ['potion', '상인 무트 (기본 물약만 판매)'],
+      ];
+      body = `<ul class="list">${src.map(([id, where]) => `<li>${itemGem(id)}<div><b>${ITEMS[id].name} <small class="dim">보유 ${p.count(id)}</small></b><small>${where}</small></div></li>`).join('')}</ul>
+        <p class="hint">광석·나무는 한 단계 위까지 지금 도구로 캘 수 있지만 내구도가 3배로 닳습니다.</p>`;
+    } else {
+      const recipes = RECIPES.filter((r) => r.machine === tab);
+      const b = BUILDINGS[tab as BuildingType];
+      body = `<p class="hint">${b.description} 레시피마다 필요한 건물 레벨이 있습니다 (세라의 강화 도면).</p><ul class="list">${recipes.map((r) => row(r.output, r.count, r.inputs, `${b.name} Lv.${r.tier} · ${r.time}초`)).join('')}</ul>`;
+    }
+    const s = this.open(
+      'recipes',
+      `<div class="panel wide tall">
+         <button class="close">${ICONS.close}</button>
+         <h2>레시피북 <small>회색 재료는 지금 부족한 것</small></h2>
+         <div class="tabs recipe-tabs">${tabs.map(([k, n]) => `<button data-tab="${k}" class="${tab === k ? 'on' : ''}">${n}</button>`).join('')}</div>
+         <div class="scroll">${body}</div>
+       </div>`,
+      onClose,
+    );
+    this.on(s, '[data-tab]', (el) => this.recipeBook(p, el.dataset.tab!, onClose));
+  }
+
   // ---------------- 패치노트 ----------------
   patchNotes(onClose: () => void): void {
     const body = PATCH_NOTES.map(
