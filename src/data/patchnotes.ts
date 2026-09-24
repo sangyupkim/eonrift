@@ -7,6 +7,13 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '4.3',
+    date: '2026-09-24',
+    items: [
+      '4.2의 조립기·마력 주입기 비용 변경을 되돌림: 조립기는 마력 금속을 쓰는 뒷단계 건물이라 원래대로 더 비쌈',
+    ],
+  },
+  {
     version: '4.2',
     date: '2026-09-24',
     items: [
