@@ -1,5 +1,5 @@
 /** 차원집 공장의 건물과 레시피 */
-export type BuildingType = 'generator' | 'wire' | 'belt' | 'splitter' | 'box' | 'smelter' | 'crusher' | 'infuser' | 'alchemy' | 'workbench' | 'healer';
+export type BuildingType = 'generator' | 'wire' | 'belt' | 'splitter' | 'box' | 'smelter' | 'crusher' | 'infuser' | 'alchemy' | 'workbench' | 'healer' | 'warehouse';
 
 export interface BuildingDef {
   type: BuildingType;
@@ -25,10 +25,11 @@ export const BUILDINGS: Record<BuildingType, BuildingDef> = {
   alchemy: { type: 'alchemy', name: '연금 솥', power: 4, color: 0x5a9a4a, cost: { copper_ore: 3, wood: 3 }, description: '치유 물약에 더 높은 마력 정수를 넣어 상위 물약을 만든다.', blueprint: { gold: 500, items: { wood: 10 } } },
   workbench: { type: 'workbench', name: '제작대', power: 8, color: 0xb07a3a, cost: { copper_ore: 10, wood: 10 }, description: '판·장비·채집 도구·귀환석 등을 만든다. 제작을 시작하면 전력을 쓰며 시간이 지나면 완성된다. 완성품은 앞쪽 레일로 내보낸다 (막히면 제작대에 쌓임).', blueprint: null },
   healer: { type: 'healer', name: '마력 치유석 (회복)', power: 10, color: 0x6aff9a, cost: { copper_ore: 6, wood: 4 }, description: '마력선으로 발전기와 이으면, 곁에 서 있는 동안 HP·MP를 초당 12%씩 회복한다. 회복할 때만 전력을 쓴다 (물약보다 훨씬 싸다).', blueprint: null },
+  warehouse: { type: 'warehouse', name: '일반 창고', power: 0, color: 0x8a6a4a, cost: { wood: 8, copper_ore: 4 }, description: '차원집 전용 창고 (레벨당 20칸, 한 칸 99개). 차원집 안의 일반 창고는 모두 하나로 이어져 어느 것을 열어도 같고, 안의 재료는 차원집에서 제작·건설에 바로 쓰인다. 레일로 들어온 아이템도 받아 보관한다.', blueprint: { gold: 500, items: { copper_ingot: 4, plank: 6 } } },
   splitter: { type: 'splitter', name: '분배기', power: 0, color: 0x6a7080, cost: { copper_ore: 1 }, description: '들어온 아이템을 앞·왼쪽·오른쪽으로 번갈아 보낸다.', blueprint: { gold: 400, items: {} } },
 };
 
-export const BUILD_ORDER: BuildingType[] = ['generator', 'wire', 'belt', 'box', 'workbench', 'healer', 'smelter', 'crusher', 'infuser', 'alchemy', 'splitter'];
+export const BUILD_ORDER: BuildingType[] = ['generator', 'wire', 'belt', 'box', 'workbench', 'healer', 'smelter', 'crusher', 'infuser', 'alchemy', 'warehouse', 'splitter'];
 
 export interface Recipe {
   id: string;
@@ -88,7 +89,7 @@ export const OFFLINE_CAP_HOURS = 8;
 // ---- 건물 레벨 (세라의 강화 도면) ----
 export const MAX_BUILDING_LEVEL = 7;
 /** 레벨을 올릴 수 있는 건물 */
-export const UPGRADABLE: BuildingType[] = ['generator', 'smelter', 'crusher', 'infuser', 'alchemy'];
+export const UPGRADABLE: BuildingType[] = ['generator', 'smelter', 'crusher', 'infuser', 'alchemy', 'warehouse'];
 
 const LEVEL_INGOT = ['copper_ingot', 'iron_ingot', 'gold_ingot', 'diamond', 'titanium_ingot', 'orichalcum_ingot', 'dim_ingot'];
 

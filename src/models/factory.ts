@@ -62,6 +62,20 @@ export function buildBuildingGeometry(type: BuildingType, connections: boolean[]
         part(new BoxGeometry(0.2, 0.2, 0.06), 0xe8c14a, { pos: [0, 0.55, 0.82] }),
         arrow(0xe8c14a, 1.15),
       ]);
+    case 'warehouse':
+      // 작은 창고: 나무 벽, 박공 지붕, 앞에 쌓인 상자
+      return merge([
+        part(new BoxGeometry(1.8, 1.2, 1.5), 0x8a6a4a, { pos: [0, 0.6, -0.1] }),
+        part(new BoxGeometry(1.9, 0.12, 1.6), 0x5a4028, { pos: [0, 0.06, -0.1] }),
+        part(new BoxGeometry(1.1, 0.14, 1.66), 0x6a3a2a, { pos: [0.42, 1.42, -0.1], rot: [0, 0, -0.55] }),
+        part(new BoxGeometry(1.1, 0.14, 1.66), 0x6a3a2a, { pos: [-0.42, 1.42, -0.1], rot: [0, 0, 0.55] }),
+        part(new BoxGeometry(0.7, 0.9, 0.06), 0x4a3020, { pos: [0, 0.45, 0.66] }),
+        part(new BoxGeometry(0.06, 0.9, 0.08), 0xc8a060, { pos: [0, 0.45, 0.69] }),
+        part(new BoxGeometry(0.45, 0.4, 0.45), 0xb07a3a, { pos: [0.62, 0.2, 0.62] }),
+        part(new BoxGeometry(0.35, 0.3, 0.35), 0xc08a4a, { pos: [0.62, 0.55, 0.62], rot: [0, 0.4, 0] }),
+        part(new BoxGeometry(0.4, 0.36, 0.4), 0xa06a30, { pos: [-0.64, 0.18, 0.64], rot: [0, -0.3, 0] }),
+        part(new BoxGeometry(0.3, 0.12, 0.3), 0xe8c14a, { pos: [0, 1.25, 0.6] }),
+      ]);
     case 'smelter':
       return merge([
         part(new BoxGeometry(1.7, 1.2, 1.7), 0x8a4a3a, { pos: [0, 0.6, 0] }),

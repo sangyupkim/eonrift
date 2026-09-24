@@ -74,6 +74,10 @@ export interface SaveData {
   bestiaryClaim?: Record<string, number>;
   /** 도감: 받은 수집 보상 수 (= 연구 보너스 단계) */
   research?: number;
+  /** 공유 창고 칸 수 (확장하면 늘어난다) */
+  storageSlots?: number;
+  /** 차원집 일반 창고 (차원집 안의 모든 일반 창고가 함께 쓰는 보관함) */
+  homeStorage?: Record<string, number>;
   settings: { shadows: boolean; sound: boolean; music?: number; sfx?: number; autoAim?: boolean; timersOpen?: boolean };
   /** 곡괭이·도끼 내구도 */
   tools: Record<ToolKind, ToolState>;
@@ -147,6 +151,15 @@ export function loadSave(): SaveData | null {
   }
 }
 
+/** 공유 창고·일반 창고 한 칸에 쌓이는 수 */
+export const STORE_STACK = 99;
+export const STORAGE_START_SLOTS = 60;
+export const STORAGE_EXPAND_STEP = 10;
+export const STORAGE_MAX_SLOTS = 200;
+/** 일반 창고 레벨별 칸 수 */
+export const warehouseSlots = (level: number) => 20 * level;
+const slotsOf = (r: Record<string, number>) => Object.values(r).reduce((a, n) => a + (n > 0 ? Math.ceil(n / STORE_STACK) : 0), 0);
+
 /** 예전 저장 파일을 지금 구조로 바꾼다 */
 function migrate(d: SaveData & { maxTier?: number }): SaveData {
   const fixSlot = (e: Equip) => {
@@ -189,6 +202,11 @@ function migrate(d: SaveData & { maxTier?: number }): SaveData {
       b.recipe = null;
     }
     if (b.type === 'generator') b.buffer ??= {};
+  }
+  // 창고 칸 수가 생기기 전 저장: 지금 쓰는 칸보다 넉넉하게 시작한다
+  if (d.storageSlots === undefined) {
+    const used = Object.values(d.storage).reduce((a, n) => a + (n > 0 ? Math.ceil(n / STORE_STACK) : 0), 0) + d.equips.length;
+    d.storageSlots = Math.min(STORAGE_MAX_SLOTS, Math.max(STORAGE_START_SLOTS, Math.ceil((used + 10) / STORAGE_EXPAND_STEP) * STORAGE_EXPAND_STEP));
   }
   // 조립기는 제작대로 합쳐졌다: 지어 둔 조립기는 제작대로 바꾸고, 산 도면 값은 골드로 돌려준다
   for (const b of d.factory.buildings as (Omit<BuildingState, 'type'> & { type: string; energy?: number })[]) {
@@ -410,9 +428,76 @@ export class Progress {
   stored(id: string): number {
     return this.data.storage[id] ?? 0;
   }
-  /** 창고 + 개인 가방 + 차원가방에 있는 개수 (재료 소모는 이 합계로 한다) */
+
+  // ---- 공유 창고 칸 (한 칸에 99개, 장비는 한 칸) ----
+  get storageCapacity(): number {
+    return this.data.storageSlots ?? STORAGE_START_SLOTS;
+  }
+  get storageUsed(): number {
+    return slotsOf(this.data.storage) + this.data.equips.length;
+  }
+  /** 창고에 n개를 더 넣을 칸이 있는지 */
+  storageFits(id: string, n: number): boolean {
+    const cur = this.stored(id);
+    return this.storageUsed - Math.ceil(cur / STORE_STACK) + Math.ceil((cur + n) / STORE_STACK) <= this.storageCapacity;
+  }
+  /** 칸이 허락하는 만큼 넣고 넣은 개수를 돌려준다 (가방에서 직접 넣을 때) */
+  depositItem(id: string, n: number): number {
+    const cur = this.stored(id);
+    const free = Math.max(0, this.storageCapacity - this.storageUsed);
+    const room = free * STORE_STACK + (cur % STORE_STACK ? STORE_STACK - (cur % STORE_STACK) : 0);
+    const k = Math.max(0, Math.min(n, room));
+    if (k > 0) this.add(id, k);
+    return k;
+  }
+  /** 장비를 창고에 넣을 칸이 있는지 */
+  get storageHasSlot(): boolean {
+    return this.storageUsed < this.storageCapacity;
+  }
+  /** 다음 창고 확장 비용 (없으면 최대) */
+  get storageExpandCost(): number | null {
+    const cap = this.storageCapacity;
+    if (cap >= STORAGE_MAX_SLOTS) return null;
+    return 2000 * (1 + (cap - STORAGE_START_SLOTS) / STORAGE_EXPAND_STEP);
+  }
+
+  // ---- 차원집 일반 창고 ----
+  /** 차원집에 있으면 일반 창고의 재료도 가진 것으로 친다 (제작·건설·강화) */
+  atHome = false;
+  get home(): Record<string, number> {
+    return (this.data.homeStorage ??= {});
+  }
+  homeStored(id: string): number {
+    return this.data.homeStorage?.[id] ?? 0;
+  }
+  /** 일반 창고 칸 수: 지어 둔 일반 창고마다 레벨 × 20칸 */
+  get homeCapacity(): number {
+    return this.data.factory.buildings.filter((b) => b.type === 'warehouse').reduce((a, b) => a + warehouseSlots(b.level ?? 1), 0);
+  }
+  get homeUsed(): number {
+    return slotsOf(this.data.homeStorage ?? {});
+  }
+  /** 일반 창고에 넣는다 (칸이 모자라면 들어가는 만큼). 넣은 개수 */
+  addHome(id: string, n: number): number {
+    const cur = this.homeStored(id);
+    const free = this.homeCapacity - this.homeUsed;
+    const room = free * STORE_STACK + (cur % STORE_STACK ? STORE_STACK - (cur % STORE_STACK) : 0);
+    const k = Math.max(0, Math.min(n, room));
+    if (k > 0) this.home[id] = cur + k;
+    return k;
+  }
+  takeHome(id: string, n: number): number {
+    const k = Math.min(n, this.homeStored(id));
+    if (k > 0) {
+      this.home[id] -= k;
+      if (this.home[id] <= 0) delete this.home[id];
+    }
+    return k;
+  }
+
+  /** 창고 + 개인 가방 + 차원가방에 있는 개수 (재료 소모는 이 합계로 한다). 차원집 안이면 일반 창고도 */
   count(id: string): number {
-    let n = this.stored(id);
+    let n = this.stored(id) + (this.atHome ? this.homeStored(id) : 0);
     for (const s of this.data.inventory) if (s && !s.equip && s.itemId === id) n += s.count;
     for (const s of this.data.dimBag) if (s && !s.equip && s.itemId === id) n += s.count;
     return n;
@@ -426,6 +511,7 @@ export class Progress {
       if (this.data.storage[id] === 0) delete this.data.storage[id];
     }
     let left = n - fromStore;
+    if (left && this.atHome) left -= this.takeHome(id, left);
     if (left) left -= this.invBag.remove(id, left);
     if (left) this.dimBagObj.remove(id, left);
     return true;

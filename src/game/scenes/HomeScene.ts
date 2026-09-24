@@ -190,8 +190,8 @@ export class HomeScene extends Level {
     this.interactables.length = 0;
     this.interactables.push(this.exitInteract, this.storageInteract);
     for (const b of this.factory.state.buildings) {
-      if (b.type !== 'generator' && b.type !== 'box' && b.type !== 'workbench' && !MACHINE_TYPES.has(b.type)) continue;
-      const label = b.type === 'generator' ? '연료' : b.type === 'box' ? '열기' : b.type === 'workbench' ? '제작' : '보기';
+      if (b.type !== 'generator' && b.type !== 'box' && b.type !== 'workbench' && b.type !== 'warehouse' && !MACHINE_TYPES.has(b.type)) continue;
+      const label = b.type === 'generator' ? '연료' : b.type === 'box' || b.type === 'warehouse' ? '열기' : b.type === 'workbench' ? '제작' : '보기';
       this.interactables.push({ id: 'building', x: (b.x + 0.5) * TILE, z: (b.y + 0.5) * TILE, range: 2.1, label, action: () => this.onBuilding(b) });
     }
   }

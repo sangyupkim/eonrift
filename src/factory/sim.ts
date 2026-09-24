@@ -134,6 +134,8 @@ export class Factory {
   private netSupply: number[] = [];
   private netDemand: number[] = [];
   private dirty = true;
+  /** 일반 창고로 들어온 아이템을 차원집 보관함에 넣는다. 자리가 없으면 false */
+  onStore: ((item: string) => boolean) | null = null;
   /** 출하상자로 들어간 아이템을 알린다 (퀘스트용) */
   onCraft: ((item: string, count: number) => void) | null = null;
 
@@ -494,6 +496,9 @@ export class Factory {
         target.progress = 0;
         return true;
       }
+      case 'warehouse':
+        // 일반 창고: 레일로 들어온 것을 차원집 보관함에 모은다
+        return this.onStore?.(item) ?? false;
       case 'box': {
         if (target.mode !== 'out' || boxTotal(target) >= BOX_CAPACITY) return false;
         target.buffer![item] = (target.buffer![item] ?? 0) + 1;

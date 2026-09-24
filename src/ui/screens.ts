@@ -11,7 +11,7 @@ import type { QuestDef } from '../data/quests';
 import { THEMES } from '../data/themes';
 import { canEnqueue, enqueueJob, WORKBENCH_OUT_MAX, WORKBENCH_QUEUE_MAX, BOX_CAPACITY, boxTotal, ESSENCES, MACHINE_TYPES, RECIPE_BY_ID, recipesFor, type BuildingState, type Factory, type WorkJob } from '../factory/sim';
 import type { Bag, Slot } from '../game/Bag';
-import { stageIndex, type Progress } from '../game/Progress';
+import { stageIndex, STORAGE_EXPAND_STEP, STORE_STACK, warehouseSlots, type Progress } from '../game/Progress';
 import { objectiveNeed, objectiveProgress, objectiveText, type Quests } from '../game/Quests';
 import { ICONS, mico } from './icons';
 import { buildingThumb } from './thumbs';
@@ -73,6 +73,12 @@ const equipGem = (e: Equip) => {
 const toolGem = (k: ToolKind, t: ToolState) => {
   const url = toolIconUrl(k, t.tier);
   return url ? `<img class="gem ico" src="${url}" alt="">` : '';
+};
+/** 개수를 창고 칸(99개씩)으로 나눈다 */
+const stacks = (n: number): number[] => {
+  const out: number[] = [];
+  for (let left = n; left > 0; left -= STORE_STACK) out.push(Math.min(STORE_STACK, left));
+  return out;
 };
 /** 글 사이에 들어가는 작은 아이콘 */
 const inlineGem = (id: string) => {
@@ -800,7 +806,7 @@ export class Screens {
   }
 
   // ---------------- 공유 창고: 가방 ⇄ 창고 ----------------
-  storage(p: Progress, onClose: () => void, message?: string): void {
+  storage(p: Progress, onClose: () => void, message?: string, onChange?: () => void): void {
     type Sel = { from: 'bag' | 'dim'; i: number } | { from: 'store'; id: string } | { from: 'storeEq'; uid: string } | null;
     let sel: Sel = null;
     let info = message ?? '아이템을 누르고 반대쪽(가방 ↔ 창고)을 누르면 옮겨집니다.';
@@ -812,9 +818,14 @@ export class Screens {
         const on = sel && sel.from === from && sel.i === i ? 'sel' : '';
         return `<div class="slot filled ${on}" data-from="${from}" data-i="${i}">${x.equip ? equipGem(x.equip) : itemGem(x.itemId)}<span class="cnt">${x.equip ? `+${x.equip.plus}` : x.count}</span></div>`;
       };
+      // 한 칸에 99개씩 나눠 보여 준다
       const storeItems = ITEM_LIST.filter((it) => p.stored(it.id) > 0)
-        .map((it) => `<div class="slot filled ${sel?.from === 'store' && sel.id === it.id ? 'sel' : ''}" data-store="${it.id}">${itemGem(it.id)}<span class="cnt">${p.stored(it.id)}</span></div>`)
+        .flatMap((it) => stacks(p.stored(it.id)).map((n) => `<div class="slot filled ${sel?.from === 'store' && sel.id === it.id ? 'sel' : ''}" data-store="${it.id}">${itemGem(it.id)}<span class="cnt">${n}</span></div>`))
         .join('');
+      const used = p.storageUsed;
+      const cap = p.storageCapacity;
+      const cost = p.storageExpandCost;
+      const emptyCells = Array.from({ length: Math.max(0, Math.min(cap - used, 40)) }, () => '<div class="slot"></div>').join('');
       const storeEq = p.data.equips
         .map((e) => `<div class="slot filled ${sel?.from === 'storeEq' && sel.uid === e.uid ? 'sel' : ''}" data-storeeq="${e.uid}">${equipGem(e)}<span class="cnt">+${e.plus}</span></div>`)
         .join('');
@@ -824,7 +835,7 @@ export class Screens {
         'storage',
         `<div class="panel wide tall">
            <button class="close">${ICONS.close}</button>
-           <h2>공유 창고 <small>모든 직업이 함께 씁니다</small> <button class="tool-sm" data-a="all">재료 모두 창고로</button></h2>
+           <h2>공유 창고 <small class="${used > cap ? 'bad' : ''}">${used}/${cap}칸 · 한 칸 ${STORE_STACK}개</small> <button class="tool-sm" data-a="all">재료 모두 창고로</button> ${cost ? `<button class="tool-sm" data-a="expand" ${p.data.gold >= cost ? '' : 'disabled'}>+${STORAGE_EXPAND_STEP}칸 확장 (${cost} G)</button>` : '<small class="ok">최대 칸</small>'}</h2>
            <div class="item-info">${info}</div>
            <div class="store-split scroll">
              <div>
@@ -834,8 +845,8 @@ export class Screens {
                <div class="bag-grid inv-grid ${toBag ? 'drop' : ''}" data-grid="dim">${dim.slots.map((x, i) => cell(x, 'dim', i)).join('')}</div>
              </div>
              <div>
-               <h3>창고</h3>
-               <div class="store-grid ${toStore ? 'drop' : ''}" data-grid="store">${storeItems}${storeEq}${!storeItems && !storeEq ? '<p class="hint">비어 있음</p>' : ''}</div>
+               <h3>창고 <small>${used > cap ? '<span class="bad">칸이 넘쳤습니다 — 비우거나 확장하세요</span>' : `빈 칸 ${cap - used}`}</small></h3>
+               <div class="store-grid ${toStore ? 'drop' : ''}" data-grid="store">${storeItems}${storeEq}${emptyCells}</div>
              </div>
            </div>
          </div>`,
@@ -850,10 +861,18 @@ export class Screens {
             const b = sel.from === 'bag' ? bag : dim;
             const x = b.slots[sel.i];
             if (x) {
-              if (x.equip) p.data.equips.push(x.equip);
-              else p.add(x.itemId, x.count);
-              b.slots[sel.i] = null;
-              info = `${x.equip ? equipName(x.equip) : `${ITEMS[x.itemId].name} ×${x.count}`} → 창고`;
+              if (x.equip) {
+                if (p.storageHasSlot) {
+                  p.data.equips.push(x.equip);
+                  b.slots[sel.i] = null;
+                  info = `${equipName(x.equip)} → 창고`;
+                } else info = '<span class="bad">창고에 빈 칸이 없습니다 (확장하세요)</span>';
+              } else {
+                const k = p.depositItem(x.itemId, x.count);
+                x.count -= k;
+                if (x.count <= 0) b.slots[sel.i] = null;
+                info = k ? `${ITEMS[x.itemId].name} ×${k} → 창고${x.count > 0 ? ` <span class="bad">(칸이 모자라 ${x.count}개는 가방에)</span>` : ''}` : '<span class="bad">창고에 빈 칸이 없습니다 (확장하세요)</span>';
+              }
             }
             sel = null;
             this.click();
@@ -903,15 +922,169 @@ export class Screens {
       );
       this.on(sc, '[data-a="all"]', () => {
         let n = 0;
+        let left = 0;
         for (const b of [bag, dim])
           b.slots.forEach((x, i) => {
             if (!x || x.equip) return;
-            p.add(x.itemId, x.count);
-            n += x.count;
-            b.slots[i] = null;
+            const k = p.depositItem(x.itemId, x.count);
+            n += k;
+            x.count -= k;
+            left += x.count;
+            if (x.count <= 0) b.slots[i] = null;
           });
         sel = null;
-        info = n ? `재료 ${n}개를 창고에 넣었습니다` : '넣을 재료가 없습니다';
+        info = n ? `재료 ${n}개를 창고에 넣었습니다${left ? ` <span class="bad">(칸이 모자라 ${left}개는 가방에)</span>` : ''}` : left ? '<span class="bad">창고에 빈 칸이 없습니다</span>' : '넣을 재료가 없습니다';
+        render();
+      });
+      this.on(sc, '[data-a="expand"]', () => {
+        const c = p.storageExpandCost;
+        if (!c || p.data.gold < c) return;
+        p.data.gold -= c;
+        p.data.storageSlots = p.storageCapacity + STORAGE_EXPAND_STEP;
+        info = `<b class="ok">창고가 ${p.storageCapacity}칸으로 늘어났습니다</b>`;
+        onChange?.();
+        render();
+      });
+    };
+    render();
+  }
+
+  // ---------------- 차원집 일반 창고 ----------------
+  /** 차원집 안의 일반 창고는 모두 하나의 보관함. 가방 또는 공유 창고와 주고받는다 */
+  warehouse(p: Progress, b: BuildingState, onChange: () => void, onClose: () => void, side: 'bag' | 'shared' = 'bag', message?: string): void {
+    type Sel = { from: 'bag' | 'dim'; i: number } | { from: 'shared' | 'home'; id: string } | null;
+    let sel: Sel = null;
+    let info = message ?? '아이템을 누르고 반대쪽을 누르면 옮겨집니다. 차원집 안에서는 이 창고의 재료도 제작·건설에 바로 쓰입니다.';
+    const bag = p.invBag;
+    const dim = p.dimBagObj;
+    const render = () => {
+      const cap = p.homeCapacity;
+      const used = p.homeUsed;
+      const cell = (x: Slot | null, from: 'bag' | 'dim', i: number) => {
+        if (!x) return '<div class="slot"></div>';
+        if (x.equip) return `<div class="slot filled dim-eq">${equipGem(x.equip)}</div>`;
+        const on = sel && sel.from === from && sel.i === i ? 'sel' : '';
+        return `<div class="slot filled ${on}" data-from="${from}" data-i="${i}">${itemGem(x.itemId)}<span class="cnt">${x.count}</span></div>`;
+      };
+      const pool = (r: Record<string, number>, from: 'shared' | 'home') =>
+        ITEM_LIST.filter((it) => (r[it.id] ?? 0) > 0)
+          .flatMap((it) => stacks(r[it.id]).map((n) => `<div class="slot filled ${sel && 'id' in sel && sel.from === from && sel.id === it.id ? 'sel' : ''}" data-${from}="${it.id}">${itemGem(it.id)}<span class="cnt">${n}</span></div>`))
+          .join('');
+      const empty = Array.from({ length: Math.max(0, Math.min(cap - used, 40)) }, () => '<div class="slot"></div>').join('');
+      const left =
+        side === 'bag'
+          ? `<h3>가방 <small>${bag.used}/${bag.slots.length}</small></h3><div class="bag-grid inv-grid" data-grid="bag">${bag.slots.map((x, i) => cell(x, 'bag', i)).join('')}</div>
+             <h3>차원가방 <small>${dim.used}/${dim.slots.length}</small></h3><div class="bag-grid inv-grid" data-grid="dim">${dim.slots.map((x, i) => cell(x, 'dim', i)).join('')}</div>`
+          : `<h3>공유 창고 <small>${p.storageUsed}/${p.storageCapacity}칸</small></h3><div class="store-grid" data-grid="shared">${pool(p.data.storage, 'shared') || '<p class="hint">비어 있음</p>'}</div>`;
+      const sc = this.open(
+        'storage',
+        `<div class="panel wide tall">
+           <button class="close">${ICONS.close}</button>
+           <h2>일반 창고 <small class="${used > cap ? 'bad' : ''}">${used}/${cap}칸 · 한 칸 ${STORE_STACK}개</small> <button class="tool-sm" data-a="all">재료 모두 넣기</button></h2>
+           ${this.levelBlock(b, p)}
+           <div class="tabs"><button data-side="bag" class="${side === 'bag' ? 'on' : ''}">가방과 주고받기</button><button data-side="shared" class="${side === 'shared' ? 'on' : ''}">공유 창고와 주고받기</button></div>
+           <div class="item-info">${info}</div>
+           <div class="store-split scroll">
+             <div>${left}</div>
+             <div>
+               <h3>일반 창고 <small>차원집의 일반 창고 ${p.data.factory.buildings.filter((x) => x.type === 'warehouse').length}개가 함께 씀 · 레일로 들어온 것도 여기로</small></h3>
+               <div class="store-grid" data-grid="home">${pool(p.home, 'home')}${empty}</div>
+             </div>
+           </div>
+         </div>`,
+        onClose,
+      );
+      const moveToHome = (id: string, n: number) => p.addHome(id, n);
+      sc.querySelectorAll<HTMLElement>('[data-grid]').forEach((grid) =>
+        grid.addEventListener('click', (ev) => {
+          const el = (ev.target as HTMLElement).closest<HTMLElement>('.slot.filled');
+          const g = grid.dataset.grid as 'bag' | 'dim' | 'shared' | 'home';
+          if (sel && g === 'home' && sel.from !== 'home') {
+            if (sel.from === 'shared') {
+              const id = sel.id;
+              const k = moveToHome(id, p.stored(id));
+              if (k) {
+                p.data.storage[id] -= k;
+                if (p.data.storage[id] <= 0) delete p.data.storage[id];
+              }
+              info = k ? `${ITEMS[id].name} ×${k} → 일반 창고` : '<span class="bad">일반 창고에 빈 칸이 없습니다</span>';
+            } else if ('i' in sel) {
+              const si = sel.i;
+              const bb = sel.from === 'bag' ? bag : dim;
+              const x = bb.slots[si];
+              if (x && !x.equip) {
+                const k = moveToHome(x.itemId, x.count);
+                x.count -= k;
+                if (x.count <= 0) bb.slots[si] = null;
+                info = k ? `${ITEMS[x.itemId].name} ×${k} → 일반 창고` : '<span class="bad">일반 창고에 빈 칸이 없습니다</span>';
+              }
+            }
+            sel = null;
+            this.click();
+            onChange();
+            return render();
+          }
+          if (sel && sel.from === 'home' && g !== 'home') {
+            const id = sel.id;
+            const have = p.homeStored(id);
+            let k = 0;
+            if (g === 'shared') k = p.depositItem(id, have);
+            else k = (g === 'bag' ? bag : dim).add(id, have);
+            p.takeHome(id, k);
+            info = k ? `${ITEMS[id].name} ×${k} → ${g === 'shared' ? '공유 창고' : g === 'bag' ? '가방' : '차원가방'}` : '<span class="bad">빈 칸이 없습니다</span>';
+            sel = null;
+            this.click();
+            onChange();
+            return render();
+          }
+          if (!el) return;
+          this.click();
+          if (el.dataset.home) {
+            const id = el.dataset.home;
+            sel = sel && 'id' in sel && sel.from === 'home' && sel.id === id ? null : { from: 'home', id };
+            info = sel ? `${slotInfo({ itemId: id, count: p.homeStored(id) })}<br><small class="ok">▶ 반대쪽을 누르면 꺼냅니다</small>` : info;
+          } else if (el.dataset.shared) {
+            const id = el.dataset.shared;
+            sel = sel && 'id' in sel && sel.from === 'shared' && sel.id === id ? null : { from: 'shared', id };
+            info = sel ? `${slotInfo({ itemId: id, count: p.stored(id) })}<br><small class="ok">▶ 일반 창고를 누르면 옮깁니다</small>` : info;
+          } else if (el.dataset.from) {
+            const from = el.dataset.from as 'bag' | 'dim';
+            const i = Number(el.dataset.i);
+            sel = sel && 'i' in sel && sel.from === from && sel.i === i ? null : { from, i };
+            info = sel ? `${slotInfo((from === 'bag' ? bag : dim).slots[i]!)}<br><small class="ok">▶ 일반 창고를 누르면 넣습니다</small>` : info;
+          }
+          render();
+        }),
+      );
+      this.on(sc, '[data-side]', (el) => this.warehouse(p, b, onChange, onClose, el.dataset.side as 'bag' | 'shared'));
+      this.on(sc, '[data-a="all"]', () => {
+        let n = 0;
+        let left = 0;
+        if (side === 'bag')
+          for (const bb of [bag, dim])
+            bb.slots.forEach((x, i) => {
+              if (!x || x.equip) return;
+              const k = moveToHome(x.itemId, x.count);
+              n += k;
+              x.count -= k;
+              left += x.count;
+              if (x.count <= 0) bb.slots[i] = null;
+            });
+        else
+          for (const [id, have] of Object.entries(p.data.storage)) {
+            const k = moveToHome(id, have);
+            n += k;
+            left += have - k;
+            p.data.storage[id] -= k;
+            if (p.data.storage[id] <= 0) delete p.data.storage[id];
+          }
+        sel = null;
+        info = n ? `재료 ${n}개를 일반 창고에 넣었습니다${left ? ` <span class="bad">(칸이 모자라 ${left}개는 그대로)</span>` : ''}` : '넣을 재료가 없거나 빈 칸이 없습니다';
+        onChange();
+        render();
+      });
+      this.bindUpgrade(sc, b, p, () => {
+        onChange();
         render();
       });
     };
@@ -1204,7 +1377,7 @@ export class Screens {
         const opened = p.maxTier >= lv;
         const ok = opened && p.data.gold >= cost.gold && p.hasAll(cost.items);
         const costTxt = [`${cost.gold} G`, ...Object.entries(cost.items).map(([id, n]) => `${ITEMS[id].name} ${p.count(id)}/${n}`)].join(' · ');
-        return `<li>${icon}<div><b>${d.name} Lv.${lv} 강화 도면</b><small>${t === 'generator' ? `전력 ${generatorPower(lv)}` : `${TOOL_TIER_NAMES[lv - 1]} 단계 재료를 가공 · 속도 ×${levelSpeed(lv).toFixed(2)}`}</small><small class="dim">${opened ? costTxt : `${lv}단계 차원문을 열면 판매`}</small></div><button data-up="${t}:${lv}" ${ok ? '' : 'disabled'}>구입</button></li>`;
+        return `<li>${icon}<div><b>${d.name} Lv.${lv} 강화 도면</b><small>${t === 'generator' ? `전력 ${generatorPower(lv)}` : t === 'warehouse' ? `창고 하나당 ${warehouseSlots(lv)}칸` : `${TOOL_TIER_NAMES[lv - 1]} 단계 재료를 가공 · 속도 ×${levelSpeed(lv).toFixed(2)}`}</small><small class="dim">${opened ? costTxt : `${lv}단계 차원문을 열면 판매`}</small></div><button data-up="${t}:${lv}" ${ok ? '' : 'disabled'}>구입</button></li>`;
       })
       .join('');
     const rows = BUILD_ORDER.filter((t) => BUILDINGS[t].blueprint)
@@ -1423,14 +1596,14 @@ export class Screens {
     if (!UPGRADABLE.includes(b.type)) return '';
     const lv = b.level ?? 1;
     const next = lv + 1;
-    const speed = b.type === 'generator' ? `전력 ${generatorPower(lv)}` : `속도 ×${levelSpeed(lv).toFixed(2)} · ${TOOL_TIER_NAMES[lv - 1]} 단계 재료까지`;
+    const speed = b.type === 'generator' ? `전력 ${generatorPower(lv)}` : b.type === 'warehouse' ? `${warehouseSlots(lv)}칸` : `속도 ×${levelSpeed(lv).toFixed(2)} · ${TOOL_TIER_NAMES[lv - 1]} 단계 재료까지`;
     let html = `<div class="level-box"><b>Lv.${lv}</b> <small>${speed}</small>`;
     if (next > MAX_BUILDING_LEVEL) html += ' <small class="ok">최고 레벨</small>';
     else if (!p.flag(`bp_${b.type}_lv${next}`)) html += `<small class="dim">Lv.${next}: 세라에게서 강화 도면(Lv.${next})을 사야 합니다</small>`;
     else {
       const cost = buildingUpgradeCost(b.type, next);
       const ok = p.hasAll(cost);
-      html += `<small>Lv.${next} → ${b.type === 'generator' ? `전력 ${generatorPower(next)}` : `${TOOL_TIER_NAMES[next - 1]} 재료 가공 · 속도 ×${levelSpeed(next).toFixed(2)}`}</small>
+      html += `<small>Lv.${next} → ${b.type === 'generator' ? `전력 ${generatorPower(next)}` : b.type === 'warehouse' ? `${warehouseSlots(next)}칸` : `${TOOL_TIER_NAMES[next - 1]} 재료 가공 · 속도 ×${levelSpeed(next).toFixed(2)}`}</small>
         <small>${Object.entries(cost).map(([id, n]) => `<span class="${p.count(id) >= n ? '' : 'bad'}">${inlineGem(id)}${ITEMS[id].name} ${p.count(id)}/${n}</span>`).join(' · ')}</small>
         <button class="primary" data-upgrade ${ok ? '' : 'disabled'}>Lv.${next}로 업그레이드</button>`;
     }

@@ -206,6 +206,8 @@ export class Game {
     });
     this.factory = new Factory(p.data.factory, p.factorySize);
     this.factory.onCraft = (item, n) => this.quests.event({ type: 'craft', item, count: n });
+    // 레일로 일반 창고에 들어온 아이템은 차원집 보관함으로
+    this.factory.onStore = (item) => p.addHome(item, 1) === 1;
   }
 
   // =============== 시작 / 저장 ===============
@@ -350,6 +352,8 @@ export class Game {
     // 차원집을 떠나면 치유석은 쉰다 (전력을 쓰지 않는다)
     for (const b of this.factory.state.buildings) if (b.type === 'healer') b.active = false;
     this.level = level;
+    // 차원집 안에서는 일반 창고의 재료도 가진 것으로 친다
+    this.progress.atHome = level instanceof HomeScene;
     this.buildMode(false);
     this.gathering = null;
     this.makePlayer(level.playerStart.x, level.playerStart.z, level.playerStart.facing);
@@ -643,7 +647,7 @@ export class Game {
   }
 
   private openStorage(): void {
-    this.openMenu(() => this.screens.storage(this.progress, () => this.resume()));
+    this.openMenu(() => this.screens.storage(this.progress, () => this.resume(), undefined, () => this.saveNow()));
   }
 
   /** 장비·스탯이 바뀌면 최대 HP/MP를 다시 계산한다 */
@@ -1647,6 +1651,7 @@ export class Game {
     const save = () => this.saveNow();
     if (b.type === 'generator') this.openMenu(() => this.screens.generator(this.factory, b, p, save, () => this.resume()));
     else if (b.type === 'box') this.openMenu(() => this.screens.box(b, p, save, () => this.resume()));
+    else if (b.type === 'warehouse') this.openMenu(() => this.screens.warehouse(p, b, save, () => this.resume()));
     else if (MACHINE_TYPES.has(b.type)) this.openMenu(() => this.screens.machine(this.factory, b, p, save, () => this.resume()));
     else if (b.type === 'workbench') this.openMenu(() => this.screens.workbench(this.factory, b, p, () => {
       this.applyStats();
