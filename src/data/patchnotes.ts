@@ -7,6 +7,14 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '4.1',
+    date: '2026-09-24',
+    items: [
+      '앱 아이콘을 새로 그림: 차원의 틈새 앞에서 검을 든 검사 (3D 모델로 렌더링)',
+      '이미 설치했다면 앱을 지우고 다시 설치해야 새 아이콘으로 바뀔 수 있음',
+    ],
+  },
+  {
     version: '4.0',
     date: '2026-09-24',
     items: [

@@ -26,7 +26,7 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
-      - run: mkdir -p _site/sound && cp -r index.html version.json assets manifest.webmanifest icon*.png icon.svg sw.js .nojekyll _site/ && cp sound/*.mp3 _site/sound/
+      - run: mkdir -p _site/sound && cp -r index.html version.json assets manifest.webmanifest icon*.png favicon-64.png icon.svg sw.js .nojekyll _site/ && cp sound/*.mp3 _site/sound/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
