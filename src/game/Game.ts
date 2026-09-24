@@ -350,12 +350,24 @@ export class Game {
       exit: () => this.openWarp(),
       gather: (n) => this.startGather(n),
       shake: (a) => (this.shakeT = Math.max(this.shakeT, a)),
+      killPlayer: () => {
+        const pl = this.player;
+        if (!pl.alive || this.mode !== 'play') return;
+        pl.hurt(pl.hp + 1);
+        this.hud.floatText(...Object.values(this.toScreen(pl.position.x, 2, pl.position.z)) as [number, number], '☠', '#ff2a6a', 'crit');
+        this.shakeT = 1;
+        this.mode = 'dead';
+        this.deadTimer = 0;
+        this.hud.setVisible(false);
+        this.audio.play('fall');
+      },
       announce: (t) => {
         this.hud.toast(t, 3000);
         this.audio.play('portal');
       },
     });
     this.bossTime = 0;
+    this.timeOver = false;
     const continuing = !background && this.run !== null;
     const prevPlayer = this.player;
     this.loadLevel(dungeon, true);
@@ -1197,7 +1209,7 @@ export class Game {
           {
             title: timeOver ? '시간 초과…' : '쓰러졌다…',
             note: timeOver
-              ? `${BOSS_TIME_LIMIT / 60}분 안에 수호자를 쓰러뜨리지 못해 틈새가 닫혔다. 일반 가방의 짐은 틈새에 삼켜졌다. (장비를 강화해서 다시 도전하자)`
+              ? `${BOSS_TIME_LIMIT / 60}분 안에 쓰러뜨리지 못해 보스가 틈새를 붕괴시켰다. 일반 가방의 짐은 틈새에 삼켜졌다. (장비를 강화해서 다시 도전하자)`
               : '틈새가 몸을 마을로 밀어냈다. 일반 가방의 짐은 틈새에 삼켜졌다.',
             items: kept,
             equips: keptEquips,
@@ -1538,18 +1550,14 @@ export class Game {
         // 보스 제한 시간: 싸움이 시작되면 흐른다
         this.bossTime += dt;
         const left = Math.max(0, BOSS_TIME_LIMIT - this.bossTime);
-        if (left <= 0 && this.mode === 'play') {
-          this.hud.setBoss(null);
-          this.hud.toast('제한 시간 초과! 틈새가 닫힌다…', 3000);
-          this.mode = 'dead';
-          this.deadTimer = 0;
+        if (left <= 0 && !boss.dooming && !this.timeOver) {
+          // 시간이 다 되면 보스가 방 전체 즉사기를 시전한다 (막을 수도 피할 수도 없다)
           this.timeOver = true;
-          this.hud.setVisible(false);
-          this.audio.play('fall');
-          return;
+          level.startBossDoom();
+          this.audio.play('stone');
         }
         const clock = `⏱ ${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, '0')}`;
-        const tag = boss.shielded ? ` · 보호막 (수호병 ${boss.guardsLeft})` : boss.phase2 ? ' · 격노' : '';
+        const tag = boss.dooming ? ' · ☠ 틈새 붕괴' : boss.shielded ? ` · 보호막 (수호병 ${boss.guardsLeft})` : boss.phase2 ? ' · 격노' : '';
         this.hud.setBoss(`${boss.name}${tag}  ${clock}`, boss.hp / boss.maxHp, boss.bars, boss.shielded, left < 60);
         this.audio.playMusic('boss');
       }

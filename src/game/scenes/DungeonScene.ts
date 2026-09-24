@@ -66,6 +66,7 @@ export interface DungeonHooks {
   gather: (node: NodeInstance) => void;
   shake: (amount: number) => void;
   announce: (text: string) => void;
+  killPlayer: () => void;
 }
 
 const ARCH_WEIGHTS: Archetype[] = ['melee', 'melee', 'melee', 'ranged', 'ranged', 'charger', 'bomber', 'tank'];
@@ -118,6 +119,7 @@ export class DungeonScene extends Level {
       burst: (x, y, z, c, n, p) => self.particles.burst(x, y, z, c, n, p),
       shake: (a) => hooks.shake(a),
       announce: (t) => hooks.announce(t),
+      killPlayer: () => hooks.killPlayer(),
     };
 
     this.ngPlus = ngPlus;
@@ -284,6 +286,11 @@ export class DungeonScene extends Level {
     const list = [...this.obstacles];
     for (const m of this.monsters) if (m.alive) list.push({ x: m.x, z: m.z, radius: m.radius * 0.8 });
     return list;
+  }
+
+  /** 보스 제한 시간 초과 → 즉사기 */
+  startBossDoom(): void {
+    this.boss?.startDoom(this.world);
   }
 
   update(dt: number, focus: { x: number; z: number }): void {

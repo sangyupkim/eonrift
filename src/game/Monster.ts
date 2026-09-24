@@ -20,7 +20,7 @@ export type MonsterKind = 'normal' | 'elite' | 'midboss' | 'boss';
 
 type State = 'idle' | 'chase' | 'windup' | 'dash' | 'recover' | 'dead';
 
-type BossPattern = 'slam' | 'cone' | 'volley' | 'charge' | 'summon' | 'rain' | 'cross' | 'nova' | 'barrage';
+type BossPattern = 'slam' | 'cone' | 'volley' | 'charge' | 'summon' | 'rain' | 'cross' | 'nova' | 'barrage' | 'doom';
 
 export interface ProjectileSpec {
   x: number;
@@ -44,6 +44,8 @@ export interface MonsterWorld {
   fireEnemyProjectile(spec: ProjectileSpec): void;
   summon(arch: Archetype, x: number, z: number): Monster;
   announce(text: string): void;
+  /** 피할 수 없는 즉사 */
+  killPlayer(): void;
   burst(x: number, y: number, z: number, color: number, count: number, power?: number): void;
   shake(amount: number): void;
 }
@@ -86,6 +88,8 @@ export class Monster {
   /** 남은 줄 수가 이 값이 되면 기믹 발동 */
   private gimmickAt: number[] = [];
   private pendingGimmick = 0;
+  /** 제한 시간이 끝나 즉사기를 쓰는 중 (피해를 받지 않는다) */
+  dooming = false;
   /** 감속 남은 시간 */
   slow = 0;
   private t = 0;
@@ -199,7 +203,7 @@ export class Monster {
   /** 피해를 받는다. 죽었으면 true */
   damage(amount: number, fromX: number, fromZ: number, knock: number): boolean {
     if (!this.alive) return false;
-    if (this.shielded) {
+    if (this.shielded || this.dooming) {
       this.flash = 0.5;
       return false;
     }
@@ -245,6 +249,20 @@ export class Monster {
       r.dispose();
     }
     this.rainSpots = [];
+  }
+
+  /** 제한 시간 초과: 방 전체를 뒤덮는 즉사기. 예고가 끝나면 무조건 쓰러진다 */
+  startDoom(world: MonsterWorld): void {
+    if (this.dooming || !this.alive) return;
+    this.dooming = true;
+    this.bossQueue = [];
+    for (const r of this.rainSpots) world.scene.remove(r.group);
+    this.rainSpots = [];
+    this.pattern = 'doom';
+    this.startTelegraph(world, { kind: 'circle', r: 40 }, this.x, this.z, 0, 4);
+    this.setState('windup');
+    world.shake(0.8);
+    world.announce(`제한 시간 초과! ${this.name}이(가) 틈새를 붕괴시킨다…`);
   }
 
   private startTelegraph(world: MonsterWorld, shape: TelegraphShape, x: number, z: number, facing: number, duration: number): void {
@@ -562,6 +580,14 @@ export class Monster {
           world.effects.ring(this.x, this.z, 3, 0xb080ff, 0.5);
           break;
         }
+        case 'doom':
+          world.effects.ring(this.x, this.z, 30, 0x2a0040, 1.2);
+          world.effects.ring(this.x, this.z, 12, 0xff2a6a, 0.8);
+          world.burst(p.x, 0.8, p.z, 0xff2a6a, 40, 2.5);
+          world.shake(1.2);
+          world.killPlayer();
+          this.dooming = false;
+          break;
         case 'rain':
         case 'cross':
         case 'nova':
