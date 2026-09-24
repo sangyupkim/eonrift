@@ -2232,3 +2232,37 @@ textarea.code {
   background: rgba(94, 224, 255, 0.22);
   border-color: rgba(94, 224, 255, 0.7);
 }
+.warp-btn {
+  position: absolute;
+  right: calc(262px + var(--safe-right));
+  bottom: calc(22px + var(--safe-bottom));
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  width: 64px;
+  padding: 8px 4px 6px;
+  border-radius: 14px;
+  border: 1px solid rgba(122, 255, 192, 0.7);
+  background: rgba(20, 60, 50, 0.75);
+  color: #bfffe0;
+  font-size: 11px;
+  font-weight: 800;
+  pointer-events: auto;
+  animation: pulse 1.6s ease-in-out infinite;
+}
+.warp-btn svg {
+  width: 26px;
+  height: 26px;
+}
+.warp-btn.hidden,
+.hud:not([data-mode='dungeon']) .warp-btn {
+  display: none;
+}
+/* 긴 알림은 줄바꿈 */
+.toast {
+  white-space: normal;
+  max-width: min(92vw, 720px);
+  width: max-content;
+  text-align: center;
+  line-height: 1.4;
+}

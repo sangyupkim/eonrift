@@ -16,6 +16,7 @@ import { TILE } from '../../config';
 import { Rng } from '../../core/rng';
 import { ITEMS, ORE_TIERS, WOOD_TIERS } from '../../data/items';
 import type { Archetype } from '../../data/monsters';
+import { isFloor } from '../../dungeon/generator';
 import { NODES, resourceTier, type NodeDef } from '../../data/nodes';
 import { themeForTier, type DungeonTheme } from '../../data/themes';
 import type { CircleObstacle } from '../../dungeon/collision';
@@ -162,6 +163,23 @@ export class DungeonScene extends Level {
 
   static toWorld(tx: number, ty: number): { x: number; z: number } {
     return { x: (tx + 0.5) * TILE, z: (ty + 0.5) * TILE };
+  }
+
+  /** 고급 상자 습격: (x, z) 둘레의 빈 바닥에 몬스터 무리를 불러낸다 */
+  spawnAmbush(x: number, z: number, count: number): Monster[] {
+    const out: Monster[] = [];
+    for (let i = 0, tries = 0; out.length < count && tries < count * 20; tries++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = 4 + Math.random() * 7;
+      const px = x + Math.cos(a) * r;
+      const pz = z + Math.sin(a) * r;
+      if (!isFloor(this.grid, Math.floor(px / TILE), Math.floor(pz / TILE))) continue;
+      const kind = i % 6 === 5 ? 'elite' : 'normal';
+      out.push(this.spawnMonster(this.rng.pick(ARCH_WEIGHTS), kind, px, pz, -1, true));
+      this.particles.burst(px, 0.6, pz, 0xffd23a, 8, 1);
+      i++;
+    }
+    return out;
   }
 
   spawnMonster(arch: Archetype, kind: Monster['kind'], x: number, z: number, room: number, aggro: boolean): Monster {

@@ -11,7 +11,7 @@ import { Rng, randomSeed } from '../core/rng';
 import { CLASSES, expToNext, MAX_SKILL_LEVEL, SKILL_LEARN, skillUpgradeCost, type ClassId } from '../data/classes';
 import { durability, equipName, GRADES, rollEquip, type Equip } from '../data/equipment';
 import { BUILDINGS, FACTORY_SIZES, OFFLINE_CAP_HOURS, type BuildingType, upgradeBlueprintCost } from '../data/factory';
-import { ITEMS, TIER_PLATE } from '../data/items';
+import { ITEMS, TIER_PLATE, ORE_TIERS, TIER_MANA_PLATE } from '../data/items';
 import { QUEST_BY_ID, type NpcRef, type QuestDef } from '../data/quests';
 import type { Step } from '../data/story';
 import { moveWithCollision } from '../dungeon/collision';
@@ -65,6 +65,8 @@ const POTION_KINDS: [string, number][] = [
   ['potion', 0.4],
 ];
 const POTION_POUCH = 10;
+/** 보물 상자가 고급 상자일 확률 */
+const AMBUSH_CHANCE = 0.3;
 const POTION_COOLDOWN = 8;
 
 export class Game {
@@ -430,6 +432,7 @@ export class Game {
     });
     this.bossTime = 0;
     this.timeOver = false;
+    this.ambush = null;
     const continuing = !background && this.run !== null;
     const prevPlayer = this.player;
     this.loadLevel(dungeon, true);
@@ -645,6 +648,8 @@ export class Game {
   }
 
   private gearKey = '';
+  /** 고급 상자 습격 중인 몬스터 무리 */
+  private ambush: { monsters: import('./Monster').Monster[]; tier: number } | null = null;
   /** 이어 하기: 다음 enterDungeon이 이 체크포인트로 run을 만든다 */
   private resumeFrom: RunCheckpoint | null = null;
   private freshLoad = false;
@@ -1324,7 +1329,45 @@ export class Game {
     }
     this.shakeT = Math.max(this.shakeT, 0.08);
     this.audio.play('gather');
+    // 보물 상자는 일정 확률로 '고급 상자': 상자를 지키던 몬스터 무리가 몰려온다. 모두 쓰러뜨리면 큰 보상
+    if (n.def.style === 'chest' && (n.dying > 0 || !n.alive) && !this.ambush && Math.random() < AMBUSH_CHANCE) {
+      const count = 10 + this.run.stage + this.run.tier * 2;
+      const wave = this.level.spawnAmbush(n.x, n.z, count);
+      this.ambush = { monsters: wave, tier: this.run.tier };
+      this.level.effects.pillar(n.x, n.z, 0xffd23a, 5);
+      this.shakeT = Math.max(this.shakeT, 0.5);
+      this.audio.play('stone');
+      this.hud.toast(`✨ 고급 상자다! 상자를 지키던 몬스터 ${wave.length}마리가 몰려온다 — 모두 쓰러뜨리면 보상`, 3500);
+    }
     this.refreshHud();
+  }
+
+  /** 고급 상자 습격을 다 막아 냈을 때 보상 */
+  private ambushReward(): void {
+    const a = this.ambush;
+    const run = this.run;
+    this.ambush = null;
+    if (!a || !run) return;
+    const rng = new Rng(randomSeed());
+    const t = a.tier;
+    const gold = Math.round(120 * t * (1 + run.stage * 0.1));
+    run.gold += gold;
+    this.progress.data.gold += gold;
+    const got: string[] = [`${gold} G`];
+    const add = (id: string, n: number) => {
+      const k = run.bag.add(id, n);
+      if (k) got.push(`${ITEMS[id].name}×${k}`);
+    };
+    add(TIER_PLATE[t - 1], 2 + rng.int(0, 2));
+    add(ESSENCE(t), 4 + rng.int(0, 3));
+    add(ORE_TIERS[t - 1], 6 + rng.int(0, 5));
+    if (rng.chance(0.35)) add(TIER_MANA_PLATE[t - 1], 1);
+    const e = rollEquip(rng, t, this.progress.data.currentClass, 0.3);
+    if (run.bag.addEquip(e)) got.push(`[${GRADES[e.grade].name}] ${equipName(e)}`);
+    this.level.effects.pillar(this.player.position.x, this.player.position.z, 0xffd23a, 5);
+    this.audio.play('level');
+    this.hud.toast(`고급 상자 습격을 막아 냈다! 보상: ${got.join(', ')}`, 5000);
+    this.saveNow();
   }
 
   /** 던전을 무사히 나왔다 (워프 게이트 또는 귀환석) */
@@ -1666,6 +1709,7 @@ export class Game {
     if (input.consume('build')) {
       if (this.level instanceof HomeScene) this.setBuilding(!this.building);
     }
+    if (input.consume('warp') && this.run && this.run.roomCleared && this.level instanceof DungeonScene && this.level.exitOpen) return this.openWarp();
     if (input.consume('recipes') && this.level instanceof HomeScene && !this.building) return this.openMenu(() => this.screens.recipeBook(this.progress, 'smelter', () => this.resume()));
 
     // 연타한 공격 입력을 잠시 기억해 두었다가 쓸 수 있을 때 쓴다
@@ -1741,6 +1785,7 @@ export class Game {
       }
       if (this.healFx < 0) this.healFx = Math.min(0, this.healFx + dt);
     }
+    if (this.ambush && this.ambush.monsters.every((m) => !m.alive)) this.ambushReward();
     if (level instanceof DungeonScene && this.run) {
       const boss = level.boss;
       if (boss && boss.alive && boss.aggro) {
@@ -1847,7 +1892,10 @@ export class Game {
       const d = this.level;
       const left = d.aliveCount;
       const boss = d.boss && d.boss.alive ? ` · ${d.boss.name}` : '';
-      const head = left > 0 ? `남은 몬스터 ${left}${boss} (M: 지도)` : '워프 게이트로 가자 (다음 방 / 마을)';
+      const amb = this.ambush ? this.ambush.monsters.filter((m) => m.alive).length : 0;
+      const head = amb > 0 ? `✨ 고급 상자 습격! 남은 몬스터 ${amb}` : left > 0 ? `남은 몬스터 ${left}${boss} (M: 지도)` : '워프 게이트로 가자 (다음 방 / 마을)';
+      // 방을 정리했으면 언제든 워프 창을 열 수 있는 버튼
+      this.hud.setWarpButton(!!this.run.roomCleared && d.exitOpen);
       this.hud.setObjective([head, ...questLines(p, this.quests)].join('\n'));
     } else this.hud.setObjective(objective(p, this.quests));
     this.hud.setBuffs(pl.buffs.map((b) => `${b.name}${b.stacks !== undefined ? ` ${b.stacks}회` : ''} ${Math.ceil(b.t)}s`));

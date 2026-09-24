@@ -127,6 +127,9 @@ export class Hud {
     this.invBtn = this.button('icon-btn', ICONS.person, 'char');
     this.buildBtn = this.button('icon-btn build-btn', ICONS.hammer, 'build');
     const recipeBtn = this.button('icon-btn recipe-btn', ICONS.book, 'recipes');
+    // 방을 정리한 뒤 언제든 워프 창을 여는 버튼 (자원을 캐고 바로 돌아갈 때)
+    this.warpBtn = this.button('warp-btn hidden', `${ICONS.warp}<span>워프</span>`, 'warp');
+    this.root.appendChild(this.warpBtn);
     menuCol.append(this.button('icon-btn', ICONS.pause, 'pause'), this.bagBtn, this.invBtn, this.buildBtn, recipeBtn);
     topRight.append(this.minimapSlot, menuCol);
     this.root.appendChild(topRight);
@@ -221,6 +224,11 @@ export class Hud {
   /** 장소에 따라 보이는 버튼이 다르다 */
   setMode(mode: HudMode): void {
     this.root.dataset.mode = mode;
+  }
+
+  private warpBtn!: HTMLButtonElement;
+  setWarpButton(on: boolean): void {
+    this.warpBtn.classList.toggle('hidden', !on);
   }
 
   setBuilding(on: boolean): void {
