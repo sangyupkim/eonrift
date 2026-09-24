@@ -2188,3 +2188,32 @@ textarea.code {
   touch-action: pan-x;
   height: 28px;
 }
+/* HUD 캐릭터 상반신 */
+.status .portrait {
+  position: relative;
+  width: 58px;
+  height: 58px;
+  overflow: visible;
+  background: radial-gradient(circle at 50% 35%, #3f5a9a, #141a34 70%);
+}
+.status .portrait img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  transform: scale(1.15) translateY(4%);
+  clip-path: circle(43% at 50% 45%);
+}
+.status .portrait .lv-badge {
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1c2240;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 8px;
+  padding: 0 5px;
+  font-size: 10px;
+  font-weight: 900;
+  white-space: nowrap;
+}

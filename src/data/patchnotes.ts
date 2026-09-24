@@ -7,6 +7,15 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '3.5',
+    date: '2026-09-24',
+    items: [
+      '대화 글자가 나올 때 말소리 효과음 (NPC마다 음높이가 다름)',
+      '왼쪽 위 상태창에 캐릭터 상반신 초상화 + 레벨 표시 (장비를 바꾸면 모습도 바뀜)',
+      '타이틀 화면에서도 마을 배경음 재생 (첫 터치 뒤)',
+    ],
+  },
+  {
     version: '3.4',
     date: '2026-09-24',
     items: [

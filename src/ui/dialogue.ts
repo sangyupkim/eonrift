@@ -7,6 +7,8 @@ export interface DialogueHandlers {
   click: () => void;
   /** 말하는 사람 이름 → 초상화 이미지 (없으면 빈 문자열) */
   portrait?: (speaker: string) => string;
+  /** 글자가 나올 때 소리 (speaker: 말하는 사람) */
+  blip?: (speaker: string) => void;
 }
 
 /**
@@ -100,9 +102,13 @@ export class Dialogue {
       this.fullText = step.t;
       this.shown = 0;
       this.textEl.textContent = '';
+      const speaker = step.s;
       this.typing = window.setInterval(() => {
         this.shown++;
         this.textEl.textContent = this.fullText.slice(0, this.shown);
+        // 두 글자마다, 공백·문장부호는 건너뛰고 말소리
+        const ch = this.fullText[this.shown - 1] ?? '';
+        if (this.shown % 2 === 1 && /[^\s.,!?…~·]/.test(ch)) this.handlers.blip?.(speaker);
         if (this.shown >= this.fullText.length) window.clearInterval(this.typing);
       }, 28);
     } else if ('choice' in step) {

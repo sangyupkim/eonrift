@@ -91,6 +91,14 @@ export class Audio {
     src.stop(t + dur + 0.02);
   }
 
+  /** 대화 글자 소리: 말하는 사람마다 음높이가 다른 짧은 '띠' 소리 */
+  blip(pitch: number): void {
+    if (!this.ctx || !this.enabled) return;
+    const f = pitch * (0.94 + Math.random() * 0.12);
+    this.tone(f, 0.05, 'square', 0.035, f * 0.85);
+    this.tone(f * 2, 0.03, 'triangle', 0.02);
+  }
+
   play(name: string): void {
     if (!this.ctx || !this.enabled) return;
     switch (name) {

@@ -227,13 +227,35 @@ export class Hud {
     this.root.classList.toggle('building', on);
   }
 
+  /** 왼쪽 위 캐릭터 상반신 (장비가 바뀌면 다시 그린다). 이미지를 못 만들면 직업 글자 */
+  setPortrait(url: string, short: string): void {
+    if (!url) {
+      this.portrait.textContent = short;
+      return;
+    }
+    let img = this.portrait.querySelector('img');
+    if (!img) {
+      this.portrait.textContent = '';
+      img = document.createElement('img');
+      img.alt = '';
+      const badge = el('span', 'lv-badge');
+      this.portrait.append(img, badge);
+    }
+    if (img.dataset.src !== url) {
+      img.dataset.src = url;
+      img.src = url;
+    }
+  }
+
   setClass(short: string, color: string, skillNames: string[]): void {
-    this.portrait.textContent = short;
+    if (!this.portrait.querySelector('img')) this.portrait.textContent = short;
     this.portrait.style.background = `linear-gradient(160deg, ${color}, #1c2240)`;
     skillNames.slice(0, this.skillLabels.length).forEach((n, i) => (this.skillLabels[i].textContent = n));
   }
 
   setBars(hp: number, maxHp: number, mp: number, maxMp: number, exp: number, expMax: number, level: number): void {
+    const lb = this.portrait.querySelector('.lv-badge');
+    if (lb && lb.textContent !== `Lv.${level}`) lb.textContent = `Lv.${level}`;
     const key = `${Math.ceil(hp)}|${maxHp}|${Math.floor(mp)}|${maxMp}|${exp}|${expMax}|${level}`;
     if (key === this.lastBars) return;
     this.lastBars = key;

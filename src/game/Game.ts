@@ -132,6 +132,12 @@ export class Game {
       run: (cmd) => this.runCommand(cmd),
       shake: () => (this.shakeT = 0.6),
       click,
+      blip: (speaker) => {
+        // 이름으로 음높이를 정한다 (내레이션은 낮고 부드럽게)
+        let h = 0;
+        for (const c of speaker) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+        this.audio.blip(speaker ? 320 + (h % 9) * 45 : 220);
+      },
       portrait: (speaker) => {
         const npc = NPCS.find((n) => n.name === speaker || n.name.endsWith(` ${speaker}`));
         return npc ? bustUrl(npc.id, npc.look) : '';
@@ -182,6 +188,8 @@ export class Game {
   // =============== 시작 / 저장 ===============
   private showTitle(): void {
     this.mode = 'title';
+    // 타이틀에서도 마을 배경음 (첫 터치 뒤에 소리가 켜진다)
+    this.audio.playMusic('village');
     this.hud.setVisible(false);
     this.screens.title(
       hasSave(),
@@ -363,6 +371,7 @@ export class Game {
       skillLevel: (i) => this.progress.cls.skills[i] ?? 0,
     });
     this.hud.setClass(cls.short, hex(cls.look.tunic), cls.skills.map((s) => s.name));
+    this.updatePortrait();
   }
 
   private enterVillage(arrival: 'portal' | 'home' | 'start' | { x: number; z: number; facing: number }): void {
@@ -591,6 +600,14 @@ export class Game {
   }
 
   /** 장비·스탯이 바뀌면 최대 HP/MP를 다시 계산한다 */
+  /** HUD 왼쪽 위의 캐릭터 상반신 (지금 장비 모습) */
+  private updatePortrait(): void {
+    const cls = CLASSES[this.progress.data.currentClass];
+    const gear = gearLook(this.progress.cls.equipment, this.progress.data.tools);
+    const look = { ...cls.look, shield: cls.look.weapon === 'sword', hat: cls.look.weapon === 'staff' ? ('wizard' as const) : ('none' as const), gear };
+    this.hud.setPortrait(bustUrl(`player:${cls.id}:${JSON.stringify(gear)}`, look), cls.short);
+  }
+
   /** 버프를 반영한 능력치 (공격·치명·속도·방어) */
   private buffedStats(): Stats {
     const st = { ...this.progress.stats() };
@@ -647,6 +664,7 @@ export class Game {
     prev.rig.root.parent?.remove(prev.rig.root);
     this.level.scene.add(next.rig.root);
     this.player = next;
+    this.updatePortrait();
   }
 
   private openExpand(): void {
