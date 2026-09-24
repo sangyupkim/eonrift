@@ -497,6 +497,10 @@ export class Game {
     this.mode = 'play';
     this.hud.setVisible(true);
     this.refreshHud();
+    if (this.progress.flag('homeTutorial') && !this.progress.flag('healerHint')) {
+      this.progress.setFlag('healerHint');
+      this.hud.toast('새 건물 마력 치유석: 건설 모드에서 짓고 마력선으로 발전기와 이으면, 곁에 서 있는 동안 HP·MP가 빠르게 찹니다', 5000);
+    }
     if (!this.progress.flag('homeTutorial')) {
       this.progress.setFlag('homeTutorial');
       this.hud.toast('오른쪽 위 망치 버튼(B 키)으로 건설 모드를 엽니다', 4000);

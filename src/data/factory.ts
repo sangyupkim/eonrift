@@ -25,7 +25,7 @@ export const BUILDINGS: Record<BuildingType, BuildingDef> = {
   assembler: { type: 'assembler', name: '조립기', power: 10, color: 0x4a9a8a, cost: { iron_ore: 6, wood: 4 }, description: '고른 설계대로 여러 재료를 조립한다.', blueprint: { gold: 1200, items: { copper_ingot: 5, plank: 5 } } },
   alchemy: { type: 'alchemy', name: '연금 솥', power: 4, color: 0x5a9a4a, cost: { copper_ore: 3, wood: 3 }, description: '치유 물약에 더 높은 마력 정수를 넣어 상위 물약을 만든다.', blueprint: { gold: 500, items: { wood: 10 } } },
   workbench: { type: 'workbench', name: '제작대', power: 8, color: 0xb07a3a, cost: { copper_ore: 10, wood: 10 }, description: '장비와 채집 도구를 만든다. 마력선으로 발전기와 이으면 에너지가 충전되고, 제작과 레벨업에 에너지를 쓴다.', blueprint: null },
-  healer: { type: 'healer', name: '마력 치유석', power: 10, color: 0x6aff9a, cost: { copper_ore: 6, wood: 4 }, description: '마력선으로 발전기와 이으면, 곁에 서 있는 동안 HP·MP를 초당 12%씩 회복한다. 회복할 때만 전력을 쓴다 (물약보다 훨씬 싸다).', blueprint: null },
+  healer: { type: 'healer', name: '마력 치유석 (회복)', power: 10, color: 0x6aff9a, cost: { copper_ore: 6, wood: 4 }, description: '마력선으로 발전기와 이으면, 곁에 서 있는 동안 HP·MP를 초당 12%씩 회복한다. 회복할 때만 전력을 쓴다 (물약보다 훨씬 싸다).', blueprint: null },
   splitter: { type: 'splitter', name: '분배기', power: 0, color: 0x6a7080, cost: { copper_ore: 1 }, description: '들어온 아이템을 앞·왼쪽·오른쪽으로 번갈아 보낸다.', blueprint: { gold: 400, items: {} } },
 };
 

@@ -1021,6 +1021,7 @@ export class Screens {
          <h2>세라의 도면 <small class="gold">${p.data.gold} G</small></h2>
          ${message ? `<div class="notice">${message}</div>` : ''}
          <div class="scroll">
+         <p class="notice">도면 없이 바로 지을 수 있는 기본 건물: 마력 발전기 · 마력선 · 레일 · 보관상자 · 제작대 · <b>마력 치유석(HP·MP 회복)</b> · 제련로 — 차원집의 망치 버튼(건설 모드)에서 고르세요.</p>
          <h3>건물 도면 <small>사면 차원집 건설 모드에서 지을 수 있습니다</small></h3>
          <ul class="list">${rows}</ul>
          <h3>강화 도면 <small>설치한 건물을 누르고 업그레이드하면 상위 재료를 가공합니다</small></h3>

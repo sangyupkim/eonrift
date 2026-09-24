@@ -7,6 +7,14 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '3.9',
+    date: '2026-09-24',
+    items: [
+      '마력 치유석을 찾기 쉽게: 이름에 (회복) 표시, 차원집에 들어가면 한 번 안내, 세라의 도면 창에 "도면 없이 짓는 기본 건물" 목록 표시',
+      '참고: 마력 치유석은 도면 없이 건설 모드에서 바로 지을 수 있음 (구리광석 6 + 참나무 목재 4)',
+    ],
+  },
+  {
     version: '3.8',
     date: '2026-09-24',
     items: [
