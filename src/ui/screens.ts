@@ -1012,7 +1012,9 @@ export class Screens {
   forge(p: Progress, onChange: () => void, onClose: () => void, selected?: string, message?: string): void {
     const c = p.cls;
     const worn = Object.values(c.equipment).filter(Boolean) as Equip[];
-    const all: Equip[] = [...worn, ...p.data.equips];
+    // 착용 · 가방 · 차원가방 · 창고의 모든 장비
+    const inBags = [p.invBag, p.dimBagObj].flatMap((b) => b.equips());
+    const all: Equip[] = [...worn, ...inBags, ...p.data.equips];
     const tools = p.data.tools;
     const toolRows = (['pickaxe', 'axe'] as const)
       .filter((k) => p.flag(k === 'axe' ? 'tool_axe' : 'tool_pickaxe'))
@@ -1022,7 +1024,7 @@ export class Screens {
     const sel = selTool ? undefined : (all.find((e) => e.uid === selected) ?? all[0]);
     const durTxt = (e: Equip) => `<span class="${durability(e) <= 0 ? 'bad' : durability(e) < 30 ? 'warn' : 'dim'}">내구 ${durability(e)}</span>`;
     const list = all
-      .map((e) => `<li class="${e === sel ? 'sel' : ''}" data-pick="${e.uid}">${equipGem(e)}<div>${equipTitle(e)}<small>${equipLine(e) || '<span class="bad">망가짐</span>'} · ${durTxt(e)}${worn.includes(e) ? ' · 착용 중' : ''}</small></div></li>`)
+      .map((e) => `<li class="${e === sel ? 'sel' : ''}" data-pick="${e.uid}">${equipGem(e)}<div>${equipTitle(e)}<small>${equipLine(e) || '<span class="bad">망가짐</span>'} · ${durTxt(e)}${worn.includes(e) ? ' · 착용 중' : inBags.includes(e) ? ' · 가방' : ' · 창고'}</small></div></li>`)
       .join('');
     const costLine = (ore: string, count: number, gold: number) => {
       const have = p.count(ore);
