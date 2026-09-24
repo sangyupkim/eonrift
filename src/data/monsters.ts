@@ -69,3 +69,6 @@ export function tierScale(tier: number, stage: number, ngPlus: number): { hp: nu
 export const BOSS_TIME_LIMIT = 300;
 /** 보스를 쓰러뜨린 뒤 다시 나타나기까지 (밀리초): 파수꾼 1시간, 챕터 수호자 4시간 */
 export const BOSS_RESPAWN_MS = { midboss: 60 * 60 * 1000, boss: 4 * 60 * 60 * 1000 };
+/** 채집 특화 맵(벌목지·광맥지): 어느 단계든 한 번 들어가면 30분 뒤에 다시 들어갈 수 있다 (종류마다 따로) */
+export const FARM_COOLDOWN_MS = 30 * 60 * 1000;
+export const FARM_NAMES = { wood: '벌목지', ore: '광맥지' } as const;

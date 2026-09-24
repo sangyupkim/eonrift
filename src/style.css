@@ -2498,3 +2498,96 @@ img.mico-inline {
   padding: 2px 6px;
   min-width: 0;
 }
+
+/* 마을 상단 타이머 (보스 재등장 · 채집 맵) */
+.timers {
+  position: absolute;
+  top: calc(6px + var(--safe-top));
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(460px, calc(100% - 520px));
+  min-width: 120px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 6px;
+  padding: 4px 10px;
+  border-radius: 14px;
+  background: rgba(10, 10, 22, 0.72);
+  border: 1px solid var(--panel-line);
+  font-size: 11px;
+  font-weight: 700;
+  pointer-events: auto;
+  cursor: pointer;
+  user-select: none;
+}
+.timers.hidden {
+  display: none;
+}
+.timers .t-head {
+  color: var(--ink-dim);
+  white-space: nowrap;
+}
+.timers .t-chip {
+  white-space: nowrap;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.07);
+}
+.timers .t-chip b {
+  color: #ffd98a;
+}
+.timers .t-chip b.ok {
+  color: #7aff9a;
+}
+.hud[data-mode='dungeon'] .timers {
+  display: none;
+}
+
+/* 차원문 광장: 채집 특화 맵 */
+.farm-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.farm-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(122, 255, 154, 0.5);
+  background: rgba(40, 90, 60, 0.35);
+  text-align: left;
+}
+.farm-btn span {
+  display: grid;
+}
+.farm-btn small {
+  font-size: 11px;
+  color: var(--ink-dim);
+}
+.farm-btn.waiting {
+  opacity: 0.55;
+  border-color: var(--panel-line);
+  background: rgba(255, 255, 255, 0.04);
+}
+.stage-btn.waiting small {
+  color: #ffb07a;
+}
+
+.farm-btn .gem.ico {
+  position: static;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  transform: none;
+}
+.screen.select .panel {
+  max-height: calc(100% - 16px);
+  overflow-y: auto;
+}
+
+.screen.select h3 {
+  margin: 8px 0 6px;
+}

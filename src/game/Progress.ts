@@ -33,6 +33,8 @@ export interface RunCheckpoint {
   start: [string, number][];
   startEquips: string[];
   pouch: string[];
+  farm?: 'wood' | 'ore';
+  bossKilled?: boolean;
 }
 
 export interface SaveData {
@@ -63,7 +65,9 @@ export interface SaveData {
   run?: RunCheckpoint;
   /** 보스가 다시 나타나는 시각 (키: "단계-방", 값: ms) */
   bossReadyAt?: Record<string, number>;
-  settings: { shadows: boolean; sound: boolean; music?: number; sfx?: number; autoAim?: boolean };
+  /** 채집 특화 맵에 다시 들어갈 수 있는 시각 */
+  farmReadyAt?: { wood?: number; ore?: number };
+  settings: { shadows: boolean; sound: boolean; music?: number; sfx?: number; autoAim?: boolean; timersOpen?: boolean };
   /** 곡괭이·도끼 내구도 */
   tools: Record<ToolKind, ToolState>;
 }
@@ -446,6 +450,15 @@ export class Progress {
   /** 보스를 쓰러뜨렸다: 재등장 시각을 기록한다 */
   bossDefeated(tier: number, stage: number, respawnMs: number, now = Date.now()): void {
     (this.data.bossReadyAt ??= {})[`${tier}-${stage}`] = now + respawnMs;
+  }
+
+  /** 채집 특화 맵에 다시 들어갈 수 있을 때까지 남은 시간(ms) */
+  farmWait(kind: 'wood' | 'ore', now = Date.now()): number {
+    return Math.max(0, (this.data.farmReadyAt?.[kind] ?? 0) - now);
+  }
+
+  farmEntered(kind: 'wood' | 'ore', cooldownMs: number, now = Date.now()): void {
+    (this.data.farmReadyAt ??= {})[kind] = now + cooldownMs;
   }
 
   flag(name: string): number {

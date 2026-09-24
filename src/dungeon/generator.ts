@@ -1,5 +1,5 @@
 import { Rng } from '../core/rng';
-import { pickResourceNode } from '../data/nodes';
+import { pickResourceNode, resourceTier } from '../data/nodes';
 import { themeForTier, type DecorKind } from '../data/themes';
 
 /**
@@ -76,18 +76,30 @@ export function isFloor(d: Pick<DungeonData, 'width' | 'height' | 'cells'>, x: n
 
 const roomCenter = (r: Room) => ({ x: Math.floor(r.x + r.w / 2), y: Math.floor(r.y + r.h / 2) });
 
-/** bossReady: 5·10번째 방의 보스가 지금 있는지 (쓰러뜨린 뒤 재등장 대기 중이면 false) */
-export function generateDungeon(seed: number, tier: number, stage = 1, bossReady = true): DungeonData {
+/**
+ * 던전 만들기 옵션
+ * - boss: 5·10번째 방의 보스. present=보스, guard=재등장 대기 중이라 정예가 지킴, none=이번 방에서 이미 쓰러뜨림(비움)
+ * - farm: 채집 특화 맵 (나무/광물이 가득, 몬스터는 적다)
+ */
+export interface GenOptions {
+  boss?: 'present' | 'guard' | 'none';
+  farm?: FarmKind;
+}
+export type FarmKind = 'wood' | 'ore';
+
+export function generateDungeon(seed: number, tier: number, stage = 1, opts: GenOptions = {}): DungeonData {
   const rng = new Rng(seed);
   // 방 배치가 너무 적게 나오면 같은 난수 흐름으로 다시 시도한다 (시드가 같으면 결과도 같다)
   for (let attempt = 0; attempt < 20; attempt++) {
-    const result = tryGenerate(rng, seed, tier, stage, bossReady);
+    const result = tryGenerate(rng, seed, tier, stage, opts);
     if (result) return result;
   }
   throw new Error(`던전 생성 실패 (seed=${seed})`);
 }
 
-function tryGenerate(rng: Rng, seed: number, tier: number, stage: number, bossReady: boolean): DungeonData | null {
+function tryGenerate(rng: Rng, seed: number, tier: number, stage: number, opts: GenOptions): DungeonData | null {
+  const farm = opts.farm;
+  const bossMode = opts.boss ?? 'present';
   const width = MAP_WIDTH;
   const height = MAP_HEIGHT;
   const cells = new Uint8Array(width * height);
@@ -96,7 +108,7 @@ function tryGenerate(rng: Rng, seed: number, tier: number, stage: number, bossRe
   // 1. 방 배치
   const rooms: Room[] = [];
   // 보스 방(5·10번째 방)은 넓은 방을 먼저 놓는다
-  const bossStage = stage === 5 || stage === 10;
+  const bossStage = !farm && (stage === 5 || stage === 10);
   if (bossStage) {
     const w = stage === 10 ? 17 : 14;
     const h = stage === 10 ? 14 : 12;
@@ -231,7 +243,9 @@ function tryGenerate(rng: Rng, seed: number, tier: number, stage: number, bossRe
   const roles: RoomType[] = ['elite', 'treasure', 'resource', 'resource'];
   if (rng.chance(0.5)) roles.push('resource');
   others.forEach((r, i) => {
-    if (i < roles.length) r.type = roles[i];
+    // 채집 특화 맵은 모든 방이 채집 방
+    if (farm) r.type = 'resource';
+    else if (i < roles.length) r.type = roles[i];
   });
 
   // 6. 채집물, 몬스터, 장식 배치
@@ -273,13 +287,20 @@ function tryGenerate(rng: Rng, seed: number, tier: number, stage: number, bossRe
     treasure: [0, 1],
     exit: [0, 0],
   };
+  if (farm) {
+    nodeCount.resource = [8, 11];
+    nodeCount.start = [2, 3];
+    nodeCount.exit = [2, 4];
+  }
   for (const r of rooms) {
     const [min, max] = nodeCount[r.type];
     const count = rng.int(min, max);
     for (let i = 0; i < count; i++) {
       const cell = pickInteriorCell(r, 1);
       if (!cell) break;
-      nodes.push({ nodeId: pickResourceNode(tier, stage, theme.special, () => rng.next()), x: cell.x + rng.range(-0.15, 0.15), y: cell.y + rng.range(-0.15, 0.15) });
+      // 채집 특화 맵: 이번 단계 위주(가끔 앞 단계)의 나무 또는 광맥만
+      const nodeId = farm ? `${farm === 'wood' ? 'tree' : 'ore'}_${resourceTier(tier, 10, rng.next())}` : pickResourceNode(tier, stage, theme.special, () => rng.next());
+      nodes.push({ nodeId, x: cell.x + rng.range(-0.15, 0.15), y: cell.y + rng.range(-0.15, 0.15) });
     }
     if (r.type === 'treasure') {
       const cell = pickInteriorCell(r, 1);
@@ -291,7 +312,7 @@ function tryGenerate(rng: Rng, seed: number, tier: number, stage: number, bossRe
       // 깊은 방일수록 몬스터가 많다
       // 핵앤슬래시: 방마다 한 무리씩 몰려 있다
       const extra = Math.floor(stage / 3);
-      const count = r.type === 'combat' ? rng.int(9, 12) + extra : rng.int(2, 4) + (stage > 5 ? 1 : 0);
+      const count = farm ? rng.int(1, 3) : r.type === 'combat' ? rng.int(9, 12) + extra : rng.int(2, 4) + (stage > 5 ? 1 : 0);
       for (let i = 0; i < count; i++) {
         const cell = pickInteriorCell(r, 0);
         if (cell) monsters.push({ ...cell, kind: 'normal' });
@@ -305,9 +326,11 @@ function tryGenerate(rng: Rng, seed: number, tier: number, stage: number, bossRe
         if (c) monsters.push({ ...c, kind: 'normal' });
       }
     } else if (r.type === 'exit') {
-      if (stage === 10 && bossReady) monsters.push({ x: exit.x, y: exit.y - 2, kind: 'boss' });
-      else if (stage === 5 && bossReady) monsters.push({ x: exit.x, y: exit.y - 2, kind: 'midboss' });
-      else if (stage === 5 || stage === 10) {
+      if (farm || (bossStage && bossMode === 'none')) {
+        // 채집 맵의 출구, 또는 이번 방에서 이미 보스를 쓰러뜨린 뒤 이어 하기: 출구는 비워 둔다
+      } else if (stage === 10 && bossMode === 'present') monsters.push({ x: exit.x, y: exit.y - 2, kind: 'boss' });
+      else if (stage === 5 && bossMode === 'present') monsters.push({ x: exit.x, y: exit.y - 2, kind: 'midboss' });
+      else if (bossStage) {
         // 보스가 재등장을 기다리는 동안: 빈 보스 방 대신 정예 무리가 지킨다 (보스 보상 없음)
         monsters.push({ x: exit.x, y: exit.y - 2, kind: 'elite' });
         for (let i = 0; i < (stage === 10 ? 2 : 1); i++) {

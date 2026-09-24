@@ -195,6 +195,17 @@ export class Hud {
     });
     this.root.appendChild(this.bigMapEl);
 
+    // 마을 상단: 보스 재등장·채집 맵 대기 시간 (접었다 펼 수 있음)
+    this.timersEl = el('div', 'timers hidden');
+    this.timersEl.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.timersOpen = !this.timersOpen;
+      this.onTimersToggle?.(this.timersOpen);
+      this.renderTimers();
+    });
+    this.root.appendChild(this.timersEl);
+
     this.toastEl = el('div', 'toast');
     this.root.appendChild(this.toastEl);
     this.root.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -474,6 +485,26 @@ export class Hud {
       l.classList.toggle('accent', !!d.accent);
       l.style.transform = `translate(${d.x}px, ${d.y}px) translate(-50%, -100%)`;
     });
+  }
+
+  private timersEl: HTMLDivElement;
+  private timerChips: string[] | null = null;
+  timersOpen = true;
+  onTimersToggle: ((open: boolean) => void) | null = null;
+
+  /** 대기 시간 칩 목록. null이면 숨긴다 */
+  setTimers(chips: string[] | null): void {
+    if (JSON.stringify(chips) === JSON.stringify(this.timerChips)) return;
+    this.timerChips = chips;
+    this.renderTimers();
+  }
+
+  private renderTimers(): void {
+    const chips = this.timerChips;
+    this.timersEl.classList.toggle('hidden', !chips);
+    if (!chips) return;
+    this.timersEl.classList.toggle('open', this.timersOpen);
+    this.timersEl.innerHTML = `<span class="t-head">${richText(':hourglass:')} 타이머 ${this.timersOpen ? '▴' : '▾'}</span>${this.timersOpen ? chips.map((c) => `<span class="t-chip">${c}</span>`).join('') : ''}`;
   }
 
   toast(text: string, ms = 1800): void {

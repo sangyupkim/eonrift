@@ -6,7 +6,7 @@ import { TOOL_KIND_NAMES, TOOL_TIER_NAMES, toolBonusChance, toolEnhanceCost, too
 import { equipCraftCost, equipManaCraftCost, MANA_PLATE_OF, manaPlateCraftCost, plateCraftCost, toolCraftCost, workbenchUpgradeCost, type CraftCost } from '../data/crafting';
 import { durability, EQUIP_SLOTS, EQUIP_MAX_DUR, enhanceCost, repairCost, type EquipSlot, equipName, equipStats, equipValue, GRADES, slotName, type Equip } from '../data/equipment';
 import { BUILDINGS, BUILD_ORDER, buildingUpgradeCost, FACTORY_SIZES, generatorPower, levelSpeed, MAX_BUILDING_LEVEL, RECIPES, UPGRADABLE, upgradeBlueprintCost, type BuildingType } from '../data/factory';
-import { ITEMS, ITEM_LIST, TIER_PLATE } from '../data/items';
+import { ITEMS, ITEM_LIST, ORE_TIERS, TIER_PLATE, WOOD_TIERS } from '../data/items';
 import type { QuestDef } from '../data/quests';
 import { THEMES } from '../data/themes';
 import { canEnqueue, enqueueJob, WORKBENCH_OUT_MAX, WORKBENCH_QUEUE_MAX, BOX_CAPACITY, boxTotal, ESSENCES, MACHINE_TYPES, RECIPE_BY_ID, recipesFor, type BuildingState, type Factory, type WorkJob } from '../factory/sim';
@@ -231,7 +231,7 @@ export class Screens {
   }
 
   // ---------------- 차원문 광장: 단계 → 방 선택 ----------------
-  stageSelect(p: Progress, tier: number, onPick: (tier: number, stage: number) => void, onClose: () => void): void {
+  stageSelect(p: Progress, tier: number, onPick: (tier: number, stage: number) => void, onClose: () => void, onFarm?: (tier: number, kind: 'wood' | 'ore') => void): void {
     const maxTier = p.maxTier;
     const tiers = THEMES.map((t) => {
       const locked = t.tier > maxTier;
@@ -250,19 +250,30 @@ export class Screens {
       return `<button class="stage-btn ${done ? 'done' : ''} ${mark ? 'boss' : ''} ${wait > 0 ? 'waiting' : ''}" data-stage="${st}" ${open ? '' : 'disabled'}>
           <b>${tier}-${st}</b><small>${sub}</small></button>`;
     }).join('');
+    // 채집 특화 맵: 종류마다 30분에 한 번 (어느 단계든 한 곳)
+    const farmBtn = (kind: 'wood' | 'ore') => {
+      const wait = p.farmWait(kind);
+      const hasTool = p.flag(kind === 'wood' ? 'tool_axe' : 'tool_pickaxe') > 0;
+      const icon = kind === 'wood' ? itemGem(WOOD_TIERS[tier - 1]) : itemGem(ORE_TIERS[tier - 1]);
+      const sub = !hasTool ? (kind === 'wood' ? '도끼 필요' : '곡괭이 필요') : wait > 0 ? `${formatWait(wait)} 뒤` : '입장 가능';
+      return `<button class="farm-btn ${wait > 0 || !hasTool ? 'waiting' : ''}" data-farm="${kind}" ${wait > 0 || !hasTool ? 'disabled' : ''}>${icon}<span><b>${tier}단계 ${kind === 'wood' ? '벌목지' : '광맥지'}</b><small>${sub}</small></span></button>`;
+    };
+    const farmRow = onFarm ? `<h3>채집 특화 맵 <small>각각 30분에 한 번 (어느 단계든 한 곳)</small></h3><div class="farm-row">${farmBtn('wood')}${farmBtn('ore')}</div>` : '';
     const s = this.open(
       'select',
       `<div class="panel wide">
          <button class="close">${ICONS.close}</button>
          <h2>차원문 광장 <small>${theme.name}${p.data.ngPlus ? ` · ${p.data.ngPlus + 1}회차` : ''}</small></h2>
          <div class="tier-tabs">${tiers}</div>
-         <p class="hint">방의 몬스터를 모두 쓰러뜨리면 워프 게이트가 열립니다. 5번째 방은 파수꾼(좋은 보상), 10번째 방은 차원석을 지닌 수호자. 쓰러뜨린 파수꾼은 1시간, 수호자는 4시간 뒤 다시 나타나고, 그동안은 정예 무리가 지킵니다.</p>
+         <p class="hint">5번째 방 파수꾼(1시간마다 재등장) · 10번째 방 차원석 수호자(4시간마다). 대기 중엔 정예가 지킵니다.</p>
          <div class="stage-grid">${stages}</div>
+         ${farmRow}
        </div>`,
       onClose,
     );
-    this.on(s, '.tier-tab:not(.locked)', (b) => this.stageSelect(p, Number(b.dataset.tier), onPick, onClose));
+    this.on(s, '.tier-tab:not(.locked)', (b) => this.stageSelect(p, Number(b.dataset.tier), onPick, onClose, onFarm));
     this.on(s, '[data-stage]', (b) => onPick(tier, Number(b.dataset.stage)));
+    this.on(s, '[data-farm]', (b) => onFarm?.(tier, b.dataset.farm as 'wood' | 'ore'));
   }
 
   /** 워프 게이트: 다음 방으로 갈지, 마을로 갈지 */

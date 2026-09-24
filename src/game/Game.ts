@@ -1,7 +1,7 @@
 import { bustUrl, itemIconUrl, skillIconUrl } from '../ui/itemIcons';
 import { decodeSave, encodeSave } from './saveCode';
 import { gearLook } from '../models/items';
-import { BOSS_RESPAWN_MS, BOSS_TIME_LIMIT } from '../data/monsters';
+import { BOSS_RESPAWN_MS, BOSS_TIME_LIMIT, FARM_COOLDOWN_MS, FARM_NAMES } from '../data/monsters';
 import { newTool, TOOL_KIND_NAMES, TOOL_TIER_NAMES, toolBonusChance, toolName, toolSpeed, toolWear, type ToolKind } from '../data/tools';
 import { MeshLambertMaterial, OrthographicCamera, PCFShadowMap, Plane, Raycaster, Vector2, Vector3, WebGLRenderer } from 'three';
 import { BAG_SLOTS, CAMERA_OFFSET, PLAYER, SCREEN_UP, TILE, VIEW_HEIGHT } from '../config';
@@ -16,7 +16,7 @@ import { ITEMS, TIER_PLATE, ORE_TIERS, TIER_MANA_PLATE } from '../data/items';
 import { QUEST_BY_ID, type NpcRef, type QuestDef } from '../data/quests';
 import type { Step } from '../data/story';
 import { moveWithCollision } from '../dungeon/collision';
-import { generateDungeon, isFloor } from '../dungeon/generator';
+import { generateDungeon, isFloor, type FarmKind } from '../dungeon/generator';
 import { Factory, MACHINE_TYPES, RECIPE_BY_ID, type BuildingState, type Dir } from '../factory/sim';
 import { BuildBar } from '../ui/buildbar';
 import { Dialogue } from '../ui/dialogue';
@@ -53,6 +53,10 @@ interface Run {
   startEquips: Set<string>;
   /** 물약 주머니 (좋은 것부터, 최대 POTION_POUCH개) */
   pouch: string[];
+  /** 채집 특화 맵이면 종류 */
+  farm?: FarmKind;
+  /** 이번 방의 보스를 쓰러뜨렸는지 (꺼졌다 켜도 다시 나오지 않게) */
+  bossKilled?: boolean;
 }
 
 const ESSENCE = (tier: number) => (tier <= 3 ? 'essence_low' : tier <= 5 ? 'essence_mid' : 'essence_high');
@@ -177,6 +181,12 @@ export class Game {
 
   private setProgress(p: Progress): void {
     this.progress = p;
+    this.hud.timersOpen = p.data.settings.timersOpen !== false;
+    this.hud.onTimersToggle = (open) => {
+      p.data.settings.timersOpen = open;
+      this.saveNow();
+    };
+    this.timerAcc = 1;
     this.quests = new Quests(p.data.quests, {
       count: (id) => p.count(id),
       get stones() {
@@ -240,7 +250,7 @@ export class Game {
     if (!isNew && cp) {
       // 던전 도중에 꺼졌다: 그 방으로 돌아간다
       this.resumeFrom = cp;
-      this.enterDungeon(cp.tier, cp.stage);
+      this.enterDungeon(cp.tier, cp.stage, false, cp.farm);
       if (cp.roomCleared && this.level instanceof DungeonScene) {
         // 이미 정리한 방이면 몬스터 없이 워프 게이트가 열린 상태로
         for (const m of this.level.monsters) if (m.alive) m.damage(m.hp + 1, m.x, m.z, 0);
@@ -299,6 +309,8 @@ export class Game {
             start: [...r.start],
             startEquips: [...r.startEquips],
             pouch: [...r.pouch],
+            farm: r.farm,
+            bossKilled: r.bossKilled,
           }
         : undefined;
     this.progress.save();
@@ -407,9 +419,14 @@ export class Game {
   }
 
   /** 던전 입장. run이 있으면 가방을 들고 다음 방으로 이어 간다 */
-  private enterDungeon(tier: number, stage: number, background = false): void {
+  private enterDungeon(tier: number, stage: number, background = false, farm?: FarmKind): void {
+    const resuming = this.resumeFrom;
     const wait = this.progress.bossWait(tier, stage);
-    const data = generateDungeon(randomSeed(), tier, stage, wait === 0);
+    // 이어 하기인데 이 방의 보스를 이미 쓰러뜨렸다면 보스도, 대신 지키는 정예도 없이
+    const boss = resuming?.bossKilled ? 'none' : wait > 0 ? 'guard' : 'present';
+    const data = generateDungeon(randomSeed(), tier, stage, farm ? { farm } : { boss });
+    // 채집 특화 맵은 들어갈 때 30분 대기가 시작된다 (이어 하기는 제외)
+    if (farm && !resuming && !background) this.progress.farmEntered(farm, FARM_COOLDOWN_MS);
     const dungeon = new DungeonScene(data, this.progress.data.ngPlus, {
       player: () => this.player.position,
       cameraQuat: () => this.camera.quaternion,
@@ -449,13 +466,15 @@ export class Game {
       this.run!.tier = tier;
       this.run!.stage = stage;
       this.run!.roomCleared = false;
+      this.run!.bossKilled = false;
+      this.run!.farm = farm;
     } else {
       const dim = new Bag(this.progress.data.dimBag.length, this.progress.data.dimBag);
       const bag = this.progress.invBag;
       const start = new Map<string, number>();
       for (const b of [bag, dim]) for (const [id, n] of b.totals()) start.set(id, (start.get(id) ?? 0) + n);
       const startEquips = new Set([...bag.equips(), ...dim.equips()].map((e) => e.uid));
-      this.run = { tier, stage, bag, dimBag: dim, gold: 0, exp: 0, time: 0, stagesCleared: 0, roomCleared: false, start, startEquips, pouch: [] };
+      this.run = { tier, stage, bag, dimBag: dim, gold: 0, exp: 0, time: 0, stagesCleared: 0, roomCleared: false, start, startEquips, pouch: [], farm };
       // 저장된 체크포인트에서 이어 하기
       const cp = this.resumeFrom;
       if (cp) {
@@ -468,18 +487,20 @@ export class Game {
           start: new Map(cp.start),
           startEquips: new Set(cp.startEquips),
           pouch: [...cp.pouch],
+          bossKilled: cp.bossKilled,
         });
       }
     }
     this.fillPouch();
-    this.hud.setLocation(`${tier}-${stage} · ${dungeon.theme.name}`, dungeon.theme.portalColor);
+    this.hud.setLocation(farm ? `${tier}단계 ${FARM_NAMES[farm]} · ${dungeon.theme.name}` : `${tier}-${stage} · ${dungeon.theme.name}`, dungeon.theme.portalColor);
     this.audio.playMusic('dungeon');
     this.audio.play('portal');
     this.mode = 'play';
     this.hud.setVisible(true);
     const note =
       wait > 0 ? ` — ${stage === 10 ? '수호자' : '파수꾼'}는 ${formatWait(wait)} 뒤 다시 나타납니다 (지금은 정예가 지킴)` : stage === 10 ? ' — 차원석을 지닌 수호자가 기다립니다' : stage === 5 ? ' — 파수꾼이 지키고 있습니다' : '';
-    this.hud.toast(`${tier}-${stage} · ${dungeon.theme.name}${note}`, 3000);
+    if (farm) this.hud.toast(`${tier}단계 ${FARM_NAMES[farm]} — ${farm === 'wood' ? '나무' : '광맥'}가 가득합니다. 다음 입장은 30분 뒤`, 3500);
+    else this.hud.toast(`${tier}-${stage} · ${dungeon.theme.name}${note}`, 3000);
     this.refreshHud();
     // 방에 들어올 때마다 체크포인트 저장
     this.saveNow();
@@ -662,6 +683,7 @@ export class Game {
   private ambush: { monsters: import('./Monster').Monster[]; tier: number } | null = null;
   /** 이어 하기: 다음 enterDungeon이 이 체크포인트로 run을 만든다 */
   private resumeFrom: RunCheckpoint | null = null;
+  private timerAcc = 1;
   private freshLoad = false;
   private healFx = 0;
   /** 이번 방 보스와 싸운 시간 */
@@ -766,6 +788,11 @@ export class Game {
           this.screens.close();
         },
         () => this.resume(),
+        (t, kind) => {
+          if (this.progress.farmWait(kind) > 0) return;
+          this.afterMenu = () => this.enterDungeon(t, 1, false, kind);
+          this.screens.close();
+        },
       ),
     );
   }
@@ -1166,6 +1193,8 @@ export class Game {
     // 보스는 쓰러뜨리면 한동안 다시 나오지 않는다 (파수꾼 1시간, 수호자 4시간)
     if (m.kind === 'midboss' || m.kind === 'boss') {
       this.progress.bossDefeated(tier, run.stage, BOSS_RESPAWN_MS[m.kind]);
+      run.bossKilled = true;
+      this.saveNow();
       this.hud.toast(`${m.name}은(는) ${formatWait(BOSS_RESPAWN_MS[m.kind])} 뒤 다시 나타납니다`, 3000);
     }
     if (m.kind === 'midboss') {
@@ -1197,14 +1226,17 @@ export class Game {
     run.stagesCleared++;
     const g = stageIndex(run.tier, run.stage);
     const p = this.progress;
-    p.data.cleared = Math.max(p.data.cleared, g);
-    this.quests.event({ type: 'stage' });
+    // 채집 특화 맵은 스테이지 진행으로 치지 않는다
+    if (!run.farm) {
+      p.data.cleared = Math.max(p.data.cleared, g);
+      this.quests.event({ type: 'stage' });
+    }
     this.audio.play('portal');
     this.saveNow();
     this.refreshHud();
     this.openMenu(() =>
       this.screens.ask(
-        `${run.tier}-${run.stage} 클리어!`,
+        run.farm ? `${FARM_NAMES[run.farm]} 정리!` : `${run.tier}-${run.stage} 클리어!`,
         '워프 게이트가 열렸습니다. 워프 게이트로 이동하시겠습니까?',
         () => {
           this.afterMenu = () => this.moveToWarp();
@@ -1242,10 +1274,11 @@ export class Game {
     const run = this.run;
     if (!run) return;
     const g = stageIndex(run.tier, run.stage);
-    const next = g < MAX_STAGE ? stageOf(g + 1) : null;
+    // 채집 특화 맵에서는 마을로만 돌아간다
+    const next = !run.farm && g < MAX_STAGE ? stageOf(g + 1) : null;
     this.openMenu(() =>
       this.screens.warp(
-        `${run.tier}-${run.stage}`,
+        run.farm ? `${run.tier}단계 ${FARM_NAMES[run.farm]}` : `${run.tier}-${run.stage}`,
         next ? `${next.tier}-${next.stage}` : null,
         () => {
           this.afterMenu = () => this.enterDungeon(next!.tier, next!.stage);
@@ -1739,6 +1772,12 @@ export class Game {
     const dt = Math.min(0.05, (now - this.lastTime) / 1000);
     this.lastTime = now;
 
+    this.timerAcc += dt;
+    if (this.timerAcc >= 1) {
+      this.timerAcc = 0;
+      this.updateTimers();
+    }
+
     // 공장은 어디에 있든 계속 돌아간다
     if (this.mode !== 'title' && this.progress.flag('home')) {
       this.factoryAcc += dt;
@@ -1981,6 +2020,32 @@ export class Game {
     if (!run) return;
     for (const id of run.pouch) if (run.bag.add(id, 1) === 0) this.progress.add(id, 1);
     run.pouch = [];
+  }
+
+  /** 마을·차원집 상단 타이머: 재등장 대기 중인 보스와 채집 맵 */
+  private updateTimers(): void {
+    const town = this.mode !== 'title' && (this.level instanceof VillageScene || this.level instanceof HomeScene);
+    if (!town) return this.hud.setTimers(null);
+    const p = this.progress;
+    const img = (id: string) => {
+      const u = itemIconUrl(id);
+      return u ? `<img class="mico-inline" src="${u}" alt="">` : '';
+    };
+    const chips: string[] = [];
+    for (const kind of ['wood', 'ore'] as const) {
+      const w = p.farmWait(kind);
+      chips.push(`${img(kind === 'wood' ? 'wood' : 'copper_ore')}${FARM_NAMES[kind]} ${w > 0 ? `<b>${formatWait(w)}</b>` : '<b class="ok">입장 가능</b>'}`);
+    }
+    const bosses = Object.keys(p.data.bossReadyAt ?? {})
+      .map((k) => {
+        const [t, st] = k.split('-').map(Number);
+        return { k, t, st, w: p.bossWait(t, st) };
+      })
+      .filter((b) => b.w > 0)
+      .sort((a, b) => a.t - b.t || a.st - b.st);
+    if (bosses.length) for (const b of bosses) chips.push(`${b.k} ${b.st === 10 ? '수호자' : '파수꾼'} <b>${formatWait(b.w)}</b>`);
+    else chips.push('보스 <b class="ok">모두 출현 중</b>');
+    this.hud.setTimers(chips);
   }
 
   private refreshHud(): void {
