@@ -896,6 +896,42 @@ export class Screens {
     this.on(s, '[data-accept]', (b) => onAccept(Number(b.dataset.accept)));
   }
 
+  /** 상점 개수 입력 창: 패널 위에 겹쳐 띄운다 */
+  private qtyPicker(s: HTMLElement, o: { title: string; unit: number; max: number; verb: string; onOk: (n: number) => void }): void {
+    s.querySelector('.qty-pop')?.remove();
+    const pop = document.createElement('div');
+    pop.className = 'qty-pop';
+    pop.innerHTML = `<div class="qty-box">
+        <h3>${esc(o.title)}</h3>
+        <div class="qty-row">
+          <button data-d="-10">−10</button><button data-d="-1">−</button>
+          <input type="number" inputmode="numeric" min="1" max="${o.max}" value="1" />
+          <button data-d="1">+</button><button data-d="10">+10</button>
+        </div>
+        <div class="qty-row small"><button data-set="1">1개</button><button data-set="${o.max}">최대 ${o.max}</button></div>
+        <p class="qty-total"></p>
+        <div class="menu two"><button class="primary" data-ok>${o.verb}</button><button data-no>취소</button></div>
+      </div>`;
+    (s.querySelector('.panel') ?? s).appendChild(pop);
+    const input = pop.querySelector('input')!;
+    const total = pop.querySelector<HTMLElement>('.qty-total')!;
+    const val = () => Math.max(1, Math.min(o.max, Math.floor(Number(input.value) || 1)));
+    const show = () => (total.innerHTML = `${val()}개 × ${o.unit} G = <b class="gold">${val() * o.unit} G</b>`);
+    const set = (n: number) => {
+      input.value = String(Math.max(1, Math.min(o.max, n)));
+      show();
+    };
+    input.addEventListener('input', show);
+    input.addEventListener('change', () => set(val()));
+    this.on(pop, '[data-d]', (b) => set(val() + Number(b.dataset.d)));
+    this.on(pop, '[data-set]', (b) => set(Number(b.dataset.set)));
+    this.on(pop, '[data-no]', () => pop.remove());
+    this.on(pop, '[data-ok]', () => o.onOk(val()));
+    pop.addEventListener('pointerdown', (e) => e.stopPropagation());
+    pop.addEventListener('pointerup', (e) => e.stopPropagation());
+    show();
+  }
+
   // ---------------- 상점 ----------------
   shop(p: Progress, onChange: () => void, onClose: () => void, tab: 'buy' | 'sell' = 'buy', toast?: string): void {
     const goods: { id: string; label: string; price: number; make: () => void; equip?: Equip }[] = [
@@ -922,7 +958,7 @@ export class Screens {
       const items = ITEM_LIST.filter((i) => p.count(i.id) > 0 && i.value > 0)
         .map((i) => {
           const inBag = p.count(i.id) - p.stored(i.id);
-          return `<li>${itemGem(i.id)}<div><b>${i.name} <span class="dim">× ${p.count(i.id)}</span></b><small>개당 ${i.value} G · 창고 ${p.stored(i.id)}${inBag ? ` · 가방 ${inBag}` : ''}</small></div><button data-sell="${i.id}">1개</button><button data-sellall="${i.id}">전부</button></li>`;
+          return `<li>${itemGem(i.id)}<div><b>${i.name} <span class="dim">× ${p.count(i.id)}</span></b><small>개당 ${i.value} G · 창고 ${p.stored(i.id)}${inBag ? ` · 가방 ${inBag}` : ''}</small></div><button data-sell="${i.id}">팔기</button></li>`;
         })
         .join('');
       // 창고 장비 + 가방·차원가방 장비
@@ -950,21 +986,24 @@ export class Screens {
     this.on(s, '[data-tab]', (b) => again(b.dataset.tab as typeof tab));
     this.on(s, '[data-buy]', (b) => {
       const g = goods[Number(b.dataset.buy)];
-      if (p.data.gold < g.price) return;
-      p.data.gold -= g.price;
-      g.make();
-      again(tab, `${g.label} 구입`);
+      const max = Math.min(99, Math.floor(p.data.gold / g.price));
+      if (max < 1) return;
+      this.qtyPicker(s, { title: `${g.label} 사기`, unit: g.price, max, verb: '사기', onOk: (n) => {
+        if (p.data.gold < g.price * n) return;
+        p.data.gold -= g.price * n;
+        for (let k = 0; k < n; k++) g.make();
+        again(tab, `${g.label} ${n}개 구입 −${g.price * n} G`);
+      } });
     });
     this.on(s, '[data-sell]', (b) => {
       const id = b.dataset.sell!;
-      if (p.take(id, 1)) p.data.gold += ITEMS[id].value;
-      again(tab, `${ITEMS[id].name} 판매 +${ITEMS[id].value} G`);
-    });
-    this.on(s, '[data-sellall]', (b) => {
-      const id = b.dataset.sellall!;
-      const n = p.count(id);
-      if (n > 0 && p.take(id, n)) p.data.gold += ITEMS[id].value * n;
-      again(tab, `${ITEMS[id].name} ${n}개 판매 +${ITEMS[id].value * n} G`);
+      const max = p.count(id);
+      if (max < 1) return;
+      this.qtyPicker(s, { title: `${ITEMS[id].name} 팔기`, unit: ITEMS[id].value, max, verb: '팔기', onOk: (n) => {
+        n = Math.min(n, p.count(id));
+        if (n > 0 && p.take(id, n)) p.data.gold += ITEMS[id].value * n;
+        again(tab, `${ITEMS[id].name} ${n}개 판매 +${ITEMS[id].value * n} G`);
+      } });
     });
     this.on(s, '[data-selleq]', (b) => {
       const uid = b.dataset.selleq;

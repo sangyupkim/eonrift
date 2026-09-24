@@ -7,6 +7,13 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '4.4',
+    date: '2026-09-24',
+    items: [
+      '상점에서 사고팔 때 개수를 입력할 수 있음: −10 / − / + / +10 버튼, 직접 입력, 1개·최대 버튼, 합계 금액 표시',
+    ],
+  },
+  {
     version: '4.3',
     date: '2026-09-24',
     items: [
