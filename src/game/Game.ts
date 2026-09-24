@@ -369,6 +369,7 @@ export class Game {
       hitStop: (t) => (this.hitStopT = Math.max(this.hitStopT, t)),
       sfx: (n) => this.audio.play(n),
       skillLevel: (i) => this.progress.cls.skills[i] ?? 0,
+      autoAim: () => this.progress.data.settings.autoAim !== false,
     });
     this.hud.setClass(cls.short, hex(cls.look.tunic), cls.skills.map((s) => s.name));
     this.updatePortrait();
@@ -536,6 +537,10 @@ export class Game {
           this.finishRun('귀환석으로 귀환');
         },
         onGiveUp: () => this.fall(),
+        autoAim: d.settings.autoAim !== false,
+        onToggleAim: (on) => {
+          d.settings.autoAim = on;
+        },
         onToggleShadows: (on) => {
           d.settings.shadows = on;
           this.level.sun.castShadow = on;

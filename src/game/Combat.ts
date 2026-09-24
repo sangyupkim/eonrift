@@ -18,6 +18,8 @@ export interface CombatHost {
   sfx: (name: string) => void;
   /** 스킬 레벨 (0 = 배우지 않음) */
   skillLevel: (index: number) => number;
+  /** true: 가까운 적에게 자동 조준 · false: 바라보는 방향으로 */
+  autoAim: () => boolean;
 }
 
 type Target = { kind: 'monster'; m: Monster; x: number; z: number };
@@ -177,7 +179,8 @@ export class Combat {
     player.mp -= skill.mp;
     this.cooldowns[index] = skill.cooldown * (1 - (lv - 1) * 0.06);
     const p = player.position;
-    const target = this.findTarget(12);
+    // 설정에서 '바라보는 방향'을 고르면 스킬은 자동 조준 없이 캐릭터가 보는 쪽으로 나간다
+    const target = this.host.autoAim() ? this.findTarget(12) : null;
     const aim = this.angleTo(target) ?? player.facing;
     const color = COLORS[player.cls.id];
     const fx = () => Math.sin(player.facing);

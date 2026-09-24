@@ -7,6 +7,11 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '3.6',
+    date: '2026-09-24',
+    items: ['메뉴 설정에 스킬 방향 선택 추가: 🎯 자동 조준(가까운 적) / ➡ 바라보는 방향'],
+  },
+  {
     version: '3.5',
     date: '2026-09-24',
     items: [

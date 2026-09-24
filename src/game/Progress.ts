@@ -61,7 +61,7 @@ export interface SaveData {
   hp?: number;
   /** 던전 진행 중 체크포인트 (게임이 꺼지면 이 방으로 돌아온다) */
   run?: RunCheckpoint;
-  settings: { shadows: boolean; sound: boolean; music?: number; sfx?: number };
+  settings: { shadows: boolean; sound: boolean; music?: number; sfx?: number; autoAim?: boolean };
   /** 곡괭이·도끼 내구도 */
   tools: Record<ToolKind, ToolState>;
 }

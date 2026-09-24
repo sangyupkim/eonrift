@@ -2217,3 +2217,18 @@ textarea.code {
   font-weight: 900;
   white-space: nowrap;
 }
+.aim-row {
+  display: grid;
+  grid-template-columns: 70px 1fr 1fr;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+}
+.menu .aim-row button {
+  padding: 7px 4px;
+  font-size: 12px;
+}
+.menu .aim-row button.on {
+  background: rgba(94, 224, 255, 0.22);
+  border-color: rgba(94, 224, 255, 0.7);
+}

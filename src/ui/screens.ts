@@ -256,6 +256,8 @@ export class Screens {
     seed?: number;
     returnStones: number;
     shadows: boolean;
+    autoAim: boolean;
+    onToggleAim: (on: boolean) => void;
     sound: boolean;
     onReturnStone: () => void;
     onGiveUp: () => void;
@@ -279,6 +281,9 @@ export class Screens {
            ${opts.inDungeon ? `<button data-a="stone" ${opts.returnStones ? '' : 'disabled'}>귀환석 사용 (보유 ${opts.returnStones})</button>` : ''}
            ${opts.inDungeon ? '<button data-a="giveup" class="danger">포기하고 쓰러지기</button>' : ''}
            <label class="toggle"><input type="checkbox" data-t="shadow" ${opts.shadows ? 'checked' : ''}/> 그림자</label>
+           <div class="aim-row"><span>스킬 방향</span>
+             <button data-aim="auto" class="${opts.autoAim ? 'on' : ''}">🎯 자동 조준</button>
+             <button data-aim="face" class="${opts.autoAim ? '' : 'on'}">➡ 바라보는 방향</button></div>
            <label class="toggle"><input type="checkbox" data-t="sound" ${opts.sound ? 'checked' : ''}/> 소리 켜기</label>
            <label class="volume">🎵 배경음 <input type="range" min="0" max="100" step="5" value="${Math.round(opts.music * 100)}" data-v="music"/><b data-vl="music">${Math.round(opts.music * 100)}</b></label>
            <label class="volume">🔊 효과음 <input type="range" min="0" max="100" step="5" value="${Math.round(opts.sfx * 100)}" data-v="sfx"/><b data-vl="sfx">${Math.round(opts.sfx * 100)}</b></label>
@@ -300,6 +305,13 @@ export class Screens {
     this.on(s, '[data-a="savecode"]', opts.onSaveCode);
     s.querySelector<HTMLInputElement>('[data-t="shadow"]')!.addEventListener('change', (e) => opts.onToggleShadows((e.target as HTMLInputElement).checked));
     s.querySelector<HTMLInputElement>('[data-t="sound"]')!.addEventListener('change', (e) => opts.onToggleSound((e.target as HTMLInputElement).checked));
+    s.querySelectorAll<HTMLButtonElement>('[data-aim]').forEach((b) =>
+      b.addEventListener('click', () => {
+        const auto = b.dataset.aim === 'auto';
+        opts.onToggleAim(auto);
+        s.querySelectorAll('[data-aim]').forEach((x) => x.classList.toggle('on', x === b));
+      }),
+    );
     for (const k of ['music', 'sfx'] as const) {
       const input = s.querySelector<HTMLInputElement>(`[data-v="${k}"]`)!;
       const label = s.querySelector<HTMLElement>(`[data-vl="${k}"]`)!;
