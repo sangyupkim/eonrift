@@ -4,6 +4,7 @@ import type { Equip } from '../data/equipment';
 import { buildHero, type HeroGear, type HeroLook } from '../models/hero';
 import { buildEquipGeometry, buildItemGeometry, buildToolGeometry } from '../models/items';
 import { buildSkillGeometry } from '../models/skills';
+import { buildUiIcon, type UiIcon } from '../models/uiIcons';
 
 /**
  * 아이템 모델을 한 번 그려서 이미지로 만들어 두는 아이콘 공장.
@@ -66,6 +67,16 @@ function geoIcon(key: string, make: () => BufferGeometry): string {
   g.dispose();
   cache.set(key, url);
   return url;
+}
+
+/** 화면 버튼·이름표용 3D 아이콘 */
+export function uiIconUrl(name: UiIcon): string {
+  return geoIcon(`u:${name}`, () => buildUiIcon(name));
+}
+
+/** 직업 기본 무기 (공격 버튼) */
+export function weaponIconUrl(cls: ClassId): string {
+  return geoIcon(`w:${cls}`, () => buildEquipGeometry({ uid: '', slot: 'weapon', cls, tier: 2, grade: 0, plus: 0 }));
 }
 
 export function itemIconUrl(id: string): string {

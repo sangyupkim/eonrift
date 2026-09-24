@@ -13,7 +13,7 @@ import { WORKBENCH_OUT_MAX, BOX_CAPACITY, boxTotal, ESSENCES, MACHINE_TYPES, REC
 import type { Bag, Slot } from '../game/Bag';
 import { stageIndex, type Progress } from '../game/Progress';
 import { objectiveNeed, objectiveProgress, objectiveText, type Quests } from '../game/Quests';
-import { ICONS } from './icons';
+import { ICONS, mico } from './icons';
 import { buildingThumb } from './thumbs';
 import { gearLook } from '../models/items';
 import { equipIconUrl, heroPortraitUrl, itemIconUrl, skillIconUrl, toolIconUrl } from './itemIcons';
@@ -37,6 +37,9 @@ export interface ResultInfo {
 }
 
 /** 목록 안의 아이콘 (절대 위치) */
+/** 글 속 작은 3D 아이콘 (그리기 실패 시 이모지) */
+const SPK = (name: Parameters<typeof mico>[0], fallback: string) => mico(name, fallback, 'mico-inline');
+
 /** 3D 모델로 그린 아이콘. 그리기에 실패하면 예전 보석 모양으로 */
 const itemGem = (id: string) => {
   const url = itemIconUrl(id);
@@ -60,7 +63,7 @@ const inlineGem = (id: string) => {
 export function workJobName(j: WorkJob): string {
   if (j.kind === 'item') return ITEMS[j.id].name;
   if (j.kind === 'tool') return `${TOOL_TIER_NAMES[j.tier - 1]} ${TOOL_KIND_NAMES[j.id as ToolKind]}`;
-  return `${j.mana ? '✨ ' : ''}${equipName(workJobEquip(j))}`;
+  return `${j.mana ? `${SPK('sparkle', '✨')} ` : ''}${equipName(workJobEquip(j))}`;
 }
 export function workJobEquip(j: WorkJob): Equip {
   return { uid: '', slot: j.id as EquipSlot, cls: j.cls as ClassId | undefined, tier: j.tier, grade: 0, plus: 0 };
@@ -181,12 +184,12 @@ export class Screens {
          <div class="title-menu">
            ${hasSave ? '<button class="primary" data-a="continue">이어하기</button>' : ''}
            <button class="${hasSave ? '' : 'primary'}" data-a="new">새로 시작</button>
-           ${canInstall() ? '<button class="install" data-a="install">📲 앱으로 설치</button>' : ''}
-           <button class="update" data-a="loadcode">📥 저장 코드로 불러오기</button>
-           <button class="update" data-a="update">🔄 업데이트 확인</button>
+           ${canInstall() ? `<button class="install" data-a="install">${SPK('phone', '📲')} 앱으로 설치</button>` : ''}
+           <button class="update" data-a="loadcode">${SPK('key', '📥')} 저장 코드로 불러오기</button>
+           <button class="update" data-a="update">${SPK('refresh', '🔄')} 업데이트 확인</button>
          </div>
        </div>
-       <button class="patch-btn" data-a="patch">📜 패치노트</button>
+       <button class="patch-btn" data-a="patch">${SPK('scroll', '📜')} 패치노트</button>
        <div class="version">v${GAME_VERSION} (${BUILD_ID}) · 모바일 가로 화면 권장</div>`,
     );
     this.on(s, '[data-a="continue"]', onContinue);
@@ -204,7 +207,7 @@ export class Screens {
       b.textContent = '확인 중…';
       void fetchRemoteVersion().then((r) => {
         remote = r;
-        if (!r) b.textContent = '⚠ 확인 실패 (인터넷 연결 확인)';
+        if (!r) b.innerHTML = `${SPK('warning', '⚠')} 확인 실패 (인터넷 연결 확인)`;
         else if (isNewer(r)) {
           b.textContent = `⬆ 새 버전 v${r.version} 받기`;
           b.classList.add('primary');
@@ -301,12 +304,12 @@ export class Screens {
            ${opts.inDungeon ? '<button data-a="giveup" class="danger">포기하고 쓰러지기</button>' : ''}
            <label class="toggle"><input type="checkbox" data-t="shadow" ${opts.shadows ? 'checked' : ''}/> 그림자</label>
            <div class="aim-row"><span>스킬 방향</span>
-             <button data-aim="auto" class="${opts.autoAim ? 'on' : ''}">🎯 자동 조준</button>
-             <button data-aim="face" class="${opts.autoAim ? '' : 'on'}">➡ 바라보는 방향</button></div>
+             <button data-aim="auto" class="${opts.autoAim ? 'on' : ''}">${SPK('target', '🎯')} 자동 조준</button>
+             <button data-aim="face" class="${opts.autoAim ? '' : 'on'}">${SPK('arrow', '➡')} 바라보는 방향</button></div>
            <label class="toggle"><input type="checkbox" data-t="sound" ${opts.sound ? 'checked' : ''}/> 소리 켜기</label>
-           <label class="volume">🎵 배경음 <input type="range" min="0" max="100" step="5" value="${Math.round(opts.music * 100)}" data-v="music"/><b data-vl="music">${Math.round(opts.music * 100)}</b></label>
-           <label class="volume">🔊 효과음 <input type="range" min="0" max="100" step="5" value="${Math.round(opts.sfx * 100)}" data-v="sfx"/><b data-vl="sfx">${Math.round(opts.sfx * 100)}</b></label>
-           <button data-a="savecode">💾 저장 코드 만들기</button>
+           <label class="volume">${SPK('music', '🎵')} 배경음 <input type="range" min="0" max="100" step="5" value="${Math.round(opts.music * 100)}" data-v="music"/><b data-vl="music">${Math.round(opts.music * 100)}</b></label>
+           <label class="volume">${SPK('speaker', '🔊')} 효과음 <input type="range" min="0" max="100" step="5" value="${Math.round(opts.sfx * 100)}" data-v="sfx"/><b data-vl="sfx">${Math.round(opts.sfx * 100)}</b></label>
+           <button data-a="savecode">${SPK('disk', '💾')} 저장 코드 만들기</button>
            <button data-a="title">타이틀로 (자동 저장)</button>
          </div>
          ${opts.seed !== undefined ? `<div class="seed">던전 시드 ${opts.seed}</div>` : ''}
@@ -359,7 +362,7 @@ export class Screens {
         'bag',
         `<div class="panel wide">
            <button class="close">${ICONS.close}</button>
-           <h2>가방 <small>${bag.used}/${bag.slots.length}</small> ${onEquip ? '<button class="tool-sm" data-a="equip">🛡 장비 교체</button>' : ''}</h2>
+           <h2>가방 <small>${bag.used}/${bag.slots.length}</small> ${onEquip ? `<button class="tool-sm" data-a="equip">${SPK('shield', '🛡')} 장비 교체</button>` : ''}</h2>
            <div class="bag-grid ${target === 'bag' ? 'drop' : ''}" data-bag="bag">${bag.slots.map((x, i) => cell(x, 'bag', i)).join('')}</div>
            <div class="item-info">${info}</div>
            <h3>차원가방 <small>쓰러져도 지켜지는 가방 · ${dimBag.used}/${dimBag.slots.length}</small></h3>
@@ -421,7 +424,7 @@ export class Screens {
         rows.push(row(MANA_PLATE_OF(t), 1, m.items, `제작대 Lv.${t} · ${m.time}초 · +6~+10 강화 재료`));
       }
       for (const r of recipesFor('workbench')) rows.push(row(r.output, r.count, r.inputs, `제작대 Lv.${r.tier} · ${r.time}초 · 조립`));
-      body = `<p class="hint">제작대에서는 판 합성, 조립(귀환석 등), 채집 도구(주괴 4 + 판자 3), 장비(주괴 + 판자 / ✨ 마력 판자)를 만듭니다. 제작을 시작하면 전력을 쓰며 시간이 걸립니다. 제작대 레벨 = 만들 수 있는 최고 단계.</p><ul class="list">${rows.join('')}</ul>`;
+      body = `<p class="hint">제작대에서는 판 합성, 조립(귀환석 등), 채집 도구(주괴 4 + 판자 3), 장비(주괴 + 판자 / ${SPK('sparkle', '✨')} 마력 판자)를 만듭니다. 제작을 시작하면 전력을 쓰며 시간이 걸립니다. 제작대 레벨 = 만들 수 있는 최고 단계.</p><ul class="list">${rows.join('')}</ul>`;
     } else if (tab === 'source') {
       const src: [string, string][] = [
         ['copper_ore', '1~2챕터 던전 광맥 (곡괭이)'],
@@ -1423,7 +1426,7 @@ export class Screens {
       [
         ...Object.entries(c.items).map(([id, k]) => `<span class="${p.count(id) >= k * n ? '' : 'bad'}">${inlineGem(id)}${ITEMS[id].name} ${p.count(id)}/${k * n}</span>`),
         ...(c.gold ? [`<span class="${p.data.gold >= c.gold * n ? '' : 'bad'}">${c.gold * n} G</span>`] : []),
-        ...(c.time ? [`<span class="dim">⏱ ${fmtTime(c.time * n)}</span>`] : []),
+        ...(c.time ? [`<span class="dim">${SPK('hourglass', '⏱')} ${fmtTime(c.time * n)}</span>`] : []),
       ].join(' · ');
     const afford = (c: CraftCost, n = 1) => p.data.gold >= c.gold * n && Object.entries(c.items).every(([id, k]) => p.count(id) >= k * n);
     const can = (c: CraftCost, n = 1) => !busy && afford(c, n);
@@ -1471,9 +1474,9 @@ export class Screens {
           const e: Equip = { uid: '', slot, cls: slot === 'weapon' ? p.data.currentClass : undefined, tier: t, grade: 0, plus: 0 };
           const c = equipCraftCost(slot, t);
           const mc = equipManaCraftCost(slot, t);
-          rows.push(`<li>${equipGem(e)}<div><b>${equipName(e)}</b><small>${equipLine(e)}</small><small>일반: ${costHtml(c)}</small><small class="mana-line">✨ 마력 제작 (고급 이상): ${costHtml(mc)}</small></div>${btn(`data-eqc="${slot}:${t}"`, c, 1, '제작')}<button class="mana-btn" data-eqm="${slot}:${t}" ${can(mc) ? '' : 'disabled'}>✨ 마력</button></li>`);
+          rows.push(`<li>${equipGem(e)}<div><b>${equipName(e)}</b><small>${equipLine(e)}</small><small>일반: ${costHtml(c)}</small><small class="mana-line">${SPK('sparkle', '✨')} 마력 제작 (고급 이상): ${costHtml(mc)}</small></div>${btn(`data-eqc="${slot}:${t}"`, c, 1, '제작')}<button class="mana-btn" data-eqm="${slot}:${t}" ${can(mc) ? '' : 'disabled'}>${SPK('sparkle', '✨')} 마력</button></li>`);
         }
-      body = `<p class="hint">일반 제작은 일반 등급, <b>✨ 마력 제작</b>(판자 대신 마력 판자)은 고급 이상 (희귀 30% · 영웅 8% · 전설 2%). 완성된 장비는 창고로 들어갑니다. 무기는 지금 직업(${CLASSES[p.data.currentClass].name}) 전용입니다.</p><ul class="list scroll">${rows.join('')}</ul>`;
+      body = `<p class="hint">일반 제작은 일반 등급, <b>${SPK('sparkle', '✨')} 마력 제작</b>(판자 대신 마력 판자)은 고급 이상 (희귀 30% · 영웅 8% · 전설 2%). 완성된 장비는 창고로 들어갑니다. 무기는 지금 직업(${CLASSES[p.data.currentClass].name}) 전용입니다.</p><ul class="list scroll">${rows.join('')}</ul>`;
     } else {
       const c = workbenchUpgradeCost(lv);
       body = c
@@ -1559,7 +1562,7 @@ export class Screens {
     const equipStart = (slot: EquipSlot, t: number, mana: boolean) => {
       const c = mana ? equipManaCraftCost(slot, t) : equipCraftCost(slot, t);
       const e: Equip = { uid: '', slot, cls: slot === 'weapon' ? p.data.currentClass : undefined, tier: t, grade: 0, plus: 0 };
-      if (start(c, 1, { kind: 'equip', id: slot, tier: t, mana, cls: e.cls, count: 1 })) again(tab, `<b class="ok">${mana ? '✨ ' : ''}${equipName(e)} 제작 시작!</b>`);
+      if (start(c, 1, { kind: 'equip', id: slot, tier: t, mana, cls: e.cls, count: 1 })) again(tab, `<b class="ok">${mana ? `${SPK('sparkle', '✨')} ` : ''}${equipName(e)} 제작 시작!</b>`);
     };
     this.on(s, '[data-eqc]', (el) => {
       const [slot, t] = el.dataset.eqc!.split(':') as [EquipSlot, string];
@@ -1617,7 +1620,7 @@ export class Screens {
     if (buf.length) body += `<p class="hint">대기 중인 재료: ${buf.map(([id, n]) => `${ITEMS[id].name} ${n}`).join(', ')}</p>`;
     const miss = f.missingInputs(b);
     if (miss)
-      body = `<div class="notice warn-box">⚠ <b>${ITEMS[miss.recipe.output].name}</b>을(를) 만들려면 ${Object.entries(miss.missing)
+      body = `<div class="notice warn-box">${SPK('warning', '⚠')} <b>${ITEMS[miss.recipe.output].name}</b>을(를) 만들려면 ${Object.entries(miss.missing)
         .map(([id, n]) => `${inlineGem(id)}<b>${ITEMS[id].name} ${n}개</b>`)
         .join(', ')}가 더 필요합니다. 투입 상자에 함께 넣어 주세요.</div>` + body;
     const s = this.open(

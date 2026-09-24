@@ -2427,3 +2427,39 @@ textarea.code {
 .wb-job small {
   font-size: 11px;
 }
+
+/* 3D 아이콘 (버튼·글 속) */
+img.mico {
+  display: block;
+  width: 78%;
+  height: 78%;
+  object-fit: contain;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.45));
+}
+.act.attack .ico img.mico,
+.act.interact-btn img.mico {
+  width: 46px;
+  height: 46px;
+}
+.act.dodge img.mico {
+  width: 70%;
+  height: 70%;
+}
+.warp-btn img.mico {
+  width: 32px;
+  height: 32px;
+}
+img.mico-inline {
+  display: inline-block;
+  width: 1.35em;
+  height: 1.35em;
+  vertical-align: -0.3em;
+  margin: 0 1px;
+  pointer-events: none;
+}
+.name-label img.mico-inline {
+  width: 1.7em;
+  height: 1.7em;
+  vertical-align: -0.5em;
+}

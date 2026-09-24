@@ -1,3 +1,6 @@
+import type { UiIcon } from '../models/uiIcons';
+import { uiIconUrl } from './itemIcons';
+
 const svg = (body: string) =>
   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
 
@@ -16,3 +19,20 @@ export const ICONS = {
   hand: svg('<path d="M8 13V5.5a1.5 1.5 0 0 1 3 0V12"/><path d="M11 11V4.5a1.5 1.5 0 0 1 3 0V11"/><path d="M14 11V6a1.5 1.5 0 0 1 3 0v7a6 6 0 0 1-6 6h-1a5 5 0 0 1-4-2l-2.5-3.5a1.5 1.5 0 0 1 2.3-1.9L8 14"/>'),
   close: svg('<path d="M6 6l12 12M18 6L6 18"/>'),
 };
+
+/** 3D 아이콘 그림 태그. 그리기에 실패하면 대신 쓸 글자(fallback)를 둔다 */
+export function mico(name: UiIcon, fallback = '', cls = 'mico'): string {
+  const url = uiIconUrl(name);
+  return url ? `<img class="${cls}" src="${url}" alt="">` : fallback;
+}
+
+const TOKEN_FALLBACK: Record<string, string> = { sparkle: '✨', hourglass: '⏱', warning: '⚠', crate_in: '📥', crate_out: '📤', skull: '☠' };
+
+/**
+ * 글 속의 :이름: 표시를 작은 3D 아이콘으로 바꾼 HTML (나머지 글자는 이스케이프).
+ * 토스트·이름표·보스 이름처럼 글자로만 넣던 곳에 쓴다
+ */
+export function richText(text: string): string {
+  const esc = text.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+  return esc.replace(/:([a-z_]+):/g, (m, name: string) => (name in TOKEN_FALLBACK ? mico(name as UiIcon, TOKEN_FALLBACK[name], 'mico-inline') : m));
+}

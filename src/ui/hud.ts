@@ -1,5 +1,7 @@
 import type { Action, Input } from '../core/input';
-import { ICONS } from './icons';
+import { ICONS, mico, richText } from './icons';
+import { itemIconUrl, weaponIconUrl } from './itemIcons';
+import type { ClassId } from '../data/classes';
 import { Joystick } from './joystick';
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, className = '', html = '') => {
@@ -121,14 +123,14 @@ export class Hud {
       input.press('map');
     });
     const menuCol = el('div', 'menu-col');
-    this.bagBtn = this.button('icon-btn', ICONS.bag, 'bag');
+    this.bagBtn = this.button('icon-btn', mico('bag', ICONS.bag), 'bag');
     this.bagCount = el('span', 'badge');
     this.bagBtn.appendChild(this.bagCount);
-    this.invBtn = this.button('icon-btn', ICONS.person, 'char');
-    this.buildBtn = this.button('icon-btn build-btn', ICONS.hammer, 'build');
-    const recipeBtn = this.button('icon-btn recipe-btn', ICONS.book, 'recipes');
+    this.invBtn = this.button('icon-btn', mico('armor', ICONS.person), 'char');
+    this.buildBtn = this.button('icon-btn build-btn', mico('hammer', ICONS.hammer), 'build');
+    const recipeBtn = this.button('icon-btn recipe-btn', mico('book', ICONS.book), 'recipes');
     // 방을 정리한 뒤 언제든 워프 창을 여는 버튼 (자원을 캐고 바로 돌아갈 때)
-    this.warpBtn = this.button('warp-btn hidden', `${ICONS.warp}<span>워프</span>`, 'warp');
+    this.warpBtn = this.button('warp-btn hidden', `${mico('portal', ICONS.warp)}<span>워프</span>`, 'warp');
     this.root.appendChild(this.warpBtn);
     menuCol.append(this.button('icon-btn', ICONS.pause, 'pause'), this.bagBtn, this.invBtn, this.buildBtn, recipeBtn);
     topRight.append(this.minimapSlot, menuCol);
@@ -156,11 +158,11 @@ export class Hud {
     this.attackBtn.addEventListener('pointercancel', release);
 
     // 상호작용 버튼: 대화·채집·입장 등 (공격 버튼과 따로 둔다)
-    this.interactBtn = this.button('act interact-btn hidden', ICONS.hand, 'interact');
+    this.interactBtn = this.button('act interact-btn hidden', mico('glove', ICONS.hand), 'interact');
     this.interactLabel = el('span', 'lbl');
     this.interactBtn.appendChild(this.interactLabel);
 
-    const dodge = this.button('act dodge', ICONS.dodge, 'dodge');
+    const dodge = this.button('act dodge', mico('boot', ICONS.dodge), 'dodge');
     this.dodgeShade = el('div', 'cooldown');
     dodge.appendChild(this.dodgeShade);
 
@@ -180,7 +182,7 @@ export class Hud {
       e.preventDefault();
       this.toast('궁극기는 보스를 쓰러뜨려야 얻을 수 있습니다 (준비 중)', 2200);
     });
-    this.potionBtn = this.button('act potion', ICONS.potion, 'potion');
+    this.potionBtn = this.button('act potion', itemIconUrl('potion') ? `<img class="mico" src="${itemIconUrl('potion')}" alt="">` : ICONS.potion, 'potion');
     this.potionCount = el('span', 'badge');
     this.potionBtn.appendChild(this.potionCount);
     actions.append(this.attackBtn, this.interactBtn, dodge, ...this.skillBtns, ult, this.potionBtn);
@@ -255,7 +257,10 @@ export class Hud {
     }
   }
 
-  setClass(short: string, color: string, skillNames: string[]): void {
+  setClass(short: string, color: string, skillNames: string[], cls?: ClassId): void {
+    // 공격 버튼: 직업 무기 3D 아이콘
+    const w = cls ? weaponIconUrl(cls) : '';
+    if (w) this.attackIcon.innerHTML = `<img class="mico" src="${w}" alt="">`;
     if (!this.portrait.querySelector('img')) this.portrait.textContent = short;
     this.portrait.style.background = `linear-gradient(160deg, ${color}, #1c2240)`;
     skillNames.slice(0, this.skillLabels.length).forEach((n, i) => (this.skillLabels[i].textContent = n));
@@ -292,7 +297,11 @@ export class Hud {
   }
 
   setObjective(text: string): void {
-    this.objectiveEl.textContent = text ? text.split('\n').map((l, i) => (i === 0 ? `▶ ${l}` : `· ${l}`)).join('\n') : '';
+    const t = text ? text.split('\n').map((l, i) => (i === 0 ? `▶ ${l}` : `· ${l}`)).join('\n') : '';
+    if (this.objectiveEl.dataset.t !== t) {
+      this.objectiveEl.dataset.t = t;
+      this.objectiveEl.innerHTML = richText(t);
+    }
     this.objectiveEl.classList.toggle('hidden', !text);
   }
 
@@ -304,7 +313,10 @@ export class Hud {
     const total = Math.max(0, ratio) * bars;
     const left = Math.ceil(total - 1e-6);
     const cur = left > 0 ? total - (left - 1) : 0;
-    this.bossName.textContent = name;
+    if (this.bossName.dataset.t !== name) {
+      this.bossName.dataset.t = name;
+      this.bossName.innerHTML = richText(name);
+    }
     this.bossFill.style.width = `${cur * 100}%`;
     this.bossFill.style.background = COLORS[(left - 1 + COLORS.length) % COLORS.length];
     const track = this.bossFill.parentElement!;
@@ -455,14 +467,17 @@ export class Hud {
         return;
       }
       l.style.display = '';
-      if (l.textContent !== d.text) l.textContent = d.text;
+      if (l.dataset.t !== d.text) {
+        l.dataset.t = d.text;
+        l.innerHTML = richText(d.text);
+      }
       l.classList.toggle('accent', !!d.accent);
       l.style.transform = `translate(${d.x}px, ${d.y}px) translate(-50%, -100%)`;
     });
   }
 
   toast(text: string, ms = 1800): void {
-    this.toastEl.textContent = text;
+    this.toastEl.innerHTML = richText(text);
     this.toastEl.classList.add('show');
     window.clearTimeout(this.toastTimer);
     this.toastTimer = window.setTimeout(() => this.toastEl.classList.remove('show'), ms);

@@ -1,3 +1,4 @@
+import { mico } from './icons';
 /** 홈 화면에 앱으로 설치하기 (PWA) */
 interface InstallPromptEvent extends Event {
   prompt(): Promise<void>;
@@ -24,7 +25,7 @@ export function setupInstall(): void {
       const b = document.createElement('button');
       b.className = 'install';
       b.dataset.a = 'install';
-      b.textContent = '📲 앱으로 설치';
+      b.innerHTML = `${mico('phone', '📲', 'mico-inline')} 앱으로 설치`;
       b.addEventListener('click', () => void promptInstall());
       menu.appendChild(b);
     }

@@ -377,7 +377,7 @@ export class Game {
       skillLevel: (i) => this.progress.cls.skills[i] ?? 0,
       autoAim: () => this.progress.data.settings.autoAim !== false,
     });
-    this.hud.setClass(cls.short, hex(cls.look.tunic), cls.skills.map((s) => s.name));
+    this.hud.setClass(cls.short, hex(cls.look.tunic), cls.skills.map((s) => s.name), this.progress.data.currentClass);
     this.updatePortrait();
   }
 
@@ -1345,7 +1345,7 @@ export class Game {
       this.level.effects.pillar(n.x, n.z, 0xffd23a, 5);
       this.shakeT = Math.max(this.shakeT, 0.5);
       this.audio.play('stone');
-      this.hud.toast(`✨ 고급 상자다! 상자를 지키던 몬스터 ${wave.length}마리가 몰려온다 — 모두 쓰러뜨리면 보상`, 3500);
+      this.hud.toast(`:sparkle: 고급 상자다! 상자를 지키던 몬스터 ${wave.length}마리가 몰려온다 — 모두 쓰러뜨리면 보상`, 3500);
     }
     this.refreshHud();
   }
@@ -1485,7 +1485,7 @@ export class Game {
         } else if (j.kind === 'equip') {
           const e: Equip = { ...workJobEquip(j), uid: newUid(), grade: j.mana ? rollManaGrade(Math.random()) : 0 };
           p.data.equips.push(e);
-          this.hud.toast(`제작대: ${j.mana ? `✨ [${GRADES[e.grade].name}] ` : ''}${equipName(e)} 완성! (창고)`);
+          this.hud.toast(`제작대: ${j.mana ? `:sparkle: [${GRADES[e.grade].name}] ` : ''}${equipName(e)} 완성! (창고)`);
         }
       }
       b.ready = [];
@@ -1891,8 +1891,8 @@ export class Game {
           level.startBossDoom();
           this.audio.play('stone');
         }
-        const clock = `⏱ ${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, '0')}`;
-        const tag = boss.dooming ? ' · ☠ 틈새 붕괴' : boss.shielded ? ` · 보호막 (수호병 ${boss.guardsLeft})` : boss.phase2 ? ' · 격노' : '';
+        const clock = `:hourglass: ${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, '0')}`;
+        const tag = boss.dooming ? ' · :skull: 틈새 붕괴' : boss.shielded ? ` · 보호막 (수호병 ${boss.guardsLeft})` : boss.phase2 ? ' · 격노' : '';
         this.hud.setBoss(`${boss.name}${tag}  ${clock}`, boss.hp / boss.maxHp, boss.bars, boss.shielded, left < 60);
         this.audio.playMusic('boss');
       }
@@ -1986,7 +1986,7 @@ export class Game {
       const left = d.aliveCount;
       const boss = d.boss && d.boss.alive ? ` · ${d.boss.name}` : '';
       const amb = this.ambush ? this.ambush.monsters.filter((m) => m.alive).length : 0;
-      const head = amb > 0 ? `✨ 고급 상자 습격! 남은 몬스터 ${amb}` : left > 0 ? `남은 몬스터 ${left}${boss} (M: 지도)` : '워프 게이트로 가자 (다음 방 / 마을)';
+      const head = amb > 0 ? `:sparkle: 고급 상자 습격! 남은 몬스터 ${amb}` : left > 0 ? `남은 몬스터 ${left}${boss} (M: 지도)` : '워프 게이트로 가자 (다음 방 / 마을)';
       // 방을 정리했으면 언제든 워프 창을 열 수 있는 버튼
       this.hud.setWarpButton(!!this.run.roomCleared && d.exitOpen);
       this.hud.setObjective([head, ...questLines(p, this.quests)].join('\n'));
@@ -2036,11 +2036,11 @@ export class Game {
       for (const b of this.factory.state.buildings) {
         if (b.type === 'box') {
           const s = this.toScreen((b.x + 0.5) * TILE, 1.9, (b.y + 0.5) * TILE);
-          labels.push({ text: b.mode === 'in' ? '📥 투입' : '📤 출하', x: s.x, y: s.y, accent: b.mode !== 'in' });
+          labels.push({ text: b.mode === 'in' ? ':crate_in: 투입' : ':crate_out: 출하', x: s.x, y: s.y, accent: b.mode !== 'in' });
         } else if (this.factory.missingInputs(b)) {
           const s = this.toScreen((b.x + 0.5) * TILE, 2.4, (b.y + 0.5) * TILE);
           const m = this.factory.missingInputs(b)!;
-          labels.push({ text: `⚠ ${Object.keys(m.missing).map((id) => ITEMS[id].name).join('·')} 필요`, x: s.x, y: s.y, accent: true });
+          labels.push({ text: `:warning: ${Object.keys(m.missing).map((id) => ITEMS[id].name).join('·')} 필요`, x: s.x, y: s.y, accent: true });
         } else if ((b.level ?? 1) > 1) {
           const s = this.toScreen((b.x + 0.5) * TILE, 0.3, (b.y + 0.5) * TILE);
           labels.push({ text: `Lv.${b.level}`, x: s.x, y: s.y, accent: true });
