@@ -104,10 +104,12 @@ export class VillageScene extends Level {
     this.buildTiles(this.grid, { floorA: 0x8f8a7c, floorB: 0x9a9486, wallSide: 0x3f5a34, wallTop: 0x5d8a44 }, rng, 1.6);
 
     const mat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
-    const place = (geo: Mesh['geometry'], tx: number, ty: number, rot: number, radius: number) => {
+    const place = (geo: Mesh['geometry'], tx: number, ty: number, rot: number, radius: number, height = 0) => {
       const p = toWorld(tx, ty);
-      this.addMesh(geo, mat, p.x, p.z, rot);
+      const mesh = this.addMesh(geo, mat, p.x, p.z, rot);
       if (radius > 0) this.obstacles.push({ x: p.x, z: p.z, radius });
+      // 키 큰 물체(집·나무 등)는 캐릭터를 가리면 반투명해진다
+      if (height > 0) this.addOccluder(mesh, p.x, p.z, radius, height);
       return p;
     };
 
@@ -120,13 +122,13 @@ export class VillageScene extends Level {
       [19, 19, 0xd0c0a0, 0x6a4a8a, Math.PI],
       [9, 19, 0xc8b898, 0x8a5a2a, Math.PI],
     ];
-    for (const [x, y, wall, roof, rot] of houses) place(buildHouse(wall, roof), x, y, rot, 2.1);
+    for (const [x, y, wall, roof, rot] of houses) place(buildHouse(wall, roof), x, y, rot, 2.1, 3.6);
 
     // 시설
-    place(buildForge(), 8, 4, 0, 1.9);
-    place(buildStall(0xc84a4a), 7, 12, Math.PI / 2, 1.5);
+    place(buildForge(), 8, 4, 0, 1.9, 2.6);
+    place(buildStall(0xc84a4a), 7, 12, Math.PI / 2, 1.5, 2.2);
     place(buildFountain(), 13, 13, 0, 1.9);
-    place(buildStatue(), 20, 5, 0, 1.3);
+    place(buildStatue(), 20, 5, 0, 1.3, 2.6);
     place(buildChest(), 11, 16, 0, 0.8);
     for (const [x, y] of [
       [10, 9],
@@ -136,7 +138,7 @@ export class VillageScene extends Level {
       [5, 9],
       [22, 9],
     ])
-      place(buildLamp(), x, y, 0, 0.25);
+      place(buildLamp(), x, y, 0, 0.25, 2.5);
     for (const [x, y] of [
       [1, 9],
       [1, 13],
@@ -146,7 +148,7 @@ export class VillageScene extends Level {
       [6, 1],
       [21, 1],
     ])
-      place(buildTree(rng.pick([0x4f8a3c, 0x5a9a44, 0x3f7a34])), x, y, rng.range(0, 6), 0.9);
+      place(buildTree(rng.pick([0x4f8a3c, 0x5a9a44, 0x3f7a34])), x, y, rng.range(0, 6), 0.9, 3);
     for (const [x, y] of [
       [6, 11],
       [9, 3],

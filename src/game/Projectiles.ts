@@ -22,6 +22,7 @@ export interface Projectile {
   knock: number;
   /** 적에게 맞거나 벽에 부딪혔을 때 (폭발 등) */
   onEnd?: (x: number, z: number) => void;
+  kind: 'orb' | 'arrow' | 'shard' | 'wave';
 }
 
 export interface ProjectileOptions {
@@ -48,6 +49,8 @@ export interface ProjectileHost {
   playerHit(p: Projectile): void;
   monsterHit(m: Monster, p: Projectile): void;
   burst(x: number, y: number, z: number, color: number, count: number, power?: number): void;
+  /** 날아가는 동안 뒤에 남기는 빛 (플레이어 투사체) */
+  trail?(x: number, y: number, z: number, color: number, big: boolean): void;
 }
 
 export class Projectiles {
@@ -75,6 +78,7 @@ export class Projectiles {
       color: o.color,
       knock: o.knock ?? 0.6,
       onEnd: o.onEnd,
+      kind: o.kind ?? 'orb',
     };
     if (o.kind === 'wave') mesh.scale.set(1, 1, 1);
     mesh.rotation.y = o.angle;
@@ -92,6 +96,7 @@ export class Projectiles {
       p.z += p.vz * dt;
       p.mesh.position.set(p.x, p.y, p.z);
       if (!p.fromPlayer) p.mesh.rotation.x += dt * 8;
+      else host.trail?.(p.x, p.y, p.z, p.color, p.kind !== 'arrow');
       let end = p.life <= 0;
 
       if (!isFloor(host.grid, Math.floor(p.x / TILE), Math.floor(p.z / TILE))) {

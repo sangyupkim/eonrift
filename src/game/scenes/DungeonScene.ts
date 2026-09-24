@@ -223,6 +223,8 @@ export class DungeonScene extends Level {
       const obstacle = { x: p.x, z: p.z, radius: def.radius };
       this.obstacles.push(obstacle);
       this.nodes.push({ def, mesh, material, x: p.x, z: p.z, hp: def.hp, shake: 0, flash: 0, dying: 0, alive: true, obstacle });
+      // 나무·결정처럼 키 큰 채집물은 캐릭터를 가리면 반투명해진다
+      this.addOccluder(mesh, p.x, p.z, def.radius + 0.3, def.style === 'tree' ? 3 : def.style === 'crystal' ? 1.8 : 1.2, true);
     });
   }
 
@@ -334,6 +336,9 @@ export class DungeonScene extends Level {
       playerHit: (p) => this.hooks.hurtPlayer(p.damage, p.x - p.vx, p.z - p.vz),
       monsterHit: (m, p) => this.hooks.monsterHitByProjectile(m, p),
       burst: (x, y, z, c, n, pw) => this.particles.burst(x, y, z, c, n, pw),
+      trail: (x, y, z, c, big) => {
+        if (big || Math.random() < 0.5) this.effects.sparks(x, y, z, c, 1, { speed: big ? 1.2 : 0.4, life: big ? 0.35 : 0.2, size: big ? 0.12 : 0.06 });
+      },
     });
 
     for (const n of this.nodes) {

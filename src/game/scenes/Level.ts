@@ -56,6 +56,8 @@ export abstract class Level {
   abstract readonly grid: DungeonData;
   abstract readonly playerStart: { x: number; z: number; facing: number };
   protected time = 0;
+  /** 캐릭터를 가릴 수 있는 큰 물체 (나무·집·광맥). 가리면 반투명해진다 */
+  private occluders: { mesh: Mesh; mat: Material & { opacity: number; transparent: boolean }; x: number; z: number; radius: number; height: number; fade: number }[] = [];
 
   constructor() {
     this.effects = new Effects(this.scene);
@@ -139,9 +141,44 @@ export abstract class Level {
     return mesh;
   }
 
+  /**
+   * 캐릭터 앞(카메라 쪽)에 서서 가릴 수 있는 물체로 등록한다.
+   * ownMaterial이 아니면 재질을 복제해 이 물체만 투명하게 만들 수 있게 한다
+   */
+  protected addOccluder(mesh: Mesh, x: number, z: number, radius: number, height: number, ownMaterial = false): void {
+    if (!ownMaterial) mesh.material = (mesh.material as Material).clone();
+    this.occluders.push({ mesh, mat: mesh.material as Material & { opacity: number; transparent: boolean }, x, z, radius, height, fade: 1 });
+  }
+
+  /** 카메라와 캐릭터 사이에 선 물체를 흐리게 한다 */
+  private fadeOccluders(dt: number, focus: { x: number; z: number }): void {
+    // 카메라는 +x,+z 쪽 위에서 내려다본다. 높이 1당 가로로 약 1.2만큼 가린다
+    const dx = Math.SQRT1_2;
+    const dz = Math.SQRT1_2;
+    for (const o of this.occluders) {
+      const rx = o.x - focus.x;
+      const rz = o.z - focus.z;
+      const along = rx * dx + rz * dz;
+      const side = Math.abs(rx * dz - rz * dx);
+      const hides = o.mesh.visible && along > -o.radius * 0.5 && along < o.height * 1.2 + o.radius && side < o.radius + 0.7;
+      const target = hides ? 0.3 : 1;
+      o.fade += (target - o.fade) * (1 - Math.exp(-dt * 10));
+      if (Math.abs(o.fade - target) < 0.01) o.fade = target;
+      const transparent = o.fade < 0.999;
+      if (o.mat.transparent !== transparent) {
+        o.mat.transparent = transparent;
+        o.mat.needsUpdate = true;
+      }
+      o.mat.opacity = o.fade;
+      // 흐려진 물체는 그림자를 계속 드리우되 깊이를 덜 써서 뒤의 캐릭터가 보이게
+      o.mat.depthWrite = !transparent;
+    }
+  }
+
   /** 매 프레임 공통 처리. 하위 클래스가 덧붙인다 */
   update(dt: number, focus: { x: number; z: number }): void {
     this.time += dt;
+    this.fadeOccluders(dt, focus);
     this.sun.position.set(focus.x - 10, 18, focus.z + 6);
     this.sun.target.position.set(focus.x, 0, focus.z);
     this.particles.update(dt);

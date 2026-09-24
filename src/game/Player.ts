@@ -1,4 +1,4 @@
-import { AdditiveBlending, Color, GreaterDepth, Material, Mesh, MeshBasicMaterial, MeshLambertMaterial } from 'three';
+import { AdditiveBlending, Color, GreaterDepth, Material, Mesh, MeshBasicMaterial, MeshLambertMaterial, NotEqualStencilFunc, Plane, ReplaceStencilOp, Vector3 } from 'three';
 import { PLAYER, SCREEN_RIGHT, SCREEN_UP } from '../config';
 import type { ClassDef } from '../data/classes';
 import { buildHero, glowColor, type HeroGear, type HeroRig } from '../models/hero';
@@ -339,15 +339,23 @@ export class Player {
       }
     }
 
+    let rollZ = 0;
+    let rollScale = 1;
     if (this.state === 'dash' && this.dash) {
       const t = Math.min(1, this.dash.t / this.dash.duration);
       switch (this.dash.pose) {
-        case 'roll':
-          r.body.rotation.x = t * Math.PI * 2;
-          bodyY = 0.45 + Math.sin(t * Math.PI) * 0.15;
-          legL = legR = -1.2;
-          armL = armR = -1.4;
+        case 'roll': {
+          // 엉덩이가 아니라 몸 가운데를 축으로 웅크려 구른다 (머리가 땅에 파묻히지 않게)
+          const th = t * Math.PI * 2;
+          const c = 0.42 * ROLL_TUCK;
+          r.body.rotation.x = th;
+          bodyY = 0.78 - c * Math.cos(th) + Math.sin(t * Math.PI) * 0.12;
+          rollZ = -c * Math.sin(th);
+          rollScale = ROLL_TUCK;
+          legL = legR = -1.5;
+          armL = armR = -1.6;
           break;
+        }
         case 'lunge':
           armR = -1.55;
           weaponX = -0.05;
@@ -365,6 +373,8 @@ export class Player {
       }
     }
     if (!(this.state === 'dash' && this.dash?.pose === 'roll')) r.body.rotation.x = 0;
+    r.body.position.z = rollZ;
+    r.body.scale.setScalar(rollScale);
 
     ease(r.legL.rotation, legL);
     ease(r.legR.rotation, legR);
@@ -391,13 +401,29 @@ export class Player {
   }
 }
 
+/** 구를 때 몸을 웅크리는 비율 */
+const ROLL_TUCK = 0.82;
+
 /**
- * 벽 뒤에 가려져도 캐릭터 윤곽이 보이도록 실루엣을 그린다.
- * 실루엣(renderOrder 1)은 벽보다 뒤에 있을 때만 그려지고,
- * 그 다음 캐릭터 본체(renderOrder 2)가 덮어써서 자기 몸에는 실루엣이 생기지 않는다.
+ * 벽이나 나무 뒤에 가려져도 캐릭터 윤곽이 은은하게 비쳐 보이게 한다.
+ * - 가려진 부분에만(GreaterDepth) 반투명한 푸른 그림자를 칠한다
+ * - 스텐실로 한 픽셀에 한 번만 칠해서, 팔·몸이 겹친 곳이 진해지지 않는다
+ * - 바닥 높이 아래는 잘라 내서 땅에 살짝 묻힐 때 파랗게 물들지 않는다
+ * 본체(renderOrder 2)가 나중에 덮어써서 자기 몸에는 실루엣이 생기지 않는다.
  */
 function addSilhouette(meshes: Mesh[]): void {
-  const mat = new MeshBasicMaterial({ color: 0x7fb4ff, depthFunc: GreaterDepth, depthWrite: false });
+  const mat = new MeshBasicMaterial({
+    color: 0x9ab8ff,
+    transparent: true,
+    opacity: 0.32,
+    depthFunc: GreaterDepth,
+    depthWrite: false,
+    clippingPlanes: [new Plane(new Vector3(0, 1, 0), -0.12)],
+    stencilWrite: true,
+    stencilRef: 1,
+    stencilFunc: NotEqualStencilFunc,
+    stencilZPass: ReplaceStencilOp,
+  });
   for (const m of meshes) {
     const sil = new Mesh(m.geometry, mat);
     sil.renderOrder = 1;

@@ -120,7 +120,10 @@ export class Game {
   private moveTo: { x: number; y: number } | null = null;
 
   constructor(private container: HTMLElement) {
-    this.renderer = new WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    // stencil: 캐릭터 실루엣을 한 번만 칠하려고 쓴다
+    this.renderer = new WebGLRenderer({ antialias: true, powerPreference: 'high-performance', stencil: true });
+    // 실루엣을 바닥 높이 아래에서는 자른다 (구르기·계단에서 파랗게 물드는 것 방지)
+    this.renderer.localClippingEnabled = true;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = PCFShadowMap;
