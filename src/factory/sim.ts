@@ -261,8 +261,14 @@ export class Factory {
     // 2. 투입 보관상자: 앞 칸이 받을 수 있을 때만 하나씩 보낸다
     for (const b of buildings) {
       if (b.type !== 'box' || b.mode !== 'in') continue;
-      // 여러 재료가 있으면 번갈아 보낸다 (조립기에 재료가 골고루 들어가도록)
-      const ids = Object.keys(b.buffer!).filter((id) => b.buffer![id] > 0).sort();
+      // 여러 재료가 있으면 번갈아 보낸다 (조립기에 재료가 골고루 들어가도록).
+      // 레일 끝에 기계가 있으면 그 기계가 지금 받을 수 있는 재료만 보낸다 (레일 위에 가는 중인 것까지 계산)
+      // → 한 재료만 줄지어 레일을 막아 멈추는 일이 없다
+      const dest = this.lineEnd(b);
+      const ids = Object.keys(b.buffer!)
+        .filter((id) => b.buffer![id] > 0)
+        .filter((id) => !dest || this.machineWants(dest.machine, dest.transit, id))
+        .sort();
       for (let i = 0; i < ids.length; i++) {
         const id = ids[((b.rr ?? 0) + i) % ids.length];
         if (this.pushForward(b, id)) {
@@ -342,6 +348,33 @@ export class Factory {
     return null;
   }
 
+  /** b 앞으로 이어진 레일을 따라가서 끝에 있는 기계와, 레일 위에서 가는 중인 재료 수를 돌려준다 */
+  private lineEnd(b: BuildingState): { machine: BuildingState; transit: Record<string, number> } | null {
+    const transit: Record<string, number> = {};
+    const seen = new Set<BuildingState>();
+    let [dx, dy] = DIRS[b.dir];
+    let cur = this.at(b.x + dx, b.y + dy);
+    while (cur && cur.type === 'belt' && !seen.has(cur)) {
+      seen.add(cur);
+      if (cur.item) transit[cur.item] = (transit[cur.item] ?? 0) + 1;
+      [dx, dy] = DIRS[cur.dir];
+      cur = this.at(cur.x + dx, cur.y + dy);
+    }
+    if (!cur || !MACHINE_TYPES.has(cur.type)) return null;
+    for (const [id, n] of Object.entries(cur.buffer ?? {})) transit[id] = (transit[id] ?? 0) + n;
+    return { machine: cur, transit };
+  }
+
+  /** 기계에 이미 있는 것(counts)을 생각할 때 item을 하나 더 보내도 되는지 */
+  private machineWants(m: BuildingState, counts: Record<string, number>, item: string): boolean {
+    const recipes = (m.recipe ? [RECIPE_BY_ID[m.recipe]] : recipesFor(m.type)).filter((r) => r.tier <= (m.level ?? 1));
+    return recipes.some((r) => {
+      if (r.inputs[item] === undefined) return false;
+      if (!m.recipe && Object.entries(counts).some(([id, n]) => n > 0 && r.inputs[id] === undefined)) return false;
+      return (counts[item] ?? 0) < r.inputs[item] * 2;
+    });
+  }
+
   private pushForward(b: BuildingState, item: string): boolean {
     return this.pushTo(b, b.dir, item);
   }
@@ -385,9 +418,9 @@ export class Factory {
           const other = Object.entries(target.buffer!).some(([id, n]) => n > 0 && recipe.inputs[id] === undefined);
           if (other) return false;
         }
+        // 두 번 분량까지 받아 둔다 (레일 위에서 기다리던 재료가 들어올 수 있게)
         const have = target.buffer![item] ?? 0;
-        const multi = Object.values(recipe.inputs).some((n) => n > 1);
-        if (have >= recipe.inputs[item] * (multi ? 2 : 1)) return false;
+        if (have >= recipe.inputs[item] * 2) return false;
         target.buffer![item] = have + 1;
         return true;
       }

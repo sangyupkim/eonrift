@@ -126,3 +126,37 @@ describe('부족한 재료 안내', () => {
     expect(f.missingInputs(m)?.missing).toEqual({ essence_low: 1 });
   });
 });
+
+describe('레일 막힘 방지', () => {
+  it('주입기가 한 재료만 받고 멈춰 있어도, 나중에 넣은 정수로 계속 생산된다', () => {
+    const f = new Factory({ sizeLevel: 0, buildings: [] }, 8);
+    const inBox = f.place('box', 0, 0, 0)!;
+    inBox.buffer = { copper_ingot: 5 };
+    f.place('belt', 1, 0, 0);
+    f.place('belt', 2, 0, 0);
+    f.place('infuser', 3, 0, 0);
+    const out = f.place('box', 4, 0, 0)!;
+    out.mode = 'out';
+    f.place('wire', 3, 1, 0);
+    f.place('generator', 3, 2, 0)!.buffer = { essence_low: 20 };
+    f.simulate(60);
+    inBox.buffer!.copper_ingot += 50;
+    inBox.buffer!.essence_low = 40;
+    f.simulate(600);
+    expect(out.buffer!.mana_copper).toBeGreaterThan(15);
+  });
+
+  it('한 상자에 섞어 넣은 재료로 조립기가 여러 번 계속 만든다', () => {
+    const f = new Factory({ sizeLevel: 0, buildings: [] }, 8);
+    f.place('box', 0, 0, 0)!.buffer = { mana_copper: 10, plank: 30 };
+    f.place('belt', 1, 0, 0);
+    const asm = f.place('assembler', 2, 0, 0)!;
+    asm.recipe = 'return_stone';
+    const out = f.place('box', 3, 0, 0)!;
+    out.mode = 'out';
+    f.place('wire', 2, 1, 0);
+    f.place('generator', 2, 2, 0)!.buffer = { essence_low: 20 };
+    f.simulate(900);
+    expect(out.buffer!.return_stone).toBe(10);
+  });
+});
