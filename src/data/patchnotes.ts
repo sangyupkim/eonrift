@@ -7,6 +7,13 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '6.4.1',
+    date: '2026-09-25',
+    items: [
+      '타이틀에 "테스트 캐릭터" 버튼: 모든 직업 99레벨, 전 부위 7단계 차원 등급 +10, 스킬 최고 레벨, 엔딩 완료(차원의 끝 열림), 모든 도면·재료·골드 1000만. 진짜 저장과 따로 저장되고, 타이틀로 나가면 원래 저장으로 돌아감',
+    ],
+  },
+  {
     version: '6.4',
     date: '2026-09-25',
     items: [

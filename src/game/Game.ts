@@ -1,5 +1,6 @@
 import { bustUrl, itemIconUrl, skillIconUrl } from '../ui/itemIcons';
 import { decodeSave, encodeSave } from './saveCode';
+import { makeTestSave } from './testSave';
 import { gearLook } from '../models/items';
 import { BOSS_RESPAWN_MS, BOSS_TIME_LIMIT, FARM_COOLDOWN_MS, FARM_NAMES } from '../data/monsters';
 import { DEBUFF_INFO, type DebuffId, type DebuffSpec } from '../data/species';
@@ -29,7 +30,7 @@ import { Bag } from './Bag';
 import { Combat } from './Combat';
 import type { Monster } from './Monster';
 import { Player } from './Player';
-import { DIM_BAG_MAX, deleteSave, hasSave, loadSave, newSave, Progress, stageIndex, stageOf, type SaveData, type Stats, type RunCheckpoint } from './Progress';
+import { DIM_BAG_MAX, deleteSave, hasSave, loadSave, newSave, Progress, useTestSlot, stageIndex, stageOf, type SaveData, type Stats, type RunCheckpoint } from './Progress';
 import { objectiveNeed, objectiveProgress, Quests } from './Quests';
 import { bonusText, FOOD_MINUTES, FOODS, TITLES, type BonusKey } from '../data/bonus';
 import { hasStory, objective, questLines, scriptFor } from './Story';
@@ -222,6 +223,8 @@ export class Game {
 
   // =============== 시작 / 저장 ===============
   private showTitle(): void {
+    // 타이틀의 이어하기·새로 시작은 언제나 진짜 저장
+    useTestSlot(false);
     this.mode = 'title';
     // 타이틀에서도 마을 배경음 (첫 터치 뒤에 소리가 켜진다)
     this.audio.playMusic('village');
@@ -250,6 +253,23 @@ export class Game {
           },
         );
       },
+      // 테스트 캐릭터: 진짜 저장과 따로 저장된다
+      () => {
+        useTestSlot(true);
+        const start = (data: SaveData) => {
+          new Progress(data).save();
+          this.startGame(data, false);
+          this.hud.toast(':sparkle: 테스트 캐릭터 (진짜 저장과 따로 저장됩니다 · 타이틀로 나가면 원래 저장으로)', 4000);
+        };
+        const old = hasSave() ? loadSave() : null;
+        if (!old) return start(makeTestSave());
+        this.screens.ask(
+          '테스트 캐릭터',
+          '전에 쓰던 테스트 캐릭터를 이어서 할까요?<br><small>아니오: 만렙·최종 장비 테스트 캐릭터를 새로 만듭니다</small>',
+          () => start(old),
+          () => start(makeTestSave()),
+        );
+      }
     );
   }
 

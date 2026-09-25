@@ -218,7 +218,7 @@ export class Screens {
   }
 
   // ---------------- 타이틀 ----------------
-  title(hasSave: boolean, onNew: () => void, onContinue: () => void, onLoadCode?: () => void): void {
+  title(hasSave: boolean, onNew: () => void, onContinue: () => void, onLoadCode?: () => void, onTest?: () => void): void {
     const s = this.open(
       'title',
       `<div class="title-box">
@@ -230,6 +230,7 @@ export class Screens {
            ${canInstall() ? `<button class="install" data-a="install">${SPK('phone', '📲')} 앱으로 설치</button>` : ''}
            <button class="update" data-a="loadcode">${SPK('key', '📥')} 저장 코드로 불러오기</button>
            <button class="update" data-a="update">${SPK('refresh', '🔄')} 업데이트 확인</button>
+           ${onTest ? `<button class="update test-btn" data-a="test">${SPK('sparkle', '🧪')} 테스트 캐릭터 (만렙·최종 장비)</button>` : ''}
          </div>
        </div>
        <button class="patch-btn" data-a="patch">${SPK('scroll', '📜')} 패치노트</button>
@@ -238,7 +239,8 @@ export class Screens {
     this.on(s, '[data-a="continue"]', onContinue);
     this.on(s, '[data-a="install"]', () => void promptInstall());
     if (onLoadCode) this.on(s, '[data-a="loadcode"]', onLoadCode);
-    this.on(s, '[data-a="patch"]', () => this.patchNotes(() => this.title(hasSave, onNew, onContinue, onLoadCode)));
+    if (onTest) this.on(s, '[data-a="test"]', onTest);
+    this.on(s, '[data-a="patch"]', () => this.patchNotes(() => this.title(hasSave, onNew, onContinue, onLoadCode, onTest)));
     // 업데이트 확인 → 새 버전이 있으면 같은 버튼이 "업데이트" 버튼으로 바뀐다
     let remote: RemoteVersion | null = null;
     this.on(s, '[data-a="update"]', (b) => {

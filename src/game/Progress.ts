@@ -102,7 +102,17 @@ export interface SaveData {
   tools: Record<ToolKind, ToolState>;
 }
 
-const KEY = 'yeongeop-teumsae-save-v1';
+const MAIN_KEY = 'yeongeop-teumsae-save-v1';
+/** 테스트 캐릭터는 진짜 저장과 따로 보관한다 */
+const TEST_KEY = `${MAIN_KEY}-test`;
+let KEY = MAIN_KEY;
+/** 저장 칸 바꾸기 (true = 테스트 캐릭터) */
+export function useTestSlot(test: boolean): void {
+  KEY = test ? TEST_KEY : MAIN_KEY;
+}
+export function isTestSlot(): boolean {
+  return KEY === TEST_KEY;
+}
 export const DIM_BAG_START = 4;
 export const DIM_BAG_MAX = 12;
 
