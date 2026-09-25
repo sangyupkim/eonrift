@@ -2,7 +2,7 @@ import { bustUrl, itemIconUrl, skillIconUrl } from '../ui/itemIcons';
 import { decodeSave, encodeSave } from './saveCode';
 import { makeTestSave } from './testSave';
 import { gearLook } from '../models/items';
-import { BOSS_RESPAWN_MS, BOSS_TIME_LIMIT, FARM_COOLDOWN_MS, FARM_NAMES } from '../data/monsters';
+import { BOSS_RESPAWN_MS, BOSS_TIME_LIMIT, FARM_COOLDOWN_MS, FARM_NAMES, playerDefK } from '../data/monsters';
 import { DEBUFF_INFO, type DebuffId, type DebuffSpec } from '../data/species';
 import { newTool, TOOL_KIND_NAMES, TOOL_TIER_NAMES, toolBonusChance, toolName, toolSpeed, toolWear, type ToolKind } from '../data/tools';
 import { MeshLambertMaterial, OrthographicCamera, PCFShadowMap, Plane, Raycaster, Vector2, Vector3, WebGLRenderer } from 'three';
@@ -19,7 +19,7 @@ import { essenceForTier, ITEMS, TIER_PLATE, ORE_TIERS, TIER_MANA_PLATE } from '.
 import { QUEST_BY_ID, type NpcRef, type QuestDef } from '../data/quests';
 import type { Step } from '../data/story';
 import { moveWithCollision } from '../dungeon/collision';
-import { generateDungeon, type GenOptions, isFloor, type FarmKind } from '../dungeon/generator';
+import { generateDungeon, generateTowerFloor, type GenOptions, isFloor, type FarmKind } from '../dungeon/generator';
 import { Factory, MACHINE_TYPES, RECIPE_BY_ID, type BuildingState, type Dir } from '../factory/sim';
 import { BuildBar } from '../ui/buildbar';
 import { Dialogue } from '../ui/dialogue';
@@ -35,8 +35,8 @@ import { objectiveNeed, objectiveProgress, Quests } from './Quests';
 import { bonusText, FOOD_MINUTES, FOODS, TITLES, type BonusKey } from '../data/bonus';
 import { hasStory, objective, questLines, scriptFor } from './Story';
 import { todayKey } from './Quests';
-import { rushEntry, riftEntry, AFFIXES, riftAffixes, riftLuck, riftMult, riftReward, riftYield, RIFT_TIME, rushGrade, rushReward, RUSH_DIFFS, RUSH_ORDER, DUST, formatClock, newTrial, rollTrialWeek, trialGrade, TRIAL_GRADES, trialScore, trialSpec, TRIAL_TIME, weekKey, type TrialRecord, towerBoss, towerDaily, towerFirstClear, towerMult, towerTheme, type EndRun } from '../data/endgame';
-import { DungeonScene, type DungeonMods, type NodeInstance } from './scenes/DungeonScene';
+import { END_NAMES, endLock, type EndContent, rushEntry, riftEntry, AFFIXES, riftAffixes, riftLuck, riftMult, riftReward, RIFT_NODE_MULT, RIFT_TIME, rushFights, rushFightName, rushGrade, rushReward, RUSH_DIFFS, DUST, formatClock, newTrial, rollTrialWeek, trialGrade, TRIAL_GRADES, trialScore, trialSpec, TRIAL_TIME, weekKey, type TrialRecord, towerBoss, towerDaily, towerFirstClear, towerMult, towerTheme, type EndRun } from '../data/endgame';
+import { DungeonScene, type DungeonMods, type NodeInstance, type WaveSpec } from './scenes/DungeonScene';
 import { HomeScene } from './scenes/HomeScene';
 import type { Interactable, Level } from './scenes/Level';
 import { NPCS, VillageScene, type NpcId, type VillageSpot } from './scenes/VillageScene';
@@ -384,6 +384,7 @@ export class Game {
     // 차원집을 떠나면 치유석은 쉰다 (전력을 쓰지 않는다)
     for (const b of this.factory.state.buildings) if (b.type === 'healer') b.active = false;
     this.level = level;
+    this.hud.setWave(0, 0, false, true);
     // 차원집 안에서는 일반 창고의 재료도 가진 것으로 친다
     this.progress.atHome = level instanceof HomeScene;
     this.buildMode(false);
@@ -441,11 +442,16 @@ export class Game {
 
   private enterVillage(arrival: 'portal' | 'home' | 'start' | { x: number; z: number; facing: number }): void {
     const p = this.progress;
+    const endOn = p.flag('endgame') > 0;
     const village = new VillageScene(
       (spot) => this.interactVillage(spot),
       (id) => id !== 'stranger' || p.stoneCount >= 4,
       p.flag('home') > 0,
       arrival,
+      {
+        show: endOn,
+        locked: endOn ? Object.fromEntries((['tower', 'rush', 'rift', 'trial'] as EndContent[]).map((c) => [c, endLock(p.data.end!, c) ?? undefined])) : {},
+      },
     );
     this.loadLevel(village, false);
     this.run = null;
@@ -472,11 +478,15 @@ export class Game {
     const boss = resuming?.bossKilled ? 'none' : wait > 0 ? 'guard' : 'present';
     let data;
     let mods: DungeonMods = {};
+    let extraBosses: { tier: number; kind: 'midboss' | 'boss' }[] = [];
+    let waves: WaveSpec[] = [];
     if (end) {
       const e = this.endLayout(end);
+      extraBosses = e.extraBosses ?? [];
       tier = e.tier;
       stage = e.stage;
-      data = generateDungeon(e.seed ?? randomSeed(), tier, stage, e.gen);
+      data = e.gen.tower ? generateTowerFloor(randomSeed(), tier) : generateDungeon(e.seed ?? randomSeed(), tier, stage, e.gen);
+      waves = e.waves ?? [];
       mods = e.mods;
     } else data = generateDungeon(randomSeed(), tier, stage, farm ? { farm } : { boss });
     // 채집 특화 맵은 들어갈 때 30분 대기가 시작된다 (이어 하기는 제외)
@@ -506,6 +516,15 @@ export class Game {
         this.audio.play('portal');
       },
     });
+    if (waves.length) dungeon.startWaves(waves);
+    // 보스 러시 하드·지옥: 보스 자리 곁에 다른 보스들
+    if (extraBosses.length && dungeon.boss) {
+      const b0 = dungeon.boss;
+      extraBosses.forEach((b, i) => {
+        const a = Math.PI + (i + 1) * ((Math.PI * 2) / (extraBosses.length + 1));
+        dungeon.spawnBoss(b.kind, b.tier, b0.x + Math.cos(a) * 3.2, b0.z + Math.sin(a) * 3.2);
+      });
+    }
     this.bossTime = 0;
     this.timeOver = false;
     this.ambush = null;
@@ -854,6 +873,18 @@ export class Game {
       case 'storage':
         this.openStorage();
         break;
+      case 'tower':
+      case 'rush':
+      case 'rift':
+      case 'trial': {
+        const lock = endLock(p.data.end!, spot);
+        if (lock) {
+          this.hud.toast(`${END_NAMES[spot]}: ${lock}`, 3000);
+          break;
+        }
+        this.openEndgameMenu(spot);
+        break;
+      }
       default:
         this.talk(spot);
     }
@@ -874,7 +905,7 @@ export class Game {
           this.afterMenu = () => this.enterDungeon(t, 1, false, kind);
           this.screens.close();
         },
-        () => this.openEndgameMenu(),
+        () => this.openEndgameMenu('rift'),
       ),
     );
   }
@@ -1157,7 +1188,7 @@ export class Game {
 
   // =============== 차원의 끝 (엔드 콘텐츠) ===============
   /** 엔드 콘텐츠 한 판의 맵과 몬스터 배율 */
-  private endLayout(end: EndRun): { tier: number; stage: number; gen: GenOptions; mods: DungeonMods; seed?: number } {
+  private endLayout(end: EndRun): { tier: number; stage: number; gen: GenOptions; mods: DungeonMods; seed?: number; extraBosses?: { tier: number; kind: 'midboss' | 'boss' }[]; waves?: WaveSpec[] } {
     switch (end.kind) {
       case 'trial': {
         // 주간 시련: 이번 주 모두 같은 맵·변이. 몬스터는 7단계 기준 고정
@@ -1168,27 +1199,36 @@ export class Game {
           stage: 10,
           seed: t.seed,
           gen: { boss: 'present', rooms: [6, 7], eliteChance: a.includes('elite') ? 0.15 : 0 },
-          mods: { statTier: 7, statStage: 10, hp: 1.4 * (a.includes('fortified') ? 1.3 : 1), atk: 1.4 * (a.includes('enraged') ? 1.25 : 1), speed: a.includes('haste') ? 1.2 : 1, affixes: a },
+          mods: { statTier: 7, statStage: 10, hp: 1.4 * (a.includes('fortified') ? 1.3 : 1), atk: 2.2 * (a.includes('enraged') ? 1.25 : 1), speed: a.includes('haste') ? 1.2 : 1, affixes: a },
         };
       }
       case 'tower': {
+        // 둥근 단 하나에서 웨이브 3번. 5·10층은 마지막 웨이브에 보스
         const b = towerBoss(end.floor);
         const m = towerMult(end.floor);
+        const more = Math.min(6, Math.floor(end.floor / 10));
         return {
           tier: b ? b.tier : towerTheme(end.floor),
-          stage: b ? (b.kind === 'boss' ? 10 : 5) : 3,
-          gen: { boss: 'present', rooms: b ? [3, 4] : [4, 5] },
-          mods: { statTier: 7, statStage: 1, hp: m, atk: m },
+          stage: 1,
+          gen: { tower: true },
+          mods: { statTier: 7, statStage: 10, hp: m, atk: m },
+          waves: [
+            { normals: 8 + more, elites: end.floor >= 20 ? 1 : 0 },
+            { normals: 7 + more, elites: 2 },
+            b ? { normals: 4, elites: 0, bosses: [b] } : { normals: 6 + more, elites: 3 },
+          ],
         };
       }
       case 'rush': {
-        const r = RUSH_ORDER[end.index];
+        // 한 전투의 보스들: 첫 보스가 맵의 보스 자리, 나머지는 곁에 함께 나온다
+        const [first, ...rest] = rushFights(end.diff)[end.index];
         const d = RUSH_DIFFS[end.diff];
         return {
-          tier: r.tier,
-          stage: r.kind === 'boss' ? 10 : 5,
+          tier: first.tier,
+          stage: first.kind === 'boss' ? 10 : 5,
           gen: { boss: 'present', rooms: [2, 2] },
-          mods: { ...(d.statTier ? { statTier: 7 } : {}), hp: d.hp, atk: d.atk },
+          mods: { statTier: 7, statStage: 10, hp: d.hp, atk: d.atk },
+          extraBosses: rest,
         };
       }
       case 'rift': {
@@ -1197,8 +1237,8 @@ export class Game {
         return {
           tier: end.tier,
           stage: 4,
-          gen: { boss: 'present', rooms: [5, 6], monsterMult: a.includes('swarm') ? 1.4 : 1, eliteChance: a.includes('elite') ? 0.15 : 0 },
-          mods: { statTier: 7, statStage: 1, hp: m * (a.includes('fortified') ? 1.3 : 1), atk: m * (a.includes('enraged') ? 1.25 : 1), speed: a.includes('haste') ? 1.2 : 1, affixes: a },
+          gen: { boss: 'present', rooms: [5, 6], monsterMult: a.includes('swarm') ? 1.4 : 1, eliteChance: a.includes('elite') ? 0.15 : 0, nodeMult: RIFT_NODE_MULT },
+          mods: { statTier: 7, statStage: 10, hp: m * (a.includes('fortified') ? 1.3 : 1), atk: m * (a.includes('enraged') ? 1.25 : 1), speed: a.includes('haste') ? 1.2 : 1, affixes: a },
         };
       }
     }
@@ -1207,7 +1247,7 @@ export class Game {
   private endLabel(end: EndRun, theme: string): string {
     if (end.kind === 'trial') return `주간 차원 시련 · ${theme} · :hourglass: ${formatClock(Math.max(0, TRIAL_TIME - (this.run?.time ?? 0)))} · 피격 ${end.hits}`;
     if (end.kind === 'tower') return `무한의 탑 ${end.floor}층 · ${theme}`;
-    if (end.kind === 'rush') return `보스 러시 ${RUSH_DIFFS[end.diff].name} ${end.index + 1}/${RUSH_ORDER.length}`;
+    if (end.kind === 'rush') return `보스 러시 ${RUSH_DIFFS[end.diff].name} ${end.index + 1}/${rushFights(end.diff).length}`;
     const t = Math.max(0, Math.ceil(end.timeLeft));
     return `심연 균열 ${end.level}단계 · ${theme} · :hourglass: ${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
   }
@@ -1220,8 +1260,7 @@ export class Game {
       return `무한의 탑 ${end.floor}층 — 몬스터 ×${towerMult(end.floor).toFixed(2)}${b ? ` · ${b.kind === 'boss' ? '수호자' : '파수꾼'}가 기다립니다` : ''}${end.floor > 10 && end.floor % 10 === 1 ? ' · :warning: 새 구간: 몬스터가 한꺼번에 강해졌다' : ''}`;
     }
     if (end.kind === 'rush') {
-      const r = RUSH_ORDER[end.index];
-      return `보스 러시 ${end.index + 1}/${RUSH_ORDER.length} — ${r.tier}단계 ${r.kind === 'boss' ? '수호자' : '파수꾼'}`;
+      return `보스 러시 ${end.index + 1}/${rushFights(end.diff).length} — ${rushFightName(rushFights(end.diff)[end.index])}`;
     }
     const aff = end.affixes.map((a) => AFFIXES[a].name).join(' · ');
     return `심연 균열 ${end.level}단계 — ${Math.floor(RIFT_TIME / 60)}분 안에 모두 쓰러뜨리자${aff ? ` · 변이: ${aff}` : ''}`;
@@ -1238,7 +1277,10 @@ export class Game {
   }
 
   /** 차원의 끝: 콘텐츠 고르기 */
-  private openEndgameMenu(message?: string): void {
+  private endView: EndContent = 'tower';
+  private openEndgameMenu(view: EndContent | null = null, message?: string): void {
+    if (view) this.endView = view;
+    const only = this.endView;
     const p = this.progress;
     const e = p.data.end!;
     this.rushUsedToday();
@@ -1259,13 +1301,13 @@ export class Game {
             if (r.dust) p.add(DUST, r.dust);
             this.audio.play('coin');
             this.saveNow();
-            this.openEndgameMenu(`탑 소탕 보상: +${r.gold} G${r.dust ? ` · 차원 가루 ${r.dust}개` : ''}`);
+            this.openEndgameMenu(null, `탑 소탕 보상: +${r.gold} G${r.dust ? ` · 차원 가루 ${r.dust}개` : ''}`);
           },
           rush: (diff) => {
             if (diff > 0 && !e.rushGradeBest[diff - 1]) return;
             const used = this.rushUsedToday();
             const cost = rushEntry(diff, used);
-            if (!p.hasAll(cost)) return this.openEndgameMenu(`입장 재료가 부족합니다: ${Object.entries(cost).map(([id, n]) => `${ITEMS[id].name} ${n}개`).join(', ')}`);
+            if (!p.hasAll(cost)) return this.openEndgameMenu(null, `입장 재료가 부족합니다: ${Object.entries(cost).map(([id, n]) => `${ITEMS[id].name} ${n}개`).join(', ')}`);
             p.takeAll(cost);
             if (diff < 2) e.rushUsed = used + 1;
             this.saveNow();
@@ -1279,12 +1321,12 @@ export class Game {
             p.data.aura = g;
             this.applyAura();
             this.saveNow();
-            this.openEndgameMenu(g < 0 ? '오라를 껐습니다' : `발밑 오라: ${TRIAL_GRADES[g].aura}`);
+            this.openEndgameMenu(null, g < 0 ? '오라를 껐습니다' : `발밑 오라: ${TRIAL_GRADES[g].aura}`);
           },
           rift: (tier, level) => {
             if (level > e.riftBest + 1 || tier > p.maxTier) return;
             const cost = riftEntry(level);
-            if (p.count(cost.id) < cost.n) return this.openEndgameMenu(`심연 균열 ${level}단계에 들어가려면 ${ITEMS[cost.id].name} ${cost.n}개가 필요합니다 (차원집 제작대)`);
+            if (p.count(cost.id) < cost.n) return this.openEndgameMenu(null, `심연 균열 ${level}단계에 들어가려면 ${ITEMS[cost.id].name} ${cost.n}개가 필요합니다 (차원집 제작대)`);
             p.take(cost.id, cost.n);
             this.saveNow();
             this.afterMenu = () => this.enterDungeon(tier, 1, false, undefined, { kind: 'rift', tier, level, affixes: riftAffixes(level, todayKey()), timeLeft: RIFT_TIME });
@@ -1293,6 +1335,8 @@ export class Game {
         },
         () => this.resume(),
         message,
+        undefined,
+        only,
       ),
     );
   }
@@ -1399,7 +1443,7 @@ export class Game {
       return `${end.floor}층 돌파`;
     }
     if (end.kind === 'rush') {
-      if (end.index < RUSH_ORDER.length - 1) return `${end.index + 1}/${RUSH_ORDER.length} 격파 (경과 ${formatClock(this.run!.time)})`;
+      if (end.index < rushFights(end.diff).length - 1) return `${end.index + 1}/${rushFights(end.diff).length} 격파 (경과 ${formatClock(this.run!.time)})`;
       const secs = this.run!.time;
       const grade = rushGrade(secs);
       const r = rushReward(end.diff, grade);
@@ -1459,11 +1503,17 @@ export class Game {
   }
 
   /** 플레이어가 맞는다. 실제로 들어간 피해를 돌려준다. dot: 독 웅덩이처럼 무적 시간 없이 조금씩 */
+  /** 방어 기준값: 지금 던전의 (능력치) 단계 */
+  private defK(): number {
+    const lv = this.level;
+    return playerDefK(lv instanceof DungeonScene ? (lv.mods.statTier ?? lv.grid.tier) : 1);
+  }
+
   private hurtPlayer(dmg: number, fx: number, fz: number, debuff?: DebuffSpec, dot = false): number {
     const pl = this.player;
     if (this.mode !== 'play' || !pl.alive) return 0;
     if (dot) {
-      const d = Math.max(1, Math.round(dmg * (60 / (60 + this.buffedStats().def))));
+      const d = Math.max(1, Math.round(dmg * (this.defK() / (this.defK() + this.buffedStats().def))));
       pl.inCombat();
       pl.hurtDot(d);
       const s = this.toScreen(pl.position.x, 2, pl.position.z);
@@ -1496,7 +1546,7 @@ export class Game {
       this.hud.floatText(head.x, head.y, '회피', '#c8ffb0', 'small');
       return 0;
     }
-    let final = Math.max(1, Math.round(dmg * (0.9 + Math.random() * 0.2) * (60 / (60 + st.def))));
+    let final = Math.max(1, Math.round(dmg * (0.9 + Math.random() * 0.2) * (this.defK() / (this.defK() + st.def))));
     if (pl.buff('ironwall')) final = Math.max(1, Math.round(final * 0.6));
     if (pl.buff('smoke')) final = Math.max(1, Math.round(final * 0.5));
     // 마나 실드: 피해의 60%를 MP로 받는다 (MP가 모자라면 남은 만큼만)
@@ -1807,10 +1857,9 @@ export class Game {
       if (end.kind === 'tower') {
         next = { kind: 'tower', floor: end.floor + 1 };
         nextLabel = `${end.floor + 1}층`;
-      } else if (end.kind === 'rush' && end.index < RUSH_ORDER.length - 1) {
+      } else if (end.kind === 'rush' && end.index < rushFights(end.diff).length - 1) {
         next = { ...end, index: end.index + 1 };
-        const r = RUSH_ORDER[end.index + 1];
-        nextLabel = `${r.tier}단계 ${r.kind === 'boss' ? '수호자' : '파수꾼'}`;
+        nextLabel = rushFightName(rushFights(end.diff)[end.index + 1]);
       }
       this.openMenu(() =>
         this.screens.warp(
@@ -1821,7 +1870,7 @@ export class Game {
             this.screens.close();
           },
           () => {
-            this.afterMenu = () => this.finishRun(end.kind === 'rush' && end.index < RUSH_ORDER.length - 1 ? '보스 러시 포기' : '귀환 성공');
+            this.afterMenu = () => this.finishRun(end.kind === 'rush' && end.index < rushFights(end.diff).length - 1 ? '보스 러시 포기' : '귀환 성공');
             this.screens.close();
           },
           () => this.resume(),
@@ -1919,13 +1968,7 @@ export class Game {
     const drops = this.level.hitNode(n);
     // 강화한 도구는 확률적으로 하나 더 캔다
     if (n.def.style !== 'chest' && drops.length && Math.random() < toolBonusChance(this.progress.data.tools[n.def.style === 'tree' ? 'axe' : 'pickaxe'])) drops.push({ itemId: drops[0].itemId, count: 1 });
-    // 심연 균열: 단계가 높을수록 자원이 더 많이 나온다
-    const endRun = this.run.end;
-    if (endRun?.kind === 'rift' && n.def.style !== 'chest')
-      for (const d of drops) {
-        const f = d.count * (riftYield(endRun.level) - 1);
-        d.count += Math.floor(f) + (Math.random() < f % 1 ? 1 : 0);
-      }
+
     for (const drop of drops) {
       const added = this.run.bag.add(drop.itemId, drop.count);
       const item = ITEMS[drop.itemId];
@@ -2504,6 +2547,8 @@ export class Game {
     }
     if (this.ambush && this.ambush.monsters.every((m) => !m.alive)) this.ambushReward();
     if (level instanceof DungeonScene && this.run) {
+      // 보스가 여럿이면 (보스 러시) 쓰러진 보스 다음으로 살아 있는 보스를 보여 준다
+      if (level.boss && !level.boss.alive) level.boss = level.monsters.find((m) => m.alive && m.isBoss) ?? level.boss;
       const boss = level.boss;
       if (boss && boss.alive && boss.aggro) {
         // 보스 제한 시간: 싸움이 시작되면 흐른다
@@ -2534,6 +2579,7 @@ export class Game {
           this.hud.toast(':hourglass: 시간 초과! 끝까지 정리하면 보상은 절반, 다음 단계는 열리지 않습니다', 4000);
         }
       }
+      if (level.waves.length) this.hud.setWave(Math.max(1, level.waveIndex), level.waves.length, level.exitOpen);
       if (!this.run.roomCleared && level.exitOpen) this.roomClear();
     }
     this.updateMap(dt);

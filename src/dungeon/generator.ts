@@ -63,6 +63,8 @@ export interface DungeonData {
   nodes: NodeSpawn[];
   monsters: MonsterSpawn[];
   decor: DecorSpawn[];
+  /** 무한의 탑 층 (둥근 단 하나, 몬스터는 웨이브로) */
+  tower?: boolean;
 }
 
 export function cellAt(d: Pick<DungeonData, 'width' | 'height' | 'cells'>, x: number, y: number): number {
@@ -90,6 +92,10 @@ export interface GenOptions {
   monsterMult?: number;
   /** 일반 몬스터가 정예로 나올 확률 (균열 '정예 군단') */
   eliteChance?: number;
+  /** 채집물 수 배율 (균열은 적게) */
+  nodeMult?: number;
+  /** 무한의 탑 층 (generateTowerFloor로 만든다) */
+  tower?: boolean;
 }
 export type FarmKind = 'wood' | 'ore';
 
@@ -301,7 +307,7 @@ function tryGenerate(rng: Rng, seed: number, tier: number, stage: number, opts: 
   }
   for (const r of rooms) {
     const [min, max] = nodeCount[r.type];
-    const count = rng.int(min, max);
+    const count = Math.round(rng.int(min, max) * (opts.nodeMult ?? 1));
     for (let i = 0; i < count; i++) {
       const cell = pickInteriorCell(r, 1);
       if (!cell) break;
@@ -382,6 +388,35 @@ function tryGenerate(rng: Rng, seed: number, tier: number, stage: number, opts: 
   }
 
   return { seed, tier, stage, width, height, cells, rooms, roomIndex, start, exit, nodes, monsters, decor };
+}
+
+/**
+ * 무한의 탑 한 층: 둥근 단 하나. 가장자리는 탑의 벽, 가운데에 위층으로 오르는 문.
+ * 몬스터는 배치하지 않는다 (웨이브로 나온다)
+ */
+export function generateTowerFloor(seed: number, tier: number): DungeonData {
+  const rng = new Rng(seed);
+  const size = 21;
+  const c = (size - 1) / 2;
+  const r = 8.6;
+  const cells = new Uint8Array(size * size);
+  const roomIndex = new Int16Array(size * size).fill(-1);
+  for (let y = 0; y < size; y++)
+    for (let x = 0; x < size; x++)
+      if (Math.hypot(x - c, y - c) <= r) {
+        cells[y * size + x] = CELL_FLOOR;
+        roomIndex[y * size + x] = 0;
+      }
+  const theme = themeForTier(tier);
+  const decor: DecorSpawn[] = [];
+  for (let i = 0; i < 26; i++) {
+    const a = rng.range(0, Math.PI * 2);
+    const d = rng.range(2.5, r - 0.8);
+    const dk = rng.pick(theme.decor);
+    decor.push({ kind: dk.kind, color: dk.color, x: c + 0.5 + Math.cos(a) * d, y: c + 0.5 + Math.sin(a) * d, rotation: rng.range(0, Math.PI * 2), scale: rng.range(0.7, 1.2) });
+  }
+  const room: Room = { id: 0, x: 1, y: 1, w: size - 2, h: size - 2, type: 'exit' };
+  return { seed, tier, stage: 1, width: size, height: size, cells, rooms: [room], roomIndex, start: { x: c, y: c + 6 }, exit: { x: c, y: c }, nodes: [], monsters: [], decor, tower: true };
 }
 
 /** 격자 위의 최단 거리 (4방향). 도달할 수 없는 칸은 -1 */

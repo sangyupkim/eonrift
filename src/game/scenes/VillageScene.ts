@@ -20,6 +20,10 @@ import {
   buildFountain,
   buildHomeDoor,
   buildHouse,
+  buildInfiniteTower,
+  buildRiftGate,
+  buildSkullHall,
+  buildTrialHall,
   buildLamp,
   buildStall,
   buildStatue,
@@ -57,10 +61,20 @@ export interface Npc {
   facing: number;
 }
 
-export type VillageSpot = NpcId | 'portal' | 'home' | 'forge' | 'shop' | 'hall' | 'storage';
+export type VillageSpot = NpcId | 'portal' | 'home' | 'forge' | 'shop' | 'hall' | 'storage' | EndSpot;
+export type EndSpot = 'tower' | 'rush' | 'rift' | 'trial';
+
+/** 엔딩 뒤 마을에 생기는 차원의 끝 건물: 보이는지, 열렸는지 (잠겼으면 조건 문구) */
+export interface EndBuildings {
+  show: boolean;
+  locked: Partial<Record<EndSpot, string>>;
+}
 
 const W = 28;
-const H = 22;
+/** 기본 마을 높이. 엔딩 뒤에는 남쪽에 차원의 끝 구역이 붙는다 */
+const H_BASE = 22;
+const H_END = 30;
+let H = H_BASE;
 
 const toWorld = (tx: number, ty: number) => ({ x: (tx + 0.5) * TILE, z: (ty + 0.5) * TILE });
 
@@ -98,7 +112,9 @@ export class VillageScene extends Level {
     visibleNpcs: (id: NpcId) => boolean,
     homeUnlocked: boolean,
     arrival: 'portal' | 'home' | 'start' | { x: number; z: number; facing: number },
+    end: EndBuildings = { show: false, locked: {} },
   ) {
+    H = end.show ? H_END : H_BASE;
     super();
     const rng = new Rng(12345);
     this.setupLights(0x1c1a30, 0xffe8d0, 0xffe2b8, 1.8, 2.3);
@@ -225,6 +241,35 @@ export class VillageScene extends Level {
     spot('hall', 20, 5, 2.6, '직업', '직업의 전당');
     spot('storage', 11, 16, 2.2, '창고', '창고');
 
+    // 차원의 끝 (엔딩 뒤): 남쪽 구역에 탑·해골 전투장·시련장, 차원문 광장 옆에 부서진 균열문
+    if (end.show) {
+      place(buildInfiniteTower(), 6, 25, 0, 2.2, 7);
+      place(buildSkullHall(), 14, 26, 0, 2.0, 3.6);
+      place(buildTrialHall(), 22, 25, 0, 2.2, 3.2);
+      const rift = place(buildRiftGate(), 18, 2, 0, 1.6, 3);
+      this.riftGlow = new Mesh(
+        new CircleGeometry(0.9, 7),
+        new MeshBasicMaterial({ color: 0x8a4aff, transparent: true, opacity: 0.5, side: DoubleSide, blending: AdditiveBlending, depthWrite: false }),
+      );
+      this.riftGlow.position.set(rift.x, 1.4, rift.z + 0.05);
+      this.scene.add(this.riftGlow);
+      for (const [x, y] of [
+        [10, 23],
+        [18, 23],
+        [4, 28],
+        [24, 28],
+      ])
+        place(buildLamp(), x, y, 0, 0.25, 2.5);
+      const endSpot = (id: EndSpot, tx: number, ty: number, range: number, label: string, title: string) => {
+        const lock = end.locked[id];
+        spot(id, tx, ty, range, lock ? '확인' : label, lock ? `${title} (잠김)` : title);
+      };
+      endSpot('tower', 6, 27, 3.2, '입장', '무한의 탑');
+      endSpot('rush', 14, 28, 3.2, '입장', '보스 러시');
+      endSpot('trial', 22, 27, 3.2, '입장', '주간 차원 시련');
+      endSpot('rift', 18, 3.5, 3, '입장', '심연 균열');
+    }
+
     const start =
       typeof arrival === 'object'
         ? arrival
@@ -232,8 +277,14 @@ export class VillageScene extends Level {
     this.playerStart = start;
   }
 
+  private riftGlow: Mesh | null = null;
+
   update(dt: number, focus: { x: number; z: number }): void {
     super.update(dt, focus);
+    if (this.riftGlow) {
+      this.riftGlow.rotation.z -= dt * 2.4;
+      (this.riftGlow.material as MeshBasicMaterial).opacity = 0.4 + 0.15 * Math.sin(this.time * 3.1);
+    }
     this.portalSwirl.rotation.z += dt * 1.5;
     this.homeSwirl.rotation.z -= dt * 1.2;
     if (Math.random() < dt * 6) {

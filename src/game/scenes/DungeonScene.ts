@@ -15,7 +15,7 @@ import {
 import { TILE } from '../../config';
 import { Rng } from '../../core/rng';
 import { ITEMS, ORE_TIERS, WOOD_TIERS } from '../../data/items';
-import { pickSpecies, resolveSpecies, stagePool, tierFactions, type DebuffSpec, type Faction, type SpeciesDef } from '../../data/species';
+import { BOSS_SPECIES, pickSpecies, resolveSpecies, stagePool, tierFactions, type DebuffSpec, type Faction, type SpeciesDef } from '../../data/species';
 import { isFloor } from '../../dungeon/generator';
 import { NODES, resourceTier, type NodeDef } from '../../data/nodes';
 import { themeForTier, type DungeonTheme } from '../../data/themes';
@@ -62,6 +62,13 @@ export interface Drop {
 /** 던전 한 판의 조정: 몬스터 능력치 배율과 균열 변이 */
 export interface DungeonMods extends MonsterMods {
   affixes?: AffixId[];
+}
+
+/** 무한의 탑 웨이브: 일반·정예 수와 보스 */
+export interface WaveSpec {
+  normals: number;
+  elites: number;
+  bosses?: { kind: 'boss' | 'midboss'; tier: number }[];
 }
 
 export interface DungeonHooks {
@@ -162,8 +169,8 @@ export class DungeonScene extends Level {
       x: exit.x,
       z: exit.z,
       range: 3.4,
-      label: '워프',
-      title: '워프 게이트',
+      label: grid.tower ? '오르기' : '워프',
+      title: grid.tower ? '위층으로' : '워프 게이트',
       action: () => hooks.exit(),
       enabled: () => this.exitOpen,
     });
@@ -208,6 +215,14 @@ export class DungeonScene extends Level {
       i++;
     }
     return out;
+  }
+
+  /** 보스를 하나 더 부른다 (보스 러시 하드·지옥). 종족은 단계의 보스로 정해진다 */
+  spawnBoss(kind: 'boss' | 'midboss', tier: number, x: number, z: number): Monster {
+    const m = new Monster(BOSS_SPECIES[tier - 1], kind, tier, kind === 'boss' ? 10 : 5, this.mods, x, z, this.boss?.homeRoom ?? -1);
+    m.addTo(this.scene);
+    this.monsters.push(m);
+    return m;
   }
 
   spawnMonster(species: SpeciesDef, kind: Monster['kind'], x: number, z: number, room: number, aggro: boolean): Monster {
@@ -327,9 +342,60 @@ export class DungeonScene extends Level {
     make(this.grid.exit.x, this.grid.exit.y, 'exit');
   }
 
-  /** 모든 몬스터를 쓰러뜨리면 워프 게이트가 열린다 */
+  /** 모든 몬스터를 쓰러뜨리면 워프 게이트가 열린다 (웨이브가 남았으면 아직) */
   get exitOpen(): boolean {
-    return this.monsters.every((m) => !m.alive);
+    return this.waveIndex >= this.waves.length && this.monsters.every((m) => !m.alive);
+  }
+
+  // ---------------- 웨이브 (무한의 탑) ----------------
+  waves: WaveSpec[] = [];
+  /** 지금까지 나온 웨이브 수 */
+  waveIndex = 0;
+  private waveDelay = 0;
+
+  startWaves(waves: WaveSpec[]): void {
+    this.waves = waves;
+    this.waveIndex = 0;
+    this.waveDelay = 1.6;
+  }
+
+  private updateWaves(dt: number, focus: { x: number; z: number }): void {
+    if (this.waveIndex >= this.waves.length || this.monsters.some((m) => m.alive)) return;
+    this.waveDelay -= dt;
+    if (this.waveDelay > 0) return;
+    const w = this.waves[this.waveIndex++];
+    this.waveDelay = 1.8;
+    // 둥근 단 위, 플레이어에게서 조금 떨어진 곳에 나타난다
+    const cells: { x: number; z: number }[] = [];
+    for (let y = 0; y < this.grid.height; y++)
+      for (let x = 0; x < this.grid.width; x++) {
+        if (!isFloor(this.grid, x, y)) continue;
+        const p = DungeonScene.toWorld(x, y);
+        const ex = DungeonScene.toWorld(this.grid.exit.x, this.grid.exit.y);
+        if (Math.hypot(p.x - focus.x, p.z - focus.z) > 5 && Math.hypot(p.x - ex.x, p.z - ex.z) > 2.5) cells.push(p);
+      }
+    const rand = () => this.rng.next();
+    const at = () => {
+      const p = cells[Math.floor(rand() * cells.length)];
+      return { x: p.x + (rand() - 0.5) * 1.2, z: p.z + (rand() - 0.5) * 1.2 };
+    };
+    for (let i = 0; i < w.normals; i++) {
+      const p = at();
+      const m = this.spawnMonster(pickSpecies(this.grid.tier, rand, (d) => d.arch !== 'swarm', undefined, this.pool), 'normal', p.x, p.z, 0, true);
+      this.particles.burst(m.x, 0.5, m.z, this.theme.portalColor, 6, 1);
+    }
+    for (let i = 0; i < w.elites; i++) {
+      const p = at();
+      this.spawnMonster(pickSpecies(this.grid.tier, rand, (d) => d.arch !== 'swarm', undefined, this.pool), 'elite', p.x, p.z, 0, true);
+    }
+    for (const b of w.bosses ?? []) {
+      const ex = DungeonScene.toWorld(this.grid.exit.x, this.grid.exit.y - 3);
+      const m = this.spawnBoss(b.kind, b.tier, ex.x + (rand() - 0.5) * 2, ex.z);
+      m.aggro = true;
+      if (!this.boss || !this.boss.alive) this.boss = m;
+      this.effects.pillar(m.x, m.z, 0xff4a6a, 6);
+    }
+    this.hooks.announce(this.waveIndex === this.waves.length ? `마지막 웨이브! (${this.waveIndex}/${this.waves.length})` : `웨이브 ${this.waveIndex}/${this.waves.length}`);
   }
 
   /** 위치 주변에 살아 있는 몬스터가 있는지 */
@@ -403,6 +469,7 @@ export class DungeonScene extends Level {
     }
 
     this.updateAffixes(dt, focus);
+    if (this.waves.length) this.updateWaves(dt, focus);
     this.updateHazards(dt);
     this.projectiles.update(dt, {
       grid: this.grid,

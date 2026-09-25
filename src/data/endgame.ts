@@ -60,13 +60,24 @@ export function towerStartFloor(best: number): number {
 
 export type RushDiff = 0 | 1 | 2;
 export const RUSH_DIFFS = [
-  { name: '일반', desc: '각 보스가 원래 단계의 힘으로 나온다', hp: 1, atk: 1, statTier: 0 },
-  { name: '하드', desc: '모든 보스가 7단계의 힘으로 나온다', hp: 1, atk: 1, statTier: 7 },
-  { name: '지옥', desc: '7단계의 힘에 체력 ×2, 공격력 ×1.6', hp: 2, atk: 1.6, statTier: 7 },
+  { name: '일반', desc: '7단계의 힘을 가진 보스 14마리와 한 마리씩', hp: 1, atk: 1, per: 1 },
+  { name: '하드', desc: '파수꾼과 수호자 두 마리를 한꺼번에 (7전) · 체력 ×1.5 · 공격력 ×1.3', hp: 1.5, atk: 1.3, per: 2 },
+  { name: '지옥', desc: '보스 세 마리를 한꺼번에 (5전) · 체력 ×2.2 · 공격력 ×1.6', hp: 2.2, atk: 1.6, per: 3 },
 ] as const;
 
 /** 보스 러시 순서: 1단계 파수꾼 → 1단계 수호자 → … → 7단계 수호자 (14번) */
 export const RUSH_ORDER: { tier: number; kind: 'midboss' | 'boss' }[] = Array.from({ length: 14 }, (_, i) => ({ tier: Math.floor(i / 2) + 1, kind: i % 2 ? 'boss' : 'midboss' }));
+
+/** 난이도별 전투 목록: 한 전투에 나오는 보스들 (일반 1마리, 하드 2마리, 지옥 3마리씩) */
+export function rushFights(diff: RushDiff): { tier: number; kind: 'midboss' | 'boss' }[][] {
+  const per = RUSH_DIFFS[diff].per;
+  const out: { tier: number; kind: 'midboss' | 'boss' }[][] = [];
+  for (let i = 0; i < RUSH_ORDER.length; i += per) out.push(RUSH_ORDER.slice(i, i + per));
+  return out;
+}
+export function rushFightName(f: { tier: number; kind: 'midboss' | 'boss' }[]): string {
+  return f.map((b) => `${b.tier}단계 ${b.kind === 'boss' ? '수호자' : '파수꾼'}`).join(' + ');
+}
 
 /** 하루 무료 도전 횟수. 더 하려면 차원 합금 */
 export const RUSH_DAILY = 3;
@@ -139,10 +150,11 @@ export function riftEntry(level: number): { id: string; n: number } {
   return { id: level >= RIFT_ALLOY2_FROM ? ALLOY2 : ALLOY, n: RIFT_ALLOY };
 }
 
-/** 균열 채집 배율: 단계마다 +10% (광맥·나무에서 더 많이) */
-export function riftYield(level: number): number {
-  return 1 + 0.1 * level;
-}
+/**
+ * 균열은 차원 가루·장비를 파밍하는 곳이고, 자원은 기본 스테이지·채집 특화 맵에서 캔다.
+ * 그래서 균열 맵에는 광맥·나무가 30%만 나오고 채집 보너스도 없다 (입장 재료인 합금은 기본 스테이지 자원으로 만든다)
+ */
+export const RIFT_NODE_MULT = 0.3;
 
 /** 균열 클리어 보상. 시간 안에 깨면 다음 단계가 열린다 */
 export function riftReward(level: number, inTime: boolean): { gold: number; dust: number } {
@@ -303,5 +315,23 @@ export function readTrialCode(code: string): { week: string; cls: string; score:
     return { week, cls, score: Number(score), seconds: Number(secs), hits: Number(hits) };
   } catch {
     return null;
+  }
+}
+
+// ---------------- 차원의 끝 해금 순서 ----------------
+export type EndContent = 'tower' | 'rush' | 'rift' | 'trial';
+export const END_NAMES: Record<EndContent, string> = { tower: '무한의 탑', rush: '보스 러시', rift: '심연 균열', trial: '주간 차원 시련' };
+
+/** 무한의 탑 → (10층) 보스 러시 → (일반 완주) 심연 균열 → (3단계 돌파) 주간 차원 시련. 열렸으면 null, 아니면 조건 */
+export function endLock(e: EndgameState, c: EndContent): string | null {
+  switch (c) {
+    case 'tower':
+      return null;
+    case 'rush':
+      return e.towerBest >= 10 ? null : `무한의 탑 10층을 돌파하면 열립니다 (지금 ${e.towerBest}층)`;
+    case 'rift':
+      return e.rushGradeBest[0] ? null : '보스 러시 일반을 한 번 완주하면 열립니다';
+    case 'trial':
+      return e.riftBest >= 3 ? null : `심연 균열 3단계를 돌파하면 열립니다 (지금 ${e.riftBest}단계)`;
   }
 }

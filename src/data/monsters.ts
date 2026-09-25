@@ -87,6 +87,20 @@ export function tierScale(tier: number, stage: number): { hp: number; atk: numbe
 }
 
 /**
+ * 몬스터 공격력 배율 (단계별). 예전에는 높은 단계일수록 방어력에 막혀 한 대가 체력의 1%도 안 되었다.
+ * 그 단계 장비 기준으로 일반 몬스터 한 대 ≈ 체력 3~5%(앞쪽 방) ~ 7~9%(깊은 방), 보스 기본 공격 ≈ 12~25%.
+ */
+export function monsterAtkMult(tier: number): number {
+  return 1.6 + 0.25 * (Math.min(7, Math.max(1, tier)) - 1);
+}
+
+/** 플레이어 방어 계산의 기준값 (단계별): 받는 피해 = 피해 × K / (K + 방어력). 단계가 오를수록 커져 방어력이 그 단계에 맞게 작동한다 */
+const DEF_K = [150, 150, 160, 180, 210, 250, 300];
+export function playerDefK(tier: number): number {
+  return DEF_K[Math.min(7, Math.max(1, Math.round(tier))) - 1];
+}
+
+/**
  * 엔드 콘텐츠(무한의 탑·보스 러시·심연 균열)용 몬스터 능력치 조정.
  * statTier/statStage: 능력치를 이 단계·방 기준으로 (모습·패턴은 원래 단계 그대로), hp/atk/speed: 추가 배율
  */

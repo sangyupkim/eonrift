@@ -2773,3 +2773,19 @@ img.mico-inline {
 .aura-btn.on { border-color: var(--c); box-shadow: 0 0 10px var(--c) inset; }
 /* 타이틀 왼쪽 위 숨은 입구 (테스트 캐릭터) */
 .secret-spot { position: absolute; left: 0; top: 0; width: 72px; height: 72px; z-index: 5; background: transparent; -webkit-tap-highlight-color: transparent; }
+/* 무한의 탑 웨이브 표시 */
+.wave-bar { position: absolute; top: calc(6px + var(--safe-top)); left: 50%; transform: translateX(-50%); pointer-events: none; text-align: center; color: #fff; text-shadow: 0 2px 4px #000; }
+.wave-bar.hidden { display: none; }
+.wave-bar b { font-size: 20px; letter-spacing: 2px; }
+.wave-bar.clear b { color: #7aff9a; }
+.wave-dots { display: flex; gap: 6px; justify-content: center; margin-top: 2px; }
+.wave-dots em { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.5); font-size: 11px; font-weight: bold; color: #fff; background: rgba(0, 0, 0, 0.45); }
+.wave-dots em.now { border-color: #ffd23a; color: #ffd23a; }
+.wave-dots em.done { border-color: #7aff9a; background: rgba(122, 255, 154, 0.35); }
+/* 좌상단 상태: 초상화·체력바 칸은 고정. 긴 위치 이름·목표는 칸을 넓히지 않고 옆으로 넘친다 (체력바가 밀리지 않게) */
+.status { grid-template-columns: 58px 150px; }
+.status .info-row { width: max-content; max-width: calc(100vw - 240px); }
+.status .objective { width: max-content; max-width: 300px; }
+.status .tier-label { white-space: nowrap; }
+
+.has-wave .boss-bar { top: calc(62px + var(--safe-top)); }

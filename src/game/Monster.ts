@@ -10,7 +10,7 @@ import {
   Quaternion,
   Scene,
 } from 'three';
-import { ARCHETYPES, tierScale, type Archetype, type ArchetypeDef, type MonsterMods } from '../data/monsters';
+import { ARCHETYPES, monsterAtkMult, tierScale, type Archetype, type ArchetypeDef, type MonsterMods } from '../data/monsters';
 import { BOSS_SPECIES, MIDBOSS_SPECIES, type DebuffSpec, type SpeciesDef } from '../data/species';
 import { moveWithCollision, type CircleObstacle } from '../dungeon/collision';
 import { TILE } from '../config';
@@ -168,7 +168,7 @@ export class Monster {
     // 중간보스 5줄 (3줄을 깎으면 보호막), 수호자 7줄 (3줄·5줄에서 보호막)
     this.bars = kind === 'boss' ? 7 : kind === 'midboss' ? 5 : 1;
     this.gimmickAt = kind === 'boss' ? [4, 2] : kind === 'midboss' ? [2] : [];
-    this.atk = this.def.atk * scale.atk * mult.atk * (mods.atk ?? 1);
+    this.atk = this.def.atk * scale.atk * mult.atk * (mods.atk ?? 1) * monsterAtkMult(mods.statTier ?? tier);
     this.defense = (boss ? 6 : this.def.def) * scale.def;
     this.speed = this.def.speed * (boss ? 0.95 : 1) * (mods.speed ?? 1);
     this.radius = this.def.radius * mult.size;

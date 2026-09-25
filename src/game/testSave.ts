@@ -59,6 +59,6 @@ export function makeTestSave(): SaveData {
   d.tools = { pickaxe: { ...newTool(7), plus: 10 }, axe: { ...newTool(7), plus: 10 } };
   d.factory = { sizeLevel: FACTORY_SIZES.length - 1, buildings: [] };
   // 균열 11단계(상급 합금)와 보스 러시 지옥까지 바로 시험할 수 있게
-  d.end = { ...newEndgame(), riftBest: 10, rushGradeBest: ['B', 'B', ''], rushBest: [1200, 1200, 0] };
+  d.end = { ...newEndgame(), towerBest: 10, riftBest: 10, rushGradeBest: ['B', 'B', ''], rushBest: [1200, 1200, 0] };
   return parseSave(JSON.stringify(d))!;
 }

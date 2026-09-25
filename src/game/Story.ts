@@ -22,7 +22,7 @@ export function objective(p: Progress, quests: Quests): string {
   if (stones >= 3 && !f('smith3')) return '대장장이 고른과 이야기하자';
   if (stones >= 4 && !p.data.unlockedClasses.includes('archer')) return '마을 남서쪽의 수상한 인물을 찾아가자';
   if (stones < 7) return `${stones + 1}-10의 수호자를 쓰러뜨리자 (차원석 ${stones}/7)`;
-  if (f('endgame')) return '차원문 광장의 "차원의 끝"에서 무한의 탑 · 보스 러시 · 심연 균열에 도전하자';
+  if (f('endgame')) return '마을 남쪽 "차원의 끝"의 무한의 탑에 도전하자 (탑 → 보스 러시 → 심연 균열 → 주간 시련 순서로 열림)';
   if (!f('resonatorHint')) return '마공학자 세라와 이야기하자';
   if (p.count('resonator') === 0) return '차원집 제작대(조립 탭)에서 차원석 공명 장치를 만들자';
   return '촌장 에단에게 공명 장치를 가져가자';

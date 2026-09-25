@@ -309,7 +309,24 @@ export class Hud {
   }
 
   setLocation(text: string, color: number): void {
-    this.locationEl.innerHTML = `<i style="background:#${color.toString(16).padStart(6, '0')}"></i>${text}`;
+    const html = `<i style="background:#${color.toString(16).padStart(6, '0')}"></i>${richText(text)}`;
+    if (this.locationEl.innerHTML !== html) this.locationEl.innerHTML = html;
+  }
+
+  private waveEl: HTMLDivElement | null = null;
+  /** 웨이브 표시 (무한의 탑): 화면 위 가운데. null이면 숨김 */
+  setWave(cur: number, total: number, cleared = false, hide = false): void {
+    if (!this.waveEl) {
+      this.waveEl = el('div', 'wave-bar hidden');
+      this.root.appendChild(this.waveEl);
+    }
+    this.waveEl.classList.toggle('hidden', hide);
+    this.root.classList.toggle('has-wave', !hide);
+    if (hide) return;
+    const dots = Array.from({ length: total }, (_, i) => `<em class="${i < cur - 1 || cleared ? 'done' : i === cur - 1 ? 'now' : ''}">${i + 1}</em>`).join('');
+    const html = `<b>${cleared ? 'CLEAR' : `WAVE ${cur}`}</b><div class="wave-dots">${dots}</div>`;
+    if (this.waveEl.innerHTML !== html) this.waveEl.innerHTML = html;
+    this.waveEl.classList.toggle('clear', cleared);
   }
 
   private buffEl!: HTMLDivElement;
