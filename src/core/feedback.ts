@@ -1,11 +1,11 @@
 /**
  * 의견함: 게임 안에서 쓴 의견을 구글 스프레드시트(앱스 스크립트 웹 앱)로 보낸다.
- * 한 사람당 10분에 한 번, 500자까지.
+ * 한 사람당 30초에 한 번, 500자까지.
  */
 export const FEEDBACK_URL = 'https://script.google.com/macros/s/AKfycbzi7ZgPeylLIPiPTGutrl6t6dXJoWJSAt2c8iqlgyPLxAa6QzeJnVvAGiTVq6SfhZXw/exec';
 export const FEEDBACK_MAX = 500;
 export const FEEDBACK_NAME_MAX = 20;
-export const FEEDBACK_COOLDOWN_MS = 10 * 60 * 1000;
+export const FEEDBACK_COOLDOWN_MS = 30 * 1000;
 export const FEEDBACK_KINDS = ['버그', '밸런스', '건의', '칭찬', '기타'] as const;
 
 const LAST_KEY = 'nonamerpg-feedback-last';
@@ -59,7 +59,7 @@ export interface FeedbackInfo {
 /** 보내기 결과: 실패하면 원인 (화면에 보여 준다) */
 export type FeedbackResult = { ok: true } | { ok: false; reason: string };
 
-/** 보내기. 성공하면 보낸 시각을 기억해 10분 동안 막는다 */
+/** 보내기. 성공하면 보낸 시각을 기억해 30초 동안 막는다 */
 export async function sendFeedback(kind: string, name: string, message: string, info: FeedbackInfo): Promise<FeedbackResult> {
   const body = JSON.stringify({
     kind,
@@ -83,7 +83,8 @@ export async function sendFeedback(kind: string, name: string, message: string, 
     } catch {
       j = null;
     }
-    if (j?.ok || j?.error === 'too_fast') result = { ok: true };
+    if (j?.ok) result = { ok: true };
+    else if (j?.error === 'too_fast') result = { ok: false, reason: '너무 자주 보냈습니다. 30초 뒤에 다시 보내 주세요' };
     else if (j) result = { ok: false, reason: `시트 스크립트 오류: ${j.error ?? '알 수 없음'}` };
     else if (!res.ok) result = { ok: false, reason: `HTTP ${res.status}` };
     // JSON이 아닌 응답 (구글 로그인 화면·오류 페이지): 웹 앱 접근 권한이 '모든 사용자'가 아니거나 배포가 안 된 경우

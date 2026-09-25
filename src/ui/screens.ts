@@ -523,9 +523,13 @@ export class Screens {
     let text = '';
     let status = '';
     let sending = false;
+    let timer = 0;
     const render = () => {
       const wait = feedbackWait();
-      const mins = Math.ceil(wait / 60000);
+      const secs = Math.ceil(wait / 1000);
+      // 기다리는 시간이 끝나면 버튼을 다시 켠다
+      window.clearTimeout(timer);
+      if (wait > 0) timer = window.setTimeout(() => this.current?.classList.contains('feedback') && !sending && render(), wait + 100);
       const s = this.open(
         'feedback',
         `<div class="panel">
@@ -535,7 +539,7 @@ export class Screens {
            <label class="fb-label">이름 <input class="fb-name" maxlength="${FEEDBACK_NAME_MAX}" placeholder="닉네임 (필수)" value="${name.replace(/"/g, '&quot;')}"/></label>
            <textarea class="fb-text" maxlength="${FEEDBACK_MAX}" placeholder="버그, 어려웠던 점, 바라는 점… 무엇이든 적어 주세요">${text.replace(/</g, '&lt;')}</textarea>
            <div class="fb-foot"><small class="dim"><span data-count>${text.length}</span>/${FEEDBACK_MAX}자 · 버전·직업·레벨·기기 정보가 함께 보내집니다</small>
-             <button class="primary" data-a="send" ${wait > 0 || sending ? 'disabled' : ''}>${sending ? '보내는 중…' : wait > 0 ? `${mins}분 뒤에 다시 보낼 수 있어요` : '보내기'}</button></div>
+             <button class="primary" data-a="send" ${wait > 0 || sending ? 'disabled' : ''}>${sending ? '보내는 중…' : wait > 0 ? `${secs}초 뒤에 다시 보낼 수 있어요` : '보내기'}</button></div>
            ${status ? `<div class="notice">${status}</div>` : ''}
          </div>`,
         onBack,
