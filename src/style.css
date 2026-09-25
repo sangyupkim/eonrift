@@ -2789,3 +2789,8 @@ img.mico-inline {
 .status .tier-label { white-space: nowrap; }
 
 .has-wave .boss-bar { top: calc(62px + var(--safe-top)); }
+/* 회피 버튼: 직업별 그림 (블링크·후방 도약) */
+.act.dodge.custom > :not(.dodge-art):not(.cooldown) { display: none; }
+.act.dodge .dodge-art { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
+.act.dodge .dodge-art img { width: 62%; height: 62%; object-fit: contain; }
+.act.dodge .dodge-art .lbl { font-size: 10px; font-weight: 800; margin-top: -4px; text-shadow: 0 1px 2px #000; }

@@ -1,3 +1,4 @@
+import { PLAYER } from '../config';
 import type { BonusKey } from '../data/bonus';
 import { ultCooldown, ultPower, ULT_COOLDOWN, ULTIMATES, type ClassId } from '../data/classes';
 import type { Monster } from './Monster';
@@ -228,6 +229,43 @@ export class Combat {
       }
     }
     return null;
+  }
+
+  /**
+   * 궁수 회피 (후방 도약): 입력 방향으로, 입력이 없으면 적 반대쪽으로 뛰며 무적. 던전에서는 제자리에 덫을 남긴다
+   */
+  backstep(move: { x: number; y: number }): boolean {
+    const player = this.host.player;
+    if (player.rollCooldown > 0 || player.state === 'dash' || !player.alive) return false;
+    const p = player.position;
+    const d = this.host.dungeon();
+    const target = this.findTarget(12);
+    const input = Math.hypot(move.x, move.y) > 0.12;
+    const away = this.angleTo(target);
+    let dir: { x: number; z: number };
+    if (input) dir = player.dodgeDir(move);
+    else if (away !== null) dir = { x: -Math.sin(away), z: -Math.cos(away) };
+    else dir = { x: -Math.sin(player.facing), z: -Math.cos(player.facing) };
+    const face = player.facing;
+    player.startDash({ dirX: dir.x, dirZ: dir.z, speed: 14, duration: 0.35, pose: 'leap', invuln: true });
+    // 뒤로 뛸 때는 적(또는 원래 방향)을 계속 바라본다
+    if (!input) player.facing = away ?? face;
+    player.rollCooldown = player.dodgeMax = PLAYER.backstepCooldown;
+    this.host.sfx('dash');
+    if (d) {
+      const tx = p.x;
+      const tz = p.z;
+      d.effects.zone(tx, tz, 1.2, 0xffb040, 1.2);
+      d.effects.glyph(tx, tz, 1.2, 0xffb040, 1.2);
+      this.repeat(d, 1.2, 1, 1, () => {
+        d.effects.explosion(tx, tz, 3, 0xff8a2a);
+        d.particles.burst(tx, 0.4, tz, 0x6a4a2a, 12, 1.3);
+        this.host.sfx('boom');
+        this.host.shake(0.2);
+        for (const m of d.monsters) if (m.alive && Math.hypot(m.x - tx, m.z - tz) < 3 + m.radius) this.host.damageMonster(m, 1.8, 1.5, tx, tz);
+      });
+    }
+    return true;
   }
 
   /** 자동 조준: 사거리 안의 가장 가까운 몬스터 */
@@ -586,25 +624,41 @@ export class Combat {
           aim,
         );
         break;
-      case 'archer:2': {
-        // 적 반대쪽으로 뛰며 덫을 남긴다
-        player.facing = aim;
-        const tx = p.x;
-        const tz = p.z;
-        d.effects.zone(tx, tz, 1.2, 0xffb040, 1.2);
-        d.effects.glyph(tx, tz, 1.2, 0xffb040, 1.2);
-        player.startDash({ dirX: -Math.sin(aim), dirZ: -Math.cos(aim), speed: 14, duration: 0.35, pose: 'leap', invuln: true });
-        this.host.sfx('dash');
-        window.setTimeout(() => {
-          if (this.host.dungeon() !== d) return;
-          d.effects.explosion(tx, tz, 3, 0xff8a2a);
-          d.particles.burst(tx, 0.4, tz, 0x6a4a2a, 12, 1.3);
-          this.host.sfx('boom');
-          this.host.shake(0.2);
-          for (const m of d.monsters) if (m.alive && Math.hypot(m.x - tx, m.z - tz) < 3 + m.radius) dmg(m, 3, 1.5, tx, tz);
-        }, 1200);
+      case 'archer:2':
+        // 폭발 화살: 첫 적에 맞거나 사거리 끝에서 터진다
+        player.startAction(
+          {
+            pose: 'shoot',
+            duration: 0.45,
+            hitAt: 0.6,
+            onHit: () => {
+              this.host.sfx('bow');
+              d.spawnPlayerProjectile({
+                x: p.x,
+                z: p.z,
+                angle: player.facing,
+                speed: 26,
+                damage: 1.4 * k,
+                color: 0xff8a3a,
+                kind: 'arrow',
+                radius: 0.4,
+                life: 0.7,
+                y: 1.1,
+                onEnd: (x, z) => {
+                  d.effects.explosion(x, z, 3.2, 0xff7a2a);
+                  d.effects.ring(x, z, 3.4, 0xffd08a, 0.35);
+                  d.particles.burst(x, 0.6, z, 0x5a3a2a, 12, 1.4);
+                  this.host.sfx('boom');
+                  this.host.shake(0.25);
+                  for (const m of d.monsters) if (m.alive && Math.hypot(m.x - x, m.z - z) < 3 + m.radius) dmg(m, 2.8, 1.4, x, z);
+                },
+              });
+              d.effects.streak(p.x + fx() * 0.8, p.z + fz() * 0.8, p.x + fx() * 10, p.z + fz() * 10, 0xff8a3a, 0.3);
+            },
+          },
+          aim,
+        );
         break;
-      }
 
       // ---- 방어·보조 스킬 ----
       case 'sword:3':

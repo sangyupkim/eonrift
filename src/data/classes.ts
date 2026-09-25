@@ -132,7 +132,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     skills: [
       { name: '관통 화살', mp: 12, cooldown: 3, description: '적을 꿰뚫는 강한 화살을 쏜다.' },
       { name: '부채꼴 연사', mp: 16, cooldown: 5, description: '다섯 발의 화살을 부채꼴로 쏜다.' },
-      { name: '후방 도약', mp: 14, cooldown: 7, description: '뒤로 뛰며 그 자리에 폭발하는 덫을 남긴다.' },
+      { name: '폭발 화살', mp: 16, cooldown: 6, description: '맞은 자리에서 크게 폭발하는 화살을 쏜다. 주변 적 모두에게 피해.' },
       { name: '바람 걸음', mp: 14, cooldown: 16, description: '[방어] 8초 동안 이동 속도 +40%, 적의 공격을 30% 확률로 회피.' },
       { name: '연막탄', mp: 18, cooldown: 18, description: '[방어] 6초 동안 받는 피해 -50%, 주변 적을 느리게 만든다.' },
       { name: '사냥꾼의 집중', mp: 20, cooldown: 24, description: '[보조] 10초 동안 치명타 +30%, 공격력 +15%.' },

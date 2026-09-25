@@ -163,6 +163,7 @@ export class Hud {
     this.interactBtn.appendChild(this.interactLabel);
 
     const dodge = this.button('act dodge', mico('boot', ICONS.dodge), 'dodge');
+    this.dodgeBtn = dodge;
     this.dodgeShade = el('div', 'cooldown');
     dodge.appendChild(this.dodgeShade);
 
@@ -420,6 +421,21 @@ export class Hud {
       }
       (b.querySelector('.bar span') as HTMLElement).style.width = `${Math.round(d.progress * 100)}%`;
     });
+  }
+
+  private dodgeKey = '';
+  private dodgeBtn: HTMLButtonElement | null = null;
+  /** 회피 버튼 모양: 직업마다 (구르기·블링크·후방 도약) */
+  setDodgeIcon(url: string | null, label: string): void {
+    const key = `${url}|${label}`;
+    if (key === this.dodgeKey || !this.dodgeBtn) return;
+    this.dodgeKey = key;
+    this.dodgeBtn.querySelector('.dodge-art')?.remove();
+    if (url) {
+      const art = el('div', 'dodge-art', `<img src="${url}" alt=""><span class="lbl">${label}</span>`);
+      this.dodgeBtn.prepend(art);
+    }
+    this.dodgeBtn.classList.toggle('custom', !!url);
   }
 
   setDodgeCooldown(ratio: number): void {

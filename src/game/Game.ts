@@ -2485,9 +2485,29 @@ export class Game {
       near.action();
       if (this.mode !== 'play') return;
     }
-    if (input.consume('dodge') && !this.building && pl.startRoll(move)) {
-      this.gathering = null;
-      this.audio.play('dash');
+    if (input.consume('dodge') && !this.building) {
+      // 회피: 검사는 구르기, 마법사는 블링크(무적 없음), 궁수는 후방 도약(무적 + 덫)
+      const cls = pl.cls.id;
+      let ok = false;
+      if (cls === 'mage') {
+        const sx = pl.position.x;
+        const sz = pl.position.z;
+        ok = pl.startBlink(move, () => {
+          const fx = this.level.effects;
+          fx.streak(sx, sz, pl.position.x, pl.position.z, 0xa070ff, 0.5);
+          fx.ring(pl.position.x, pl.position.z, 1.4, 0xc8a8ff, 0.25, 0.8);
+          fx.sparks(pl.position.x, 1, pl.position.z, 0xc8a8ff, 10, { speed: 4 });
+        });
+        if (ok) {
+          this.level.effects.sparks(sx, 1, sz, 0xc8a8ff, 12, { speed: 4, up: true, spread: 0.5 });
+          this.audio.play('magic');
+        }
+      } else if (cls === 'archer') ok = this.combat.backstep(move);
+      else if (pl.startRoll(move)) {
+        ok = true;
+        this.audio.play('dash');
+      }
+      if (ok) this.gathering = null;
     }
     for (let i = 0; i < 3; i++) {
       if (input.consume(`skill${i + 1}` as 'skill1')) {
@@ -2710,7 +2730,8 @@ export class Game {
     } else this.hud.setObjective(objective(p, this.quests));
     this.hud.setBuffs(pl.buffs.map((b) => ({ text: `${b.name}${b.stacks !== undefined ? ` ${b.stacks}회` : ''} ${Math.ceil(b.t)}s`, bad: b.bad })));
     this.hud.setPotions(this.run && this.level instanceof DungeonScene ? this.run.pouch.length : POTION_KINDS.reduce((a, [k]) => a + p.count(k), 0), this.potionCd / POTION_COOLDOWN);
-    this.hud.setDodgeCooldown(pl.rollCooldown / (PLAYER.rollCooldown + PLAYER.rollTime));
+    this.hud.setDodgeCooldown(pl.dodgeMax > 0 ? pl.rollCooldown / pl.dodgeMax : 0);
+    this.hud.setDodgeIcon(pl.cls.id === 'mage' ? skillIconUrl('mage', 8) : pl.cls.id === 'archer' ? skillIconUrl('archer', 8) : null, pl.cls.id === 'mage' ? '블링크' : pl.cls.id === 'archer' ? '후방 도약' : '');
     const skills = pl.cls.skills;
     const quick = p.cls.quick.map((i) => (i >= 0 && (p.cls.skills[i] ?? 0) > 0 ? i : -1));
     this.hud.setSkills(

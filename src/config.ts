@@ -21,6 +21,11 @@ export const PLAYER = {
   rollSpeed: 13,
   rollTime: 0.38,
   rollCooldown: 0.7,
+  /** 마법사 블링크: 거리와 재사용 대기 */
+  blinkDist: 5.5,
+  blinkCooldown: 1.3,
+  /** 궁수 후방 도약 (회피 버튼) 재사용 대기 */
+  backstepCooldown: 2.2,
   attackTime: 0.38,
   /** 휘두르기 시작 후 판정이 나오는 시점 (비율) */
   attackHitAt: 0.45,
@@ -34,7 +39,7 @@ export const BAG_SLOTS = 20;
 export const STACK_SIZE = 50;
 
 /** 화면에 보이는 게임 버전 (업데이트마다 올린다) */
-export const GAME_VERSION = '6.4.2';
+export const GAME_VERSION = '6.5';
 declare const __BUILD_ID__: string;
 /** 빌드 번호 (테스트에서는 dev) */
 export const BUILD_ID: string = typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : 'dev';

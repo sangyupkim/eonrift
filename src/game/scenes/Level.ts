@@ -64,9 +64,13 @@ export abstract class Level {
     this.scene.add(this.particles.mesh);
   }
 
+  /** 하늘빛 (마을 날씨가 바꾼다) */
+  hemi: HemisphereLight | null = null;
+
   protected setupLights(background: number, ambient: number, sun: number, hemiIntensity = 1.7, sunIntensity = 2.4): void {
     this.scene.background = new Color(background);
-    this.scene.add(new HemisphereLight(ambient, background, hemiIntensity));
+    this.hemi = new HemisphereLight(ambient, background, hemiIntensity);
+    this.scene.add(this.hemi);
     this.sun = new DirectionalLight(sun, sunIntensity);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(1024, 1024);

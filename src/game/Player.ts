@@ -175,12 +175,30 @@ export class Player {
     if (spec.pose !== 'leap') this.facing = Math.atan2(spec.dirX, spec.dirZ);
   }
 
+  /** 회피 버튼의 재사용 대기 최대값 (HUD 비율용): 직업마다 다르다 */
+  dodgeMax = 0;
+
+  /** 입력 방향(없으면 바라보는 방향)의 단위 벡터 */
+  dodgeDir(move: { x: number; y: number }): { x: number; z: number } {
+    const d = Player.worldDir(move);
+    return d.len > 0.1 ? { x: d.x / d.len, z: d.z / d.len } : { x: Math.sin(this.facing), z: Math.cos(this.facing) };
+  }
+
+  /** 마법사 블링크: 정해진 거리를 한순간에 이동한다. 무적은 없다 */
+  startBlink(move: { x: number; y: number }, onEnd: () => void): boolean {
+    if (this.rollCooldown > 0 || this.state === 'dash' || !this.alive) return false;
+    const dir = this.dodgeDir(move);
+    this.startDash({ dirX: dir.x, dirZ: dir.z, speed: PLAYER.blinkDist / 0.1, duration: 0.1, pose: 'lunge', invuln: false, onEnd });
+    this.rollCooldown = this.dodgeMax = PLAYER.blinkCooldown;
+    return true;
+  }
+
   startRoll(move: { x: number; y: number }): boolean {
     if (this.rollCooldown > 0 || this.state === 'dash' || !this.alive) return false;
     const d = Player.worldDir(move);
     const dir = d.len > 0.1 ? { x: d.x / d.len, z: d.z / d.len } : { x: Math.sin(this.facing), z: Math.cos(this.facing) };
     this.startDash({ dirX: dir.x, dirZ: dir.z, speed: PLAYER.rollSpeed, duration: PLAYER.rollTime, pose: 'roll', invuln: true });
-    this.rollCooldown = PLAYER.rollCooldown + PLAYER.rollTime;
+    this.rollCooldown = this.dodgeMax = PLAYER.rollCooldown + PLAYER.rollTime;
     return true;
   }
 

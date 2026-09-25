@@ -84,7 +84,13 @@ export function buildSkillGeometry(cls: ClassId, index: number): BufferGeometry 
     case 'archer:1': // 부채꼴 연사
       g = [-0.6, -0.3, 0, 0.3, 0.6].flatMap((r) => arrow(r, -Math.sin(r) * 0.15, Math.cos(r) * 0.15 - 0.05, 0xc8ffb0, 0.6));
       break;
-    case 'archer:2': // 후방 도약 덫
+    case 'archer:2': // 폭발 화살: 화살 끝의 불꽃
+      g = [...arrow(-0.8, -0.05, -0.05, 0xff8a3a, 0.9), part(new IcosahedronGeometry(0.2, 0), 0xff7a2a, { pos: [0.3, 0.3, 0.05] }), part(new IcosahedronGeometry(0.12, 0), 0xffd08a, { pos: [0.38, 0.4, 0.1] })];
+      break;
+    case 'mage:8': // 블링크: 보라빛 잔상 고리
+      g = [part(new TorusGeometry(0.34, 0.05, 5, 18), 0xa070ff, { rot: [1.2, 0, 0] }), part(new TorusGeometry(0.22, 0.04, 5, 14), 0xc8a8ff, { pos: [0.18, 0.18, 0], rot: [1.2, 0, 0] }), part(new OctahedronGeometry(0.1), 0xffffff, { pos: [0.3, 0.3, 0.05] })];
+      break;
+    case 'archer:8': // 후방 도약 덫
       g = [part(new CylinderGeometry(0.34, 0.38, 0.12, 10), 0x6a5a4a, { pos: [0, -0.2, 0] }), part(new SphereGeometry(0.2, 8, 6), 0x3a3a40, { pos: [0, 0.02, 0] }), part(new ConeGeometry(0.05, 0.16, 5), 0xffb040, { pos: [0.1, 0.25, 0], rot: [0, 0, -0.4] })];
       break;
     case 'archer:3': // 바람 걸음: 깃털

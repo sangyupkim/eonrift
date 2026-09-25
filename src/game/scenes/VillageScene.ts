@@ -30,6 +30,7 @@ import {
   buildTree,
 } from '../../models/village';
 import { Level } from './Level';
+import { VillageWeather } from './Weather';
 
 export type NpcId = 'chief' | 'guide' | 'smith' | 'engineer' | 'merchant' | 'stranger' | 'trainer' | 'researcher';
 
@@ -139,7 +140,16 @@ export class VillageScene extends Level {
       [19, 19, 0xd0c0a0, 0x6a4a8a, Math.PI],
       [9, 19, 0xc8b898, 0x8a5a2a, Math.PI],
     ];
-    for (const [x, y, wall, roof, rot] of houses) place(buildHouse(wall, roof), x, y, rot, 2.1, 3.6);
+    // 밤에 불이 켜지는 창문 (집 앞면 양쪽 창)
+    const windows: { x: number; z: number; y: number; rot: number }[] = [];
+    for (const [x, y, wall, roof, rot] of houses) {
+      const p = place(buildHouse(wall, roof), x, y, rot, 2.1, 3.6);
+      for (const lx of [-1.0, 1.0]) {
+        const lz = 1.46;
+        windows.push({ x: p.x + lx * Math.cos(rot) + lz * Math.sin(rot), z: p.z - lx * Math.sin(rot) + lz * Math.cos(rot), y: 1.25, rot });
+      }
+    }
+    const lamps: { x: number; z: number }[] = [];
 
     // 시설
     place(buildForge(), 8, 4, 0, 1.9, 2.6);
@@ -155,7 +165,7 @@ export class VillageScene extends Level {
       [5, 9],
       [22, 9],
     ])
-      place(buildLamp(), x, y, 0, 0.25, 2.5);
+      lamps.push(place(buildLamp(), x, y, 0, 0.25, 2.5));
     for (const [x, y] of [
       [1, 9],
       [1, 13],
@@ -259,7 +269,7 @@ export class VillageScene extends Level {
         [4, 28],
         [24, 28],
       ])
-        place(buildLamp(), x, y, 0, 0.25, 2.5);
+        lamps.push(place(buildLamp(), x, y, 0, 0.25, 2.5));
       const endSpot = (id: EndSpot, tx: number, ty: number, range: number, label: string, title: string) => {
         const lock = end.locked[id];
         spot(id, tx, ty, range, lock ? '확인' : label, lock ? `${title} (잠김)` : title);
@@ -275,12 +285,17 @@ export class VillageScene extends Level {
         ? arrival
         : arrival === 'portal' ? { ...toWorld(14, 7), facing: Math.PI / 4 } : arrival === 'home' ? { ...toWorld(21, 11), facing: -Math.PI / 2 } : { ...toWorld(14, 17), facing: Math.PI + Math.PI / 4 };
     this.playerStart = start;
+    this.weather = new VillageWeather(this.scene, this.hemi!, this.sun, lamps, windows);
   }
+
+  /** 날씨·낮밤 (보기만 바뀐다) */
+  readonly weather: VillageWeather;
 
   private riftGlow: Mesh | null = null;
 
   update(dt: number, focus: { x: number; z: number }): void {
     super.update(dt, focus);
+    this.weather.update(dt, focus);
     if (this.riftGlow) {
       this.riftGlow.rotation.z -= dt * 2.4;
       (this.riftGlow.material as MeshBasicMaterial).opacity = 0.4 + 0.15 * Math.sin(this.time * 3.1);
