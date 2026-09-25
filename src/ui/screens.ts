@@ -1,4 +1,5 @@
 import { BUILD_ID, GAME_VERSION } from '../config';
+import { encyclopediaPages } from './encyclopedia';
 import { FEEDBACK_KINDS, FEEDBACK_MAX, FEEDBACK_NAME_MAX, feedbackWait, savedFeedbackName, sendFeedback, type FeedbackInfo } from '../core/feedback';
 import { PATCH_NOTES } from '../data/patchnotes';
 import { applyUpdate, fetchRemoteVersion, isNewer, type RemoteVersion } from './update';
@@ -519,6 +520,30 @@ export class Screens {
   }
 
   // ---------------- 일시정지 ----------------
+  // ---------------- 종합 백과사전 ----------------
+  encyclopedia(p: Progress, onBack: () => void, tab = 'basics'): void {
+    const pages = encyclopediaPages(p);
+    const page = pages.find((x) => x.id === tab) ?? pages[0];
+    const s = this.open(
+      'ency',
+      `<div class="panel wide tall ency">
+         <button class="close">${ICONS.close}</button>
+         <h2>${SPK('book', '📖')} 백과사전 <small>궁금한 항목을 고르세요</small></h2>
+         <div class="ency-tabs">${pages
+           .map((x) => `<button class="ency-tab ${x.id === page.id ? 'on' : ''} ${x.locked ? 'locked' : ''}" data-ency="${x.id}"><img src="${x.icon}" alt="">${x.name}${x.locked ? ' 🔒' : ''}</button>`)
+           .join('')}</div>
+         <div class="ency-body scroll">${page.locked ? `<div class="ency-locked">🔒<p>${page.locked}</p></div>` : `<h2 class="ency-title">${page.name}</h2>${page.html()}`}</div>
+       </div>`,
+      onBack,
+    );
+    this.on(s, '[data-ency]', (b) => {
+      this.click();
+      this.encyclopedia(p, onBack, b.dataset.ency!);
+    });
+    // 고른 탭이 보이게
+    s.querySelector<HTMLElement>('.ency-tab.on')?.scrollIntoView({ block: 'nearest', inline: 'center' });
+  }
+
   // ---------------- 의견함 (구글 시트로 보낸다) ----------------
   feedback(info: FeedbackInfo, onBack: () => void): void {
     let kind: string = FEEDBACK_KINDS[0];
@@ -608,6 +633,8 @@ export class Screens {
     onBestiary?: () => void;
     /** 의견 보내기 */
     onFeedback?: () => void;
+    /** 백과사전 */
+    onEncyclopedia?: () => void;
     /** 가진 음식 (먹으면 30분 버프) */
     foods?: { id: string; count: number }[];
     foodLeft?: string;
@@ -631,6 +658,7 @@ export class Screens {
            <label class="volume"><span class="vol-name">${SPK('music', '🎵')} 배경음</span><input type="range" min="0" max="100" step="5" value="${Math.round(opts.music * 100)}" data-v="music"/><b data-vl="music">${Math.round(opts.music * 100)}</b></label>
            <label class="volume"><span class="vol-name">${SPK('speaker', '🔊')} 효과음</span><input type="range" min="0" max="100" step="5" value="${Math.round(opts.sfx * 100)}" data-v="sfx"/><b data-vl="sfx">${Math.round(opts.sfx * 100)}</b></label>
            ${opts.foods?.length ? `<div class="food-row">${opts.foodLeft ? `<small class="dim">먹은 음식: ${opts.foodLeft}</small>` : ''}${opts.foods.map((f) => `<button data-eat="${f.id}">${inlineGem(f.id)}${ITEMS[f.id].name} 먹기 (${f.count})</button>`).join('')}</div>` : ''}
+           ${opts.onEncyclopedia ? `<button data-a="ency">${SPK('book', '📖')} 백과사전</button>` : ''}
            ${opts.onBestiary ? `<button data-a="bestiary">${SPK('book', '📖')} 몬스터 도감</button>` : ''}
            <button data-a="savecode">${SPK('disk', '💾')} 저장 코드 만들기</button>
            ${opts.onFeedback ? `<button data-a="feedback">${SPK('scroll', '✉')} 의견 보내기</button>` : ''}
@@ -652,6 +680,7 @@ export class Screens {
     this.on(s, '[data-a="title"]', opts.onTitle);
     this.on(s, '[data-a="savecode"]', opts.onSaveCode);
     this.on(s, '[data-a="feedback"]', () => opts.onFeedback?.());
+    this.on(s, '[data-a="ency"]', () => opts.onEncyclopedia?.());
     s.querySelector<HTMLInputElement>('[data-t="shadow"]')!.addEventListener('change', (e) => opts.onToggleShadows((e.target as HTMLInputElement).checked));
     s.querySelector<HTMLInputElement>('[data-t="sound"]')!.addEventListener('change', (e) => opts.onToggleSound((e.target as HTMLInputElement).checked));
     s.querySelectorAll<HTMLButtonElement>('[data-aim]').forEach((b) =>

@@ -2947,3 +2947,45 @@ h3.sub { margin: 10px 0 6px; font-size: 14px; display: flex; align-items: center
 /* 소리 조절 막대: 이름(아이콘+글자)을 한 칸으로 묶어야 막대가 가운데 넓은 칸을 차지한다 */
 .volume { grid-template-columns: auto minmax(0, 1fr) 32px; }
 .volume .vol-name { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; min-width: 70px; }
+/* ---------- 백과사전 ---------- */
+.ency { display: flex; flex-direction: column; }
+.ency-tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; flex: 0 0 auto; scrollbar-width: none; }
+.ency-tabs::-webkit-scrollbar { display: none; }
+.ency-tab { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px 5px 6px; border-radius: 999px; border: 1px solid var(--panel-line); background: rgba(255, 255, 255, 0.05); font-size: 13px; font-weight: 700; white-space: nowrap; }
+.ency-tab img { width: 22px; height: 22px; object-fit: contain; }
+.ency-tab.on { background: var(--accent); color: #10101e; border-color: transparent; }
+.ency-tab.locked { opacity: 0.55; }
+.ency-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-right: 4px; font-size: 13.5px; line-height: 1.55; }
+.ency-title { margin: 4px 0 6px; font-size: 18px; }
+.ency-body h3 { margin: 14px 0 6px; font-size: 15px; color: var(--accent); border-bottom: 1px solid rgba(122, 200, 255, 0.2); padding-bottom: 3px; }
+.ency-body p { margin: 4px 0; }
+.ency-locked { text-align: center; font-size: 42px; padding: 40px 10px; opacity: 0.8; }
+.ency-locked p { font-size: 14px; }
+.enc-img { width: 56px; height: 56px; object-fit: contain; }
+.enc-ico { width: 22px; height: 22px; object-fit: contain; vertical-align: middle; }
+.enc-portrait { width: 64px; height: 88px; object-fit: contain; }
+.enc-mon { width: 72px; height: 72px; object-fit: contain; }
+.enc-bld { width: 60px; height: 60px; object-fit: contain; }
+.enc-chip { display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; }
+.enc-card { display: flex; gap: 10px; align-items: flex-start; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(122, 200, 255, 0.15); border-radius: 10px; padding: 8px 10px; margin: 6px 0; }
+.enc-pic { flex: 0 0 auto; display: flex; gap: 2px; align-items: center; }
+.enc-pic .enc-ico { width: 34px; height: 34px; }
+.enc-body { flex: 1 1 auto; min-width: 0; }
+.enc-body h4 { margin: 0 0 4px; font-size: 14px; }
+.enc-body h4 small { font-weight: 500; color: var(--ink-dim); font-size: 12px; }
+.enc-list { margin: 4px 0; padding-left: 18px; }
+.enc-list li { margin: 3px 0; }
+.enc-sub { font-weight: 800; margin-top: 6px !important; }
+.enc-tip { background: rgba(255, 210, 80, 0.08); border-left: 3px solid #ffd23a; padding: 5px 8px; border-radius: 4px; }
+.enc-flow { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 6px 0; }
+.enc-flow span { background: rgba(94, 224, 255, 0.1); border: 1px solid rgba(94, 224, 255, 0.3); border-radius: 8px; padding: 3px 8px; }
+.enc-flow b { color: var(--accent); }
+.enc-row { display: flex; flex-wrap: wrap; gap: 6px 10px; margin: 4px 0; }
+.enc-slot { display: inline-flex; align-items: center; gap: 3px; font-size: 12.5px; }
+.enc-slot .enc-ico { width: 30px; height: 30px; }
+.enc-table-wrap { overflow-x: auto; margin: 6px 0; }
+.enc-table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+.enc-table th, .enc-table td { border: 1px solid rgba(122, 200, 255, 0.15); padding: 4px 6px; text-align: left; vertical-align: middle; }
+.enc-table th { background: rgba(94, 224, 255, 0.1); white-space: nowrap; }
+.enc-grade { display: inline-flex; align-items: center; gap: 4px; color: var(--c); font-weight: 800; }
+.enc-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--c); margin-right: 5px; box-shadow: 0 0 6px var(--c); }

@@ -666,6 +666,7 @@ export class Game {
         },
         onGiveUp: () => this.fall(),
         onBestiary: this.quests.isDone('m_research') ? () => this.openBestiary(false) : undefined,
+        onEncyclopedia: () => this.screens.encyclopedia(this.progress, () => this.openPause()),
         onFeedback: () => {
           const c = this.progress.cls;
           const cleared = this.progress.data.cleared;
