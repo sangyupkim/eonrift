@@ -27,7 +27,7 @@ import { buildNodeGeometry, buildPortalFrame } from '../../models/props';
 import { merge } from '../../models/util';
 import { Level } from './Level';
 
-const POWERED = new Set<BuildingType>(['generator', 'wire', 'smelter', 'crusher', 'infuser', 'alchemy', 'workbench', 'healer']);
+const POWERED = new Set<BuildingType>(['generator', 'wire', 'smelter', 'crusher', 'infuser', 'alchemy', 'condenser', 'workbench', 'healer']);
 const MAX_ITEMS = 700;
 
 /** 차원집: 공장 격자 + 아래쪽 입구 */

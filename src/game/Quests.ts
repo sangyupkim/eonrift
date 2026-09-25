@@ -195,7 +195,7 @@ export class Quests {
       const tiers = rng.shuffle([0, 1, 2, 3, 4, 5]).slice(0, 2);
       for (const i of tiers) {
         const count = 30 - i * 3;
-        list.push({ id: 'deliver', title: `${ITEMS[TIER_PLATE[i]].name} 납품`, objective: { type: 'deliver', item: TIER_PLATE[i], count }, reward: { gold: 1500 * (i + 1), items: { dim_shard: 1 + Math.floor(i / 3) } }, progress: 0, claimed: false });
+        list.push({ id: 'deliver', title: `${ITEMS[TIER_PLATE[i]].name} 납품`, objective: { type: 'deliver', item: TIER_PLATE[i], count }, reward: { gold: 1500 * (i + 1), items: { dim_dust: 8 * (1 + Math.floor(i / 3)) } }, progress: 0, claimed: false });
       }
     }
     this.state.daily = { date: key, list: list.map((d, i) => ({ ...d, id: `${key}-${i}` })) };

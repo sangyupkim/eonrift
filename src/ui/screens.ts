@@ -20,7 +20,7 @@ import { gearLook } from '../models/items';
 import { equipIconUrl, heroPortraitUrl, itemIconUrl, monsterIconUrl, skillIconUrl, toolIconUrl } from './itemIcons';
 import { BESTIARY, BESTIARY_BY_ID, COLLECTION_MILESTONES, killMilestones, milestoneReward, RESEARCH_BONUS, type BestiaryReward } from '../data/bestiary';
 import { DEBUFF_INFO, TRAIT_TEXT, type Faction } from '../data/species';
-import { AFFIXES, ALLOY, formatClock, riftAffixes, riftMult, riftReward, riftYield, RIFT_ALLOY, RIFT_TIME, rushReward, RUSH_DAILY, RUSH_DIFFS, RUSH_EXTRA_ALLOY, RUSH_ORDER, SHARD, towerBoss, towerDaily, towerFirstClear, towerMult, towerStartFloor, type RushDiff } from '../data/endgame';
+import { AFFIXES, ALLOY, formatClock, riftAffixes, riftMult, riftReward, riftYield, RIFT_ALLOY, RIFT_TIME, rushReward, RUSH_DAILY, RUSH_DIFFS, RUSH_EXTRA_ALLOY, RUSH_ORDER, SHARD, DUST, DUST_PER_SHARD, towerBoss, towerDaily, towerFirstClear, towerMult, towerStartFloor, type RushDiff } from '../data/endgame';
 import { BONUS_NAMES, bonusText, TRANSCEND_STATS, transcendExp, engraveCost, engraveRange, ENGRAVE_STAGES, ENGRAVE_STAGE_NAMES, rollEngrave, TITLES, type BonusKey } from '../data/bonus';
 import { Rng } from '../core/rng';
 import type { Archetype } from '../data/monsters';
@@ -325,7 +325,7 @@ export class Screens {
     const today = todayKey();
     const cur = { tier: sel?.tier ?? Math.min(7, p.maxTier), level: sel?.level ?? Math.max(1, e.riftBest + 1) };
     const alloy = p.count(ALLOY);
-    const shardTxt = (n: number) => (n ? ` · ${inlineGem(SHARD)}차원 파편 ${n}` : '');
+    const shardTxt = (n: number) => (n ? ` · ${inlineGem(DUST)}차원 가루 ${n}` : '');
     // 무한의 탑
     const start = towerStartFloor(e.towerBest);
     const next = e.towerBest + 1;
@@ -334,11 +334,11 @@ export class Screens {
     const tower = `<section class="end-card">
         <h3>${SPK('tower', '▲')} 무한의 탑 <small>최고 ${e.towerBest}층</small></h3>
         <p class="hint">층마다 방 몇 개를 정리하고 올라갑니다. 1~10층은 층마다 +5%, 11층부터는 10층마다 한 번에 +15% 벽이 생깁니다. 5층마다 파수꾼, 10층마다 수호자.</p>
-        <p class="dim">다음 도전 ${next}층: 몬스터 ×${towerMult(next).toFixed(2)}${towerBoss(next) ? ` · ${towerBoss(next)!.kind === 'boss' ? '수호자' : '파수꾼'}` : ''} · 첫 돌파 보상 ${towerFirstClear(next).gold} G${shardTxt(towerFirstClear(next).shards)}</p>
+        <p class="dim">다음 도전 ${next}층: 몬스터 ×${towerMult(next).toFixed(2)}${towerBoss(next) ? ` · ${towerBoss(next)!.kind === 'boss' ? '수호자' : '파수꾼'}` : ''} · 첫 돌파 보상 ${towerFirstClear(next).gold} G${shardTxt(towerFirstClear(next).dust)}</p>
         <div class="menu row">
           <button class="primary" data-tower="${start}">${start}층부터 도전</button>
           ${start > 1 ? `<button data-tower="1">1층부터</button>` : ''}
-          <button data-daily ${dailyDone || e.towerBest < 1 ? 'disabled' : ''}>${dailyDone ? '오늘 소탕 완료' : `소탕 보상 ${daily.gold} G${shardTxt(daily.shards)}`}</button>
+          <button data-daily ${dailyDone || e.towerBest < 1 ? 'disabled' : ''}>${dailyDone ? '오늘 소탕 완료' : `소탕 보상 ${daily.gold} G${shardTxt(daily.dust)}`}</button>
         </div>
       </section>`;
     // 보스 러시
@@ -350,7 +350,7 @@ export class Screens {
           const locked = i > 0 && !e.rushGradeBest[i - 1];
           const best = e.rushBest[i] ? `최고 ${formatClock(e.rushBest[i])} · ${e.rushGradeBest[i]}등급` : '기록 없음';
           const r = rushReward(i as RushDiff, 'S');
-          return `<button class="rush-btn ${locked ? 'locked' : ''}" data-rush="${i}" ${locked ? 'disabled' : ''}><b>${d.name}</b><small>${locked ? `${RUSH_DIFFS[i - 1].name} 완주 후 열림` : d.desc}</small><small class="dim">${best} · S ${r.gold} G${shardTxt(r.shards)}</small></button>`;
+          return `<button class="rush-btn ${locked ? 'locked' : ''}" data-rush="${i}" ${locked ? 'disabled' : ''}><b>${d.name}</b><small>${locked ? `${RUSH_DIFFS[i - 1].name} 완주 후 열림` : d.desc}</small><small class="dim">${best} · S ${r.gold} G${shardTxt(r.dust)}</small></button>`;
         }).join('')}</div>
       </section>`;
     // 심연 균열
@@ -366,7 +366,7 @@ export class Screens {
           <button data-rlv="-1" ${cur.level <= 1 ? 'disabled' : ''}>−</button>
           <b>${cur.level}단계</b>
           <button data-rlv="1" ${cur.level >= maxLevel ? 'disabled' : ''}>+</button>
-          <span class="dim">몬스터 ×${riftMult(cur.level).toFixed(2)} · 채집 ×${riftYield(cur.level).toFixed(1)} · 보상 ${rr.gold} G${shardTxt(rr.shards)}</span>
+          <span class="dim">몬스터 ×${riftMult(cur.level).toFixed(2)} · 채집 ×${riftYield(cur.level).toFixed(1)} · 보상 ${rr.gold} G${shardTxt(rr.dust)}</span>
         </div>
         <p class="dim">오늘의 변이: ${affixes.length ? affixes.map((a) => `<span class="affix" style="color:${hex(AFFIXES[a].color)}">${AFFIXES[a].name}</span> (${AFFIXES[a].text})`).join(' · ') : '없음'}</p>
         <div class="menu row"><button class="primary" data-rift ${alloy < RIFT_ALLOY ? 'disabled' : ''}>${cur.tier}단계 맵 · 균열 ${cur.level}단계 입장</button></div>
@@ -380,7 +380,8 @@ export class Screens {
       'endgame',
       `<div class="panel wide tall">
          <button class="close">${ICONS.close}</button>
-         <h2>차원의 끝 <small>${inlineGem(SHARD)}차원 파편 ${p.count(SHARD)} · ${inlineGem(ALLOY)}차원 합금 ${alloy}</small></h2>
+         <h2>차원의 끝 <small>${inlineGem(DUST)}차원 가루 ${p.count(DUST)} · ${inlineGem(SHARD)}차원 파편 ${p.count(SHARD)} · ${inlineGem(ALLOY)}차원 합금 ${alloy}</small></h2>
+         <p class="hint">보상은 차원 가루로 받습니다. 차원집의 <b>차원 응축기</b>(세라의 도면)에서 가루 ${DUST_PER_SHARD}개 + 상급 정수로 차원 파편을, 가루 4개 + 최상급 정수로 차원 마력 정수를 만듭니다.</p>
          ${message ? `<div class="notice">${message}</div>` : ''}
          <div class="scroll">
            ${tower}${rush}${rift}
@@ -559,6 +560,7 @@ export class Screens {
       ['crusher', '벌목소'],
       ['infuser', '마력 주입기'],
       ['alchemy', '연금 솥'],
+      ['condenser', '차원 응축기'],
       ['workbench', '제작대'],
       ['source', '재료 얻는 곳'],
     ];
@@ -589,8 +591,9 @@ export class Screens {
         ['essence_mid', '4~5챕터 몬스터'],
         ['essence_high', '6챕터 몬스터'],
         ['essence_supreme', '7챕터 몬스터'],
-        ['essence_dim', '5챕터 이상 파수꾼·수호자, 7챕터 정예 (드묾)'],
-        ['dim_shard', '파수꾼(1개)·수호자(2~3개) 확정, 무한의 탑 첫 돌파·소탕, 보스 러시 완주, 심연 균열, 촌장 납품 의뢰 → 궁극기 강화 · 각인'],
+        ['dim_dust', '파수꾼(6~8)·수호자(16~24) 확정, 7챕터 정예(가끔), 무한의 탑 첫 돌파·소탕, 보스 러시 완주, 심연 균열, 촌장 납품 의뢰'],
+        ['dim_shard', '차원 응축기: 차원 가루 8 + 상급 정수 → 궁극기 강화 · 각인'],
+        ['essence_dim', '차원 응축기: 차원 가루 4 + 최상급 정수 → 최고 연료'],
         ['dim_alloy', '차원집 제작대 (구리·철·황금·다이아판 + 상급 정수) → 심연 균열 입장, 보스 러시 추가 도전'],
         ['gear_part', '5챕터 톱니 잔해'],
         ['magi_alloy', '5챕터 합금 잔해'],
@@ -1763,7 +1766,7 @@ export class Screens {
          ${message ? `<div class="notice">${message}</div>` : ''}
          <p class="hint">스킬은 직업마다 따로 배웁니다. 강화할 때마다 공격 스킬은 위력 +15%, 방어·보조 스킬은 지속 시간이 늘고, 재사용 대기 -6% (최대 Lv.${MAX_SKILL_LEVEL}). 상위 스킬은 판·마력 금속이 필요합니다. 배운 스킬은 캐릭터 → 스킬에서 퀵슬롯에 놓으세요.</p>
          <ul class="list scroll">${rows}
-           <li class="sub-head"><div><b>궁극기 강화</b><small class="dim">${inlineGem('dim_shard')}차원 파편은 파수꾼·수호자와 차원의 끝(무한의 탑·보스 러시·심연 균열)에서 얻습니다. 레벨마다 위력 +25%, 재사용 대기 -5초 (최대 Lv.${MAX_ULT_LEVEL}).</small></div></li>
+           <li class="sub-head"><div><b>궁극기 강화</b><small class="dim">${inlineGem('dim_shard')}차원 파편은 파수꾼·수호자와 차원의 끝에서 모은 차원 가루를 차원집의 차원 응축기로 압축해 만듭니다. 레벨마다 위력 +25%, 재사용 대기 -5초 (최대 Lv.${MAX_ULT_LEVEL}).</small></div></li>
            ${ultRows}</ul>
        </div>`,
       onClose,

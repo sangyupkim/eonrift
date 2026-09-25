@@ -2,10 +2,14 @@ import type { DebuffId } from './species';
 
 /**
  * 엔딩 이후 콘텐츠 (차원의 끝): 무한의 탑 · 보스 러시 · 심연 균열.
- * 파밍으로 얻는 최상위 재료는 '차원 파편' 하나로 통일한다 (궁극기 강화·각인·초월에 쓰인다).
+ * 파밍으로 얻는 최상위 재료는 '차원 가루' 하나로 통일한다.
+ * 가루는 차원집의 차원 응축기에서 차원 파편(궁극기 강화·각인)이나 차원 마력 정수(최고 연료)로 가공한다.
  */
 
+export const DUST = 'dim_dust';
 export const SHARD = 'dim_shard';
+/** 차원 파편 하나에 드는 가루 */
+export const DUST_PER_SHARD = 8;
 /** 공장에서 여러 단계 판을 섞어 만드는 엔드 콘텐츠 입장 재료 */
 export const ALLOY = 'dim_alloy';
 
@@ -35,14 +39,14 @@ export function towerTheme(floor: number): number {
 }
 
 /** 층을 처음 깼을 때 받는 보상 */
-export function towerFirstClear(floor: number): { gold: number; shards: number } {
-  const shards = floor % 10 === 0 ? 2 + Math.floor(floor / 20) : floor % 5 === 0 ? 1 : 0;
-  return { gold: 400 + floor * 150, shards };
+export function towerFirstClear(floor: number): { gold: number; dust: number } {
+  const dust = floor % 10 === 0 ? (2 + Math.floor(floor / 20)) * 8 : floor % 5 === 0 ? 8 : 2;
+  return { gold: 400 + floor * 150, dust };
 }
 
 /** 하루 한 번 받는 탑 소탕 보상 (최고 층 기준) */
-export function towerDaily(best: number): { gold: number; shards: number } {
-  return { gold: best * 300, shards: Math.floor(best / 10) };
+export function towerDaily(best: number): { gold: number; dust: number } {
+  return { gold: best * 300, dust: Math.floor(best / 10) * 8 + Math.floor(best / 2) };
 }
 
 /** 이어서 도전할 수 있는 층: 최고 기록의 10층 단위 체크포인트 다음 층 */
@@ -71,14 +75,14 @@ export function rushGrade(seconds: number): 'S' | 'A' | 'B' | 'C' {
   return seconds <= 600 ? 'S' : seconds <= 900 ? 'A' : seconds <= 1200 ? 'B' : 'C';
 }
 
-export function rushReward(diff: RushDiff, grade: 'S' | 'A' | 'B' | 'C'): { gold: number; shards: number } {
+export function rushReward(diff: RushDiff, grade: 'S' | 'A' | 'B' | 'C'): { gold: number; dust: number } {
   const g = { S: 0, A: 1, B: 2, C: 3 }[grade];
-  const shards = [
-    [4, 3, 2, 1],
-    [8, 6, 4, 2],
-    [14, 10, 7, 4],
+  const dust = [
+    [32, 24, 16, 8],
+    [64, 48, 32, 16],
+    [112, 80, 56, 32],
   ][diff][g];
-  return { gold: [20000, 60000, 150000][diff] * (1 - g * 0.2), shards };
+  return { gold: [20000, 60000, 150000][diff] * (1 - g * 0.2), dust };
 }
 
 // ---------------- 심연 균열 ----------------
@@ -130,9 +134,9 @@ export function riftYield(level: number): number {
 }
 
 /** 균열 클리어 보상. 시간 안에 깨면 다음 단계가 열린다 */
-export function riftReward(level: number, inTime: boolean): { gold: number; shards: number } {
-  const full = { gold: 3000 + level * 1500, shards: 1 + Math.floor(level / 3) };
-  return inTime ? full : { gold: Math.round(full.gold / 2), shards: Math.floor(full.shards / 2) };
+export function riftReward(level: number, inTime: boolean): { gold: number; dust: number } {
+  const full = { gold: 3000 + level * 1500, dust: 8 + level * 3 };
+  return inTime ? full : { gold: Math.round(full.gold / 2), dust: Math.floor(full.dust / 2) };
 }
 
 /** 균열의 장비 행운 보너스 (좋은 등급 확률) */

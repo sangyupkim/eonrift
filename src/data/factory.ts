@@ -1,6 +1,6 @@
 import { essenceForTier } from './items';
 /** 차원집 공장의 건물과 레시피 */
-export type BuildingType = 'generator' | 'wire' | 'belt' | 'splitter' | 'box' | 'smelter' | 'crusher' | 'infuser' | 'alchemy' | 'workbench' | 'healer' | 'warehouse';
+export type BuildingType = 'generator' | 'wire' | 'belt' | 'splitter' | 'box' | 'smelter' | 'crusher' | 'infuser' | 'alchemy' | 'condenser' | 'workbench' | 'healer' | 'warehouse';
 
 export interface BuildingDef {
   type: BuildingType;
@@ -24,13 +24,14 @@ export const BUILDINGS: Record<BuildingType, BuildingDef> = {
   crusher: { type: 'crusher', name: '벌목소', power: 5, color: 0x9a6a3c, cost: { copper_ore: 4, wood: 2 }, description: '나무를 켜서 판자로 만든다. 좋은 나무일수록 판자가 많이 나온다.', blueprint: { gold: 300, items: { copper_ingot: 3 } } },
   infuser: { type: 'infuser', name: '마력 주입기', power: 12, color: 0x8a6aff, cost: { iron_ore: 4, copper_ore: 4 }, description: '주괴·판자에 마력을 불어넣어 마력 금속·마력 판자를 만든다.', blueprint: { gold: 800, items: { copper_ingot: 3, plank: 3 } } },
   alchemy: { type: 'alchemy', name: '연금 솥', power: 4, color: 0x5a9a4a, cost: { copper_ore: 3, wood: 3 }, description: '치유 물약에 더 높은 마력 정수를 넣어 상위 물약을 만들고, 여러 판자로 음식(30분 버프)을 끓인다.', blueprint: { gold: 500, items: { wood: 10 } } },
+  condenser: { type: 'condenser', name: '차원 응축기', power: 20, color: 0x5ef0ff, cost: { iron_ore: 10, gold_ore: 6 }, description: '보스와 차원의 끝에서 모은 차원 가루를 압축한다. 가루 8 + 상급 정수 → 차원 파편(궁극기 강화·각인), 가루 4 + 최상급 정수 → 차원 마력 정수(최고 연료). 전력을 많이 쓰고 느리다.', blueprint: { gold: 3000, items: { gold_ingot: 6, mana_iron: 4 } } },
   workbench: { type: 'workbench', name: '제작대', power: 8, color: 0xb07a3a, cost: { copper_ore: 10, wood: 10 }, description: '판·장비·채집 도구·귀환석 등을 만든다. 제작을 시작하면 전력을 쓰며 시간이 지나면 완성된다. 완성품은 앞쪽 레일로 내보낸다 (막히면 제작대에 쌓임).', blueprint: null },
   healer: { type: 'healer', name: '마력 치유석 (회복)', power: 10, color: 0x6aff9a, cost: { copper_ore: 6, wood: 4 }, description: '마력선으로 발전기와 이으면, 곁에 서 있는 동안 HP·MP를 초당 12%씩 회복한다. 회복할 때만 전력을 쓴다 (물약보다 훨씬 싸다).', blueprint: null },
   warehouse: { type: 'warehouse', name: '일반 창고', power: 0, color: 0x8a6a4a, cost: { wood: 8, copper_ore: 4 }, description: '차원집 전용 창고 (레벨당 20칸, 한 칸 99개). 차원집 안의 일반 창고는 모두 하나로 이어져 어느 것을 열어도 같고, 안의 재료는 차원집에서 제작·건설에 바로 쓰인다. 레일로 들어온 아이템도 받아 보관한다.', blueprint: { gold: 500, items: { copper_ingot: 4, plank: 6 } } },
   splitter: { type: 'splitter', name: '분배기', power: 0, color: 0x6a7080, cost: { copper_ore: 1 }, description: '들어온 아이템을 앞·왼쪽·오른쪽으로 번갈아 보낸다.', blueprint: { gold: 400, items: {} } },
 };
 
-export const BUILD_ORDER: BuildingType[] = ['generator', 'wire', 'belt', 'box', 'workbench', 'healer', 'smelter', 'crusher', 'infuser', 'alchemy', 'warehouse', 'splitter'];
+export const BUILD_ORDER: BuildingType[] = ['generator', 'wire', 'belt', 'box', 'workbench', 'healer', 'smelter', 'crusher', 'infuser', 'alchemy', 'condenser', 'warehouse', 'splitter'];
 
 export interface Recipe {
   id: string;
@@ -67,6 +68,9 @@ export const RECIPES: Recipe[] = [
   { id: 'return_stone', machine: 'workbench', inputs: { mana_copper: 1, plank: 2 }, output: 'return_stone', count: 1, tier: 1, time: 45 },
   { id: 'bag_kit', machine: 'workbench', inputs: { magi_alloy: 1, gear_part: 2, mana_iron: 1 }, output: 'bag_kit', count: 1, tier: 5, time: 120 },
   { id: 'resonator', machine: 'workbench', inputs: { dim_ingot: 3, orichalcum_ingot: 2, mana_titanium: 2 }, output: 'resonator', count: 1, tier: 7, time: 300 },
+  // 차원 응축기: 파밍한 차원 가루 → 차원 파편 / 차원 마력 정수
+  { id: 'dim_shard', machine: 'condenser', inputs: { dim_dust: 8, essence_high: 1 }, output: 'dim_shard', count: 1, tier: 1, time: 120 },
+  { id: 'essence_dim', machine: 'condenser', inputs: { dim_dust: 4, essence_supreme: 1 }, output: 'essence_dim', count: 1, tier: 1, time: 90 },
   { id: 'dim_alloy', machine: 'workbench', inputs: { copper_plate: 3, iron_plate: 3, gold_plate: 2, diamond_plate: 2, essence_high: 1 }, output: 'dim_alloy', count: 1, tier: 4, time: 90 },
   { id: 'food_guard', machine: 'alchemy', inputs: { frost_plank: 2, plank: 3, essence_low: 2 }, output: 'food_guard', count: 1, tier: 3, time: 40 },
   { id: 'food_luck', machine: 'alchemy', inputs: { crystal_plank: 2, plank: 2, essence_low: 1 }, output: 'food_luck', count: 1, tier: 4, time: 45 },
@@ -98,7 +102,7 @@ export const OFFLINE_CAP_HOURS = 8;
 // ---- 건물 레벨 (세라의 강화 도면) ----
 export const MAX_BUILDING_LEVEL = 7;
 /** 레벨을 올릴 수 있는 건물 */
-export const UPGRADABLE: BuildingType[] = ['generator', 'smelter', 'crusher', 'infuser', 'alchemy', 'warehouse'];
+export const UPGRADABLE: BuildingType[] = ['generator', 'smelter', 'crusher', 'infuser', 'alchemy', 'condenser', 'warehouse'];
 
 const LEVEL_INGOT = ['copper_ingot', 'iron_ingot', 'gold_ingot', 'diamond', 'titanium_ingot', 'orichalcum_ingot', 'dim_ingot'];
 

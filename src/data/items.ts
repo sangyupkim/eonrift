@@ -40,9 +40,9 @@ const defs: ItemDef[] = [
   { id: 'essence_mid', name: '중급 마력 정수', color: 0x6f8cff, kind: 'essence', value: 14, description: '4~5단계 몬스터에게서 나온다. 발전기에서 5분 동안 타고, 타는 동안 그 전력망의 생산 속도 ×1.15.' },
   { id: 'essence_high', name: '상급 마력 정수', color: 0xd76fff, kind: 'essence', value: 30, description: '6단계 몬스터에게서 나온다. 발전기에서 10분 동안 타고, 생산 속도 ×1.3.' },
   { id: 'essence_supreme', name: '최상급 마력 정수', color: 0xffc84a, kind: 'essence', value: 70, description: '7단계 몬스터에게서 나온다. 발전기에서 20분 동안 타고, 생산 속도 ×1.5.' },
-  { id: 'essence_dim', name: '차원 마력 정수', color: 0x5ef0ff, kind: 'essence', value: 160, description: '파수꾼·수호자(5단계 이상)와 7단계 정예가 가끔 떨어뜨린다. 발전기에서 40분 동안 타고, 생산 속도 ×1.8.' },
+  { id: 'essence_dim', name: '차원 마력 정수', color: 0x5ef0ff, kind: 'essence', value: 160, description: '차원 응축기에서 차원 가루 4 + 최상급 정수로 만든다. 발전기에서 40분 동안 타고, 생산 속도 ×1.8.' },
   // 최상위 파밍 재료 (궁극기 강화 · 각인)
-  { id: 'dim_shard', name: '차원 파편', color: 0x5ef0ff, kind: 'material', value: 500, description: '파수꾼·수호자, 무한의 탑·보스 러시·심연 균열에서 얻는 최상위 재료. 궁극기 강화(교관 카엘)와 장비 각인(대장장이 고른)에 쓴다.' },
+  { id: 'dim_shard', name: '차원 파편', color: 0x5ef0ff, kind: 'material', value: 500, description: '차원 응축기에서 차원 가루 8 + 상급 정수로 압축한 최상위 재료. 궁극기 강화(교관 카엘)와 장비 각인(대장장이 고른)에 쓴다.' },
   // 엔드 콘텐츠 입장 재료
   { id: 'dim_alloy', name: '차원 합금', color: 0x9ab8ff, kind: 'processed', value: 400, description: '구리·철·황금·다이아판을 녹여 합친 합금. 심연 균열 입장(1개)과 보스 러시 추가 도전(2개)에 쓴다. 차원집 제작대에서 만든다.' },
   // 음식 (연금 솥에서 판자로 만든다. 먹으면 30분 동안 효과)
@@ -70,7 +70,7 @@ const defs: ItemDef[] = [
   { id: 'frost_dust', name: '서리 가루', color: 0xc9f2ff, kind: 'processed', value: 26, description: '(더 이상 쓰지 않는 재료) 상점에 팔 수 있다.' },
   { id: 'mana_dust', name: '마력 가루', color: 0xd4a8ff, kind: 'processed', value: 34, description: '(더 이상 쓰지 않는 재료) 상점에 팔 수 있다.' },
   { id: 'fire_dust', name: '화염 가루', color: 0xff9a5a, kind: 'processed', value: 62, description: '(더 이상 쓰지 않는 재료) 상점에 팔 수 있다.' },
-  { id: 'dim_dust', name: '차원 가루', color: 0x8ff6ff, kind: 'processed', value: 75, description: '(더 이상 쓰지 않는 재료) 상점에 팔 수 있다.' },
+  { id: 'dim_dust', name: '차원 가루', color: 0x8ff6ff, kind: 'material', value: 40, description: '파수꾼·수호자와 차원의 끝(무한의 탑·보스 러시·심연 균열)에서 모으는 차원의 가루. 차원집의 차원 응축기에서 차원 파편이나 차원 마력 정수로 압축한다.' },
   { id: 'mana_copper', name: '마력 구리', color: 0xffa070, kind: 'processed', value: 14, description: '마력판 재료. 귀환석에도 쓴다.' },
   { id: 'mana_iron', name: '마력 철', color: 0x8fb4ff, kind: 'processed', value: 22, description: '마력판 재료. 차원가방 확장 키트·차원집 확장에도 쓴다.' },
   { id: 'mana_gold', name: '마력 금', color: 0xffe08a, kind: 'processed', value: 45, description: '마력판 재료. 차원집 확장에도 쓴다.' },

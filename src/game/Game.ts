@@ -34,7 +34,7 @@ import { objectiveNeed, objectiveProgress, Quests } from './Quests';
 import { bonusText, FOOD_MINUTES, FOODS, TITLES, type BonusKey } from '../data/bonus';
 import { hasStory, objective, questLines, scriptFor } from './Story';
 import { todayKey } from './Quests';
-import { ALLOY, AFFIXES, riftAffixes, riftLuck, riftMult, riftReward, riftYield, RIFT_ALLOY, RIFT_TIME, rushGrade, rushReward, RUSH_DAILY, RUSH_DIFFS, RUSH_EXTRA_ALLOY, RUSH_ORDER, SHARD, formatClock, towerBoss, towerDaily, towerFirstClear, towerMult, towerTheme, type EndRun } from '../data/endgame';
+import { ALLOY, AFFIXES, riftAffixes, riftLuck, riftMult, riftReward, riftYield, RIFT_ALLOY, RIFT_TIME, rushGrade, rushReward, RUSH_DAILY, RUSH_DIFFS, RUSH_EXTRA_ALLOY, RUSH_ORDER, DUST, formatClock, towerBoss, towerDaily, towerFirstClear, towerMult, towerTheme, type EndRun } from '../data/endgame';
 import { DungeonScene, type DungeonMods, type NodeInstance } from './scenes/DungeonScene';
 import { HomeScene } from './scenes/HomeScene';
 import type { Interactable, Level } from './scenes/Level';
@@ -1218,10 +1218,10 @@ export class Game {
             const r = towerDaily(e.towerBest);
             e.towerDailyDate = todayKey();
             p.data.gold += r.gold;
-            if (r.shards) p.add(SHARD, r.shards);
+            if (r.dust) p.add(DUST, r.dust);
             this.audio.play('coin');
             this.saveNow();
-            this.openEndgameMenu(`탑 소탕 보상: +${r.gold} G${r.shards ? ` · 차원 파편 ${r.shards}개` : ''}`);
+            this.openEndgameMenu(`탑 소탕 보상: +${r.gold} G${r.dust ? ` · 차원 가루 ${r.dust}개` : ''}`);
           },
           rush: (diff) => {
             if (diff > 0 && !e.rushGradeBest[diff - 1]) return;
@@ -1272,21 +1272,21 @@ export class Game {
   private endRoomClear(end: EndRun): string {
     const p = this.progress;
     const e = p.data.end!;
-    const give = (gold: number, shards: number) => {
+    const give = (gold: number, dust: number) => {
       p.data.gold += gold;
       this.run!.gold += gold;
-      if (shards) {
-        const added = this.run!.bag.add(SHARD, shards);
-        if (added < shards) p.depositItem(SHARD, shards - added);
+      if (dust) {
+        const added = this.run!.bag.add(DUST, dust);
+        if (added < dust) p.depositItem(DUST, dust - added);
       }
-      return `+${gold} G${shards ? ` · 차원 파편 ${shards}개` : ''}`;
+      return `+${gold} G${dust ? ` · 차원 가루 ${dust}개` : ''}`;
     };
     if (end.kind === 'tower') {
       if (end.floor > e.towerBest) {
         e.towerBest = end.floor;
         const r = towerFirstClear(end.floor);
         this.checkTitles();
-        return `${end.floor}층 첫 돌파! ${give(r.gold, r.shards)}`;
+        return `${end.floor}층 첫 돌파! ${give(r.gold, r.dust)}`;
       }
       return `${end.floor}층 돌파`;
     }
@@ -1299,13 +1299,13 @@ export class Game {
       if (!e.rushBest[end.diff] || secs < e.rushBest[end.diff]) e.rushBest[end.diff] = Math.round(secs);
       if (!e.rushGradeBest[end.diff] || order.indexOf(grade) < order.indexOf(e.rushGradeBest[end.diff])) e.rushGradeBest[end.diff] = grade;
       this.checkTitles();
-      return `보스 러시 ${RUSH_DIFFS[end.diff].name} 완주! ${formatClock(secs)} · ${grade}등급 ${give(r.gold, r.shards)}`;
+      return `보스 러시 ${RUSH_DIFFS[end.diff].name} 완주! ${formatClock(secs)} · ${grade}등급 ${give(r.gold, r.dust)}`;
     }
     const inTime = end.timeLeft > 0;
     const r = riftReward(end.level, inTime);
     if (inTime && end.level > e.riftBest) e.riftBest = end.level;
     this.checkTitles();
-    return `심연 균열 ${end.level}단계 ${inTime ? '돌파' : '정리 (시간 초과: 보상 절반)'} ${give(r.gold, r.shards)}${inTime && end.level === e.riftBest ? ` · ${end.level + 1}단계 열림` : ''}`;
+    return `심연 균열 ${end.level}단계 ${inTime ? '돌파' : '정리 (시간 초과: 보상 절반)'} ${give(r.gold, r.dust)}${inTime && end.level === e.riftBest ? ` · ${end.level + 1}단계 열림` : ''}`;
   }
 
   /** 엔딩 후: 회차 대신 '차원의 끝'이 열린다. 레벨·장비·차원석·스테이지는 모두 그대로 */
@@ -1535,20 +1535,15 @@ export class Game {
       if (added) loot(`+${added} ${ITEMS[id].name}`, hex(ITEMS[id].color));
       else this.hud.toast('가방이 가득 찼습니다');
     }
-    // 차원 마력 정수: 5단계 이상 파수꾼·수호자, 7단계 정예가 가끔
-    const dimN = m.kind === 'boss' && tier >= 5 ? 1 + (rng.chance(0.5) ? 1 : 0) : m.kind === 'midboss' && tier >= 5 && rng.chance(0.35) ? 1 : m.kind === 'elite' && tier >= 7 && rng.chance(0.1) ? 1 : 0;
-    if (dimN) {
-      const added = run.bag.add('essence_dim', dimN);
-      if (added) loot(`+${added} ${ITEMS.essence_dim.name}`, hex(ITEMS.essence_dim.color));
-    }
-    // 차원 파편 (궁극기 강화): 파수꾼 1개, 수호자 2~3개. 높은 단계일수록 하나 더 나올 수 있다
-    if ((m.kind === 'boss' || m.kind === 'midboss') && !run.end) {
-      const shardN = (m.kind === 'boss' ? 2 + (rng.chance(0.5) ? 1 : 0) : 1) + (rng.chance(tier * 0.05) ? 1 : 0);
-      const added = run.bag.add('dim_shard', shardN);
+    // 차원 가루: 파수꾼 6~8, 수호자 16~24 (5단계 이상은 더), 7단계 정예는 가끔. 차원 응축기에서 파편·차원 정수로 가공한다
+    const dustN =
+      m.kind === 'boss' ? rng.int(16, 24) + (tier >= 5 ? 6 : 0) : m.kind === 'midboss' ? rng.int(6, 8) + (tier >= 5 ? 3 : 0) : m.kind === 'elite' && tier >= 7 && rng.chance(0.15) ? 2 : 0;
+    if (dustN && (!run.end || !m.isBoss)) {
+      const added = run.bag.add(DUST, dustN);
       // 가방이 가득 차면 창고로 바로 보낸다 (귀한 재료라 잃지 않게)
-      const stored = added < shardN ? this.progress.depositItem('dim_shard', shardN - added) : 0;
-      if (added + stored) loot(`+${added + stored} ${ITEMS.dim_shard.name}`, hex(ITEMS.dim_shard.color));
-      if (stored) this.hud.toast(`가방이 가득 차서 차원 파편 ${stored}개를 창고로 보냈습니다`);
+      const stored = added < dustN ? this.progress.depositItem(DUST, dustN - added) : 0;
+      if (added + stored) loot(`+${added + stored} ${ITEMS[DUST].name}`, hex(ITEMS[DUST].color));
+      if (stored) this.hud.toast(`가방이 가득 차서 차원 가루 ${stored}개를 창고로 보냈습니다`);
     }
     // 장비: 중간보스는 좋은 장비를 넉넉히
     const eqCount = m.kind === 'boss' ? 2 : m.kind === 'midboss' ? 2 : rng.chance(m.kind === 'elite' ? 0.4 + run.stage * 0.02 : 0.008 + run.stage * 0.0008) ? 1 : 0;

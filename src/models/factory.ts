@@ -125,6 +125,17 @@ export function buildBuildingGeometry(type: BuildingType, connections: boolean[]
         // 완성품이 나가는 방향
         arrow(0xffffff, 0.4),
       ]);
+    case 'condenser':
+      return merge([
+        part(new BoxGeometry(1.7, 0.5, 1.7), dark, { pos: [0, 0.25, 0] }),
+        part(new CylinderGeometry(0.62, 0.7, 0.3, 8), metal, { pos: [0, 0.65, 0] }),
+        part(new TorusGeometry(0.5, 0.07, 6, 16), 0x5ef0ff, { pos: [0, 1.2, 0], rot: [Math.PI / 2, 0, 0] }),
+        part(new TorusGeometry(0.34, 0.06, 6, 14), 0x7a6cff, { pos: [0, 1.2, 0], rot: [0, 0, Math.PI / 2] }),
+        part(new OctahedronGeometry(0.22), 0xdffcff, { pos: [0, 1.2, 0] }),
+        part(new BoxGeometry(0.12, 1.3, 0.12), metal, { pos: [0.72, 0.9, 0.72] }),
+        part(new BoxGeometry(0.12, 1.3, 0.12), metal, { pos: [-0.72, 0.9, -0.72] }),
+        arrow(0xffffff, 0.55),
+      ]);
     case 'alchemy':
       return merge([
         part(new CylinderGeometry(0.75, 0.6, 0.9, 8), 0x3a3a40, { pos: [0, 0.45, 0] }),

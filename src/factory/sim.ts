@@ -110,7 +110,7 @@ export type MachineStatus = 'working' | 'no-power' | 'idle' | 'blocked' | 'no-re
 
 const BELT_SPEED = 1;
 export const BOX_CAPACITY = 999;
-export const MACHINE_TYPES = new Set<BuildingType>(['smelter', 'crusher', 'infuser', 'alchemy']);
+export const MACHINE_TYPES = new Set<BuildingType>(['smelter', 'crusher', 'infuser', 'alchemy', 'condenser']);
 /** 발전기 연료 (낮은 것부터) */
 export const ESSENCES = ['essence_low', 'essence_mid', 'essence_high', 'essence_supreme', 'essence_dim'];
 
@@ -527,7 +527,8 @@ export class Factory {
       case 'smelter':
       case 'crusher':
       case 'infuser':
-      case 'alchemy': {
+      case 'alchemy':
+      case 'condenser': {
         // 가공할 재료를 한 번 분량만 받는다. 한 재료를 여러 개 쓰는 레시피는 레일이 막히지 않게 두 번 분량까지
         // 건물 레벨보다 높은 단계 재료는 받지 않는다
         // 한 재료가 여러 레시피에 쓰일 수 있다 (하급 정수: 마력 구리·철·금·판자). 첫 레시피만 보면

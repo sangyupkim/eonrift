@@ -33,7 +33,7 @@ describe('보스 러시 · 심연 균열', () => {
   it('등급과 보상', () => {
     expect(rushGrade(500)).toBe('S');
     expect(rushGrade(1300)).toBe('C');
-    expect(rushReward(2, 'S').shards).toBeGreaterThan(rushReward(0, 'S').shards);
+    expect(rushReward(2, 'S').dust).toBeGreaterThan(rushReward(0, 'S').dust);
   });
   it('균열 변이는 단계가 오를수록 늘고, 같은 날 같은 단계는 같다', () => {
     expect(riftAffixCount(1)).toBe(0);
@@ -125,6 +125,23 @@ describe('초월 · 칭호 · 음식 · 납품', () => {
     q.refreshDaily(7, true, true);
     const del = q.state.daily.list.filter((d) => d.objective.type === 'deliver');
     expect(del).toHaveLength(2);
-    expect(del.every((d) => (d.reward.items?.dim_shard ?? 0) > 0)).toBe(true);
+    expect(del.every((d) => (d.reward.items?.dim_dust ?? 0) > 0)).toBe(true);
+  });
+});
+
+describe('차원 가루 → 차원 응축기', () => {
+  it('가루와 정수로 차원 파편·차원 마력 정수를 만들고, 레일로 내보낸다', async () => {
+    const { Factory } = await import('../src/factory/sim');
+    const f = new Factory({ sizeLevel: 0, buildings: [] }, 8);
+    f.place('box', 0, 0, 0)!.buffer = { dim_dust: 24, essence_high: 2, essence_supreme: 2 };
+    f.place('belt', 1, 0, 0);
+    f.place('condenser', 2, 0, 0);
+    const out = f.place('box', 3, 0, 0)!;
+    out.mode = 'out';
+    f.place('wire', 2, 1, 0);
+    f.place('generator', 2, 2, 0)!.buffer = { essence_low: 30 };
+    f.simulate(1500);
+    expect(out.buffer!.dim_shard).toBe(2);
+    expect(out.buffer!.essence_dim).toBe(2);
   });
 });
