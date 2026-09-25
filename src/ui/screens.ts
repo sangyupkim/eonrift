@@ -1,7 +1,7 @@
 import { BUILD_ID, GAME_VERSION } from '../config';
 import { PATCH_NOTES } from '../data/patchnotes';
 import { applyUpdate, fetchRemoteVersion, isNewer, type RemoteVersion } from './update';
-import { CLASSES, CLASS_ORDER, expToNext, MAX_LEVEL, MAX_SKILL_LEVEL, SKILL_LEARN, skillUpgradeCost, STAT_INFO, STAT_KEYS, type ClassId, type StatKey } from '../data/classes';
+import { CLASSES, CLASS_ORDER, expToNext, MAX_LEVEL, MAX_SKILL_LEVEL, SKILL_LEARN, skillUpgradeCost, STAT_INFO, STAT_KEYS, ULT_COOLDOWN, ULTIMATES, type ClassId, type StatKey } from '../data/classes';
 import { TOOL_KIND_NAMES, TOOL_TIER_NAMES, toolBonusChance, toolEnhanceCost, toolMaxDur, toolName, toolRepair, toolSpeed, type ToolKind, type ToolState } from '../data/tools';
 import { equipCraftCost, equipManaCraftCost, MANA_PLATE_OF, manaPlateCraftCost, plateCraftCost, toolCraftCost, workbenchUpgradeCost, type CraftCost } from '../data/crafting';
 import { durability, EQUIP_SLOTS, EQUIP_MAX_DUR, enhanceCost, repairCost, type EquipSlot, equipName, equipStats, equipValue, GRADES, slotName, type Equip } from '../data/equipment';
@@ -368,7 +368,7 @@ export class Screens {
          </div>
          ${opts.seed !== undefined ? `<div class="seed">던전 시드 ${opts.seed}</div>` : ''}
          <div class="keys">배경음: Dreamy Analog Synth Loop · Smooth Electro Ambient Bossa Nova Loop · Relaxing Dreamy Synth Rhodes Loop — orangefreesounds.com (CC BY 4.0)</div>
-         <div class="keys">PC 조작: WASD 이동 · J/클릭 공격 · Space 구르기 · 1·2·3 스킬 · Q 물약 · E 상호작용·채집 · M 지도 · I 가방 · B 건설 · Esc 메뉴</div>
+         <div class="keys">PC 조작: WASD 이동 · J/클릭 공격 · Space 구르기 · 1·2·3 스킬 · 4/F 궁극기 · Q 물약 · E 상호작용·채집 · M 지도 · I 가방 · B 건설 · Esc 메뉴</div>
        </div>`,
       opts.onClose,
     );
@@ -679,9 +679,19 @@ export class Screens {
           return `<li class="${selSkill === i ? 'sel' : ''} ${lv ? '' : 'locked'}" ${lv ? `data-skillpick="${i}"` : ''}><img class="gem ico" src="${skillIconUrl(p.data.currentClass, i)}" alt=""><div><b class="slot-no">${slot >= 0 ? `[${slot + 1}번 칸]` : ''}</b><b>${sk.name} ${lv ? `<span class="ok">Lv.${lv}</span>` : '<span class="dim">(미습득 · 교관 카엘)</span>'}</b><small>${sk.description} · MP ${sk.mp} · ${sk.cooldown}초</small></div></li>`;
         })
         .join('');
+      // 궁극기: 수호자의 차원석으로 열리고, 하나를 골라 궁극기 칸(4·F키)에 둔다
+      const open = p.unlockedUlts();
+      const cur = p.ultIndex;
+      const ultRows = ULTIMATES[p.data.currentClass]
+        .map((u, i) => {
+          const got = open.includes(i);
+          return `<li class="${cur === i ? 'sel' : ''} ${got ? '' : 'locked'}" ${got ? `data-ult="${i}"` : ''}><img class="gem ico" src="${skillIconUrl(p.data.currentClass, 6 + i)}" alt=""><div><b>${u.name} ${cur === i ? '<span class="ok">[장착]</span>' : got ? '<span class="dim">(누르면 장착)</span>' : `<span class="dim">(${u.stone}-10 수호자 처치 시 획득)</span>`}</b><small>${u.description} · MP ${u.mp} · ${ULT_COOLDOWN}초</small></div></li>`;
+        })
+        .join('');
       body = `<div class="scroll">
         <h3>퀵슬롯 <small>${selSkill === undefined ? '아래에서 스킬을 누른 뒤 놓을 칸을 누르세요. 칸을 누르면 비웁니다' : `<b class="ok">${cls.skills[selSkill].name}</b>을(를) 놓을 칸을 누르세요`}</small></h3>
         <div class="quick-row">${quickRow}</div>
+        <h3>궁극기 <small>수호자를 처음 쓰러뜨려 차원석을 얻으면 열립니다 · 하나를 골라 궁극기 칸에 둡니다</small></h3><ul class="list">${ultRows}</ul>
         <h3>배운 스킬</h3><ul class="list">${rows}</ul></div>`;
     } else if (tab === 'stats') {
       const next = expToNext(c.level);
@@ -740,6 +750,11 @@ export class Screens {
       onClose,
     );
     const again = (t = tab, slot = selSlot, sk?: number) => this.inventory(p, quests, t, onChange, onClose, slot, field, sk);
+    this.on(s, '[data-ult]', (b) => {
+      c.ult = Number(b.dataset.ult);
+      onChange();
+      again(tab, selSlot);
+    });
     this.on(s, '[data-skillpick]', (b) => {
       const i = Number(b.dataset.skillpick);
       again(tab, selSlot, selSkill === i ? undefined : i);

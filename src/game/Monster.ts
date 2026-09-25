@@ -105,6 +105,10 @@ export class Monster {
   dooming = false;
   /** 감속 남은 시간 */
   slow = 0;
+  /** 기절·빙결 남은 시간 (아무것도 못 한다. 보스는 짧게) */
+  stun = 0;
+  /** 빙결로 보이기 (파랗게) */
+  frozen = false;
   private t = 0;
   private flash = 0;
   private knockX = 0;
@@ -414,6 +418,24 @@ export class Monster {
       return;
     }
 
+    if (this.stun > 0) {
+      this.stun -= dt * (this.isBoss ? 3 : 1);
+      if (this.state === 'windup' || this.state === 'dash') {
+        this.clearTelegraph(world.scene);
+        this.setState('chase');
+      }
+      this.aggro = true;
+      this.material.emissive.setHex(this.frozen ? 0x3a6aa0 : 0x3a3a10);
+      if (Math.random() < dt * 3) world.effects.sparks(this.x, this.rig.height * this.rig.root.scale.y, this.z, this.frozen ? 0xbff4ff : 0xffe07a, 1, { up: true, spread: 0.3 });
+      this.rig.root.position.set(this.x, 0, this.z);
+      this.obstacle.x = this.x;
+      this.obstacle.z = this.z;
+      if (this.stun <= 0) {
+        this.frozen = false;
+        this.material.emissive.setHex(this.kind === 'elite' ? 0x3a2a00 : 0x000000);
+      }
+      return;
+    }
     const p = world.player;
     const dx = p.x - this.x;
     const dz = p.z - this.z;

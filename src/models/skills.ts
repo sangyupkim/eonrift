@@ -97,6 +97,44 @@ export function buildSkillGeometry(cls: ClassId, index: number): BufferGeometry 
         part(new SphereGeometry(0.2, 8, 6), 0x9a9aaa, { pos: [0.3, -0.12, 0] }),
       ];
       break;
+    // ---- 궁극기 ----
+    case 'sword:6': // 천검난무: 원을 그리며 도는 칼 네 자루
+      g = [0, 1, 2, 3].flatMap((i) => {
+        const a = (i / 4) * Math.PI * 2;
+        return sword(a + 0.6, Math.cos(a) * 0.28, Math.sin(a) * 0.28, i % 2 ? 0x9fd8ff : STEEL);
+      });
+      g.push(part(new TorusGeometry(0.48, 0.04, 5, 22), 0x4aa8ff));
+      break;
+    case 'sword:7': // 대지 붕괴: 땅에 박힌 큰 검과 갈라진 땅
+      g = [
+        part(new CylinderGeometry(0.5, 0.55, 0.14, 8), 0x8a6a4a, { pos: [0, -0.38, 0] }),
+        ...[0, 1, 2, 3, 4].map((i) => part(new BoxGeometry(0.06, 0.04, 0.4), 0xffa24a, { pos: [Math.cos(i * 1.26) * 0.28, -0.3, Math.sin(i * 1.26) * 0.28], rot: [0, -i * 1.26, 0] })),
+        ...sword(Math.PI, 0, 0.1),
+        part(new OctahedronGeometry(0.1), 0xffd070, { pos: [0, 0.45, 0] }),
+      ];
+      break;
+    case 'mage:6': // 메테오: 불타는 바위와 꼬리
+      g = [
+        part(new IcosahedronGeometry(0.3, 0), 0x5a3a2a, { pos: [0.12, -0.1, 0] }),
+        part(new IcosahedronGeometry(0.36, 1), 0xff6a2a, { pos: [0.12, -0.1, 0], scale: [1, 1, 1] }),
+        part(new ConeGeometry(0.28, 0.7, 7), 0xffb040, { pos: [-0.2, 0.3, 0], rot: [0, 0, 2.4] }),
+        part(new ConeGeometry(0.16, 0.5, 6), 0xffe070, { pos: [-0.28, 0.4, 0.05], rot: [0, 0, 2.4] }),
+      ];
+      break;
+    case 'mage:7': // 절대영도: 큰 얼음 결정과 서리 고리
+      g = [
+        part(new OctahedronGeometry(0.3), 0xdff8ff, { scale: [0.7, 1.6, 0.7] }),
+        part(new OctahedronGeometry(0.16), 0x9fe8ff, { pos: [0.3, -0.15, 0.05], scale: [0.6, 1.4, 0.6] }),
+        part(new OctahedronGeometry(0.16), 0x9fe8ff, { pos: [-0.3, -0.15, -0.05], scale: [0.6, 1.4, 0.6] }),
+        part(new TorusGeometry(0.44, 0.035, 5, 22), 0x6ad8ff, { rot: [1.3, 0, 0], pos: [0, -0.3, 0] }),
+      ];
+      break;
+    case 'archer:6': // 화살비: 아래로 쏟아지는 화살 여러 개
+      g = [-0.3, -0.1, 0.1, 0.3].flatMap((x, i) => arrow(Math.PI, x, 0.1 - (i % 2) * 0.2, 0x7aff9a, 0.55));
+      break;
+    case 'archer:7': // 용의 사격: 황금빛 거대한 화살
+      g = [...arrow(-0.8, 0, 0, 0xffd04a, 1.1), part(new TorusGeometry(0.26, 0.05, 5, 16), 0xffc04a, { rot: [0, Math.PI / 2, 0.8] }), part(new TorusGeometry(0.38, 0.03, 5, 18), 0xfff0a0, { rot: [0, Math.PI / 2, 0.8], pos: [-0.15, -0.15, 0] })];
+      break;
     case 'archer:5': // 사냥꾼의 집중: 과녁
     default:
       g = [

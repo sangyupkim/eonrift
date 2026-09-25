@@ -175,12 +175,24 @@ export class Hud {
       this.skillLabels.push(label);
       this.skillShades.push(shade);
     }
-    // 궁극기 칸: 보스 보상 시스템과 함께 열린다 (지금은 잠김)
+    // 궁극기 칸: 수호자를 쓰러뜨려 얻는다. 잠겨 있으면 얻는 방법을 알려 준다
     const ult = el('button', 'act skill ult locked') as HTMLButtonElement;
-    ult.append(el('span', 'skill-name', '궁극기'));
+    this.ultBtn = ult;
+    this.ultIcon = document.createElement('img');
+    this.ultIcon.className = 'skill-icon';
+    this.ultIcon.alt = '';
+    this.ultIcon.style.display = 'none';
+    this.ultLabel = el('span', 'skill-name', '궁극기');
+    this.ultShade = el('div', 'cooldown');
+    this.ultSec = el('span', 'cd-sec');
+    ult.append(this.ultIcon, this.ultLabel, this.ultShade, this.ultSec);
     ult.addEventListener('pointerdown', (e) => {
       e.preventDefault();
-      this.toast('궁극기는 보스를 쓰러뜨려야 얻을 수 있습니다 (준비 중)', 2200);
+      if (this.ultLockedMsg) this.toast(this.ultLockedMsg, 2600);
+      else {
+        input.press('ult');
+        this.onPress();
+      }
     });
     this.potionBtn = this.button('act potion', itemIconUrl('potion') ? `<img class="mico" src="${itemIconUrl('potion')}" alt="">` : ICONS.potion, 'potion');
     this.potionCount = el('span', 'badge');
@@ -395,6 +407,39 @@ export class Hud {
 
   setDodgeCooldown(ratio: number): void {
     this.dodgeShade.style.transform = `scaleY(${ratio})`;
+  }
+
+  private ultBtn!: HTMLButtonElement;
+  private ultIcon!: HTMLImageElement;
+  private ultLabel!: HTMLSpanElement;
+  private ultShade!: HTMLDivElement;
+  private ultSec!: HTMLSpanElement;
+  private ultLockedMsg = '';
+  private ultCdWas = false;
+
+  /** 궁극기 칸. lockedMsg가 있으면 잠김 */
+  setUlt(o: { name: string; icon: string; ratio: number; secs: number; ready: boolean; lockedMsg?: string }): void {
+    this.ultLockedMsg = o.lockedMsg ?? '';
+    const b = this.ultBtn;
+    b.classList.toggle('locked', !!o.lockedMsg);
+    const cooling = o.ratio > 0.001;
+    b.classList.toggle('cooling', cooling);
+    b.classList.toggle('no-mp', !o.ready);
+    if (this.ultCdWas && !cooling) {
+      b.classList.remove('ready-flash');
+      void b.offsetWidth;
+      b.classList.add('ready-flash');
+    }
+    this.ultCdWas = cooling;
+    this.ultShade.style.transform = `scaleY(${Math.min(1, o.ratio)})`;
+    const sec = cooling ? String(Math.ceil(o.secs)) : '';
+    if (this.ultSec.textContent !== sec) this.ultSec.textContent = sec;
+    if (this.ultLabel.textContent !== o.name) this.ultLabel.textContent = o.name;
+    if (this.ultIcon.dataset.src !== o.icon) {
+      this.ultIcon.dataset.src = o.icon;
+      if (o.icon) this.ultIcon.src = o.icon;
+      this.ultIcon.style.display = o.icon ? '' : 'none';
+    }
   }
 
   /** 퀵슬롯 3칸. names[i]가 null이면 빈 칸 */

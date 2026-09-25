@@ -1,4 +1,4 @@
-import { CLASSES, CLASS_ORDER, expToNext, MAX_LEVEL, POINTS_PER_LEVEL, STAT_KEYS, type BaseStats, type ClassId, type StatKey } from '../data/classes';
+import { CLASSES, CLASS_ORDER, ULTIMATES, expToNext, MAX_LEVEL, POINTS_PER_LEVEL, STAT_KEYS, type BaseStats, type ClassId, type StatKey } from '../data/classes';
 import { equipStats, type Equip, type EquipSlot } from '../data/equipment';
 import { newTool, type ToolKind, type ToolState } from '../data/tools';
 import { FACTORY_SIZES, RECIPES, RECIPE_RENAMES } from '../data/factory';
@@ -21,6 +21,8 @@ export interface ClassState {
   skills: number[];
   /** 퀵슬롯 3칸에 놓인 스킬 번호 (-1 = 비어 있음) */
   quick: number[];
+  /** 고른 궁극기 (0/1) */
+  ult?: number;
 }
 
 export interface RunCheckpoint {
@@ -358,6 +360,18 @@ export class Progress {
     s.atk = Math.round(s.atk);
     s.crit = Math.round(s.crit * 10) / 10;
     return s;
+  }
+
+  /** 열린 궁극기 번호들 (수호자의 차원석으로 열린다) */
+  unlockedUlts(clsId: ClassId = this.data.currentClass): number[] {
+    return ULTIMATES[clsId].map((u, i) => (this.data.dimStones.includes(u.stone) ? i : -1)).filter((i) => i >= 0);
+  }
+  /** 지금 쓸 궁극기 (없으면 -1) */
+  get ultIndex(): number {
+    const open = this.unlockedUlts();
+    if (!open.length) return -1;
+    const want = this.cls.ult ?? open[open.length - 1];
+    return open.includes(want) ? want : open[0];
   }
 
   /** 도감: 처치 기록. 처음 잡은 종족이면 true */

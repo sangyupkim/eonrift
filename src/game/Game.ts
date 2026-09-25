@@ -9,7 +9,7 @@ import { BAG_SLOTS, CAMERA_OFFSET, PLAYER, SCREEN_UP, TILE, VIEW_HEIGHT } from '
 import { Audio } from '../core/audio';
 import { Input } from '../core/input';
 import { Rng, randomSeed } from '../core/rng';
-import { CLASSES, expToNext, MAX_SKILL_LEVEL, SKILL_LEARN, skillUpgradeCost, type ClassId } from '../data/classes';
+import { CLASSES, CLASS_ORDER, expToNext, MAX_SKILL_LEVEL, SKILL_LEARN, skillUpgradeCost, ULT_COOLDOWN, ULTIMATES, type ClassId } from '../data/classes';
 import { durability, equipName, GRADE, GRADES, newUid, rollEquip, type Equip } from '../data/equipment';
 import { rollManaGrade } from '../data/crafting';
 import { BUILDINGS, FACTORY_SIZES, OFFLINE_CAP_HOURS, type BuildingType, upgradeBlueprintCost } from '../data/factory';
@@ -63,6 +63,8 @@ interface Run {
 const ESSENCE = (tier: number) => (tier <= 3 ? 'essence_low' : tier <= 5 ? 'essence_mid' : 'essence_high');
 const NPC_IDS = new Set<string>(NPCS.map((n) => n.id));
 const MAX_STAGE = 70;
+/** 가로 시야 기준 화면비 (막대형 휴대폰 가로) */
+const REF_ASPECT = 2.2;
 
 /** 물약 (좋은 순서) → 회복 비율 */
 const POTION_KINDS: [string, number][] = [
@@ -331,7 +333,9 @@ export class Game {
     const h = this.container.clientHeight;
     this.renderer.setSize(w, h);
     const aspect = w / h;
-    const viewH = aspect >= 1 ? VIEW_HEIGHT : (VIEW_HEIGHT * 1.6) / aspect;
+    // 가로 화면은 막대형 휴대폰(가로 약 2.2:1) 기준으로 가로 폭을 맞춘다.
+    // 폴드처럼 네모에 가까운 화면은 가로는 같게 보이고 세로만 더 보인다 (확대되어 보이지 않게)
+    const viewH = aspect >= REF_ASPECT ? VIEW_HEIGHT : aspect >= 1 ? (VIEW_HEIGHT * REF_ASPECT) / aspect : (VIEW_HEIGHT * 1.6) / aspect;
     this.camera.top = viewH / 2;
     this.camera.bottom = -viewH / 2;
     this.camera.left = (-viewH * aspect) / 2;
@@ -1321,6 +1325,13 @@ export class Game {
         this.audio.play('stone');
         this.level.effects.pillar(m.x, m.z, 0x5ef0ff, 8);
         this.hud.toast(`차원석을 얻었다! (${p.stoneCount}/7)`, 4000);
+        // 수호자의 차원석으로 궁극기가 열린다 (1-10, 4-10)
+        const newUlt = ULTIMATES[p.data.currentClass].findIndex((u) => u.stone === tier);
+        if (newUlt >= 0) {
+          p.cls.ult = newUlt;
+          const names = CLASS_ORDER.map((c) => ULTIMATES[c][newUlt].name).join(' · ');
+          window.setTimeout(() => this.hud.toast(`:sparkle: 궁극기 획득! ${ULTIMATES[p.data.currentClass][newUlt].name} (모든 직업: ${names}) — 캐릭터 → 스킬에서 고를 수 있습니다`, 5000), 2500);
+        }
       }
     }
     this.refreshHud();
@@ -1996,6 +2007,15 @@ export class Game {
         else this.gathering = null;
       }
     }
+    if (input.consume('ult')) {
+      const ui = this.progress.ultIndex;
+      const msg = ui < 0 ? '궁극기는 1-10 수호자를 처음 쓰러뜨리면 얻습니다' : this.combat.useUlt(ui);
+      if (msg) this.hud.toast(msg);
+      else if (ui >= 0) {
+        this.gathering = null;
+        this.hud.toast(`궁극기: ${ULTIMATES[this.progress.data.currentClass][ui].name}!`, 1400);
+      }
+    }
     if (input.consume('potion')) this.drinkPotion();
     if ((this.attackBuffer > 0 || input.attackHeld) && !this.building && pl.canAct) {
       this.attackBuffer = 0;
@@ -2187,6 +2207,13 @@ export class Game {
       quick.map((i) => (i >= 0 ? skillIconUrl(pl.cls.id, i) : '')),
       quick.map((i) => (i >= 0 ? (this.combat.cooldowns[i] ?? 0) : 0)),
     );
+    // 궁극기 칸
+    const ui = p.ultIndex;
+    if (ui < 0) this.hud.setUlt({ name: '궁극기', icon: '', ratio: 0, secs: 0, ready: true, lockedMsg: '궁극기는 1-10 수호자를 처음 쓰러뜨리면 얻습니다 (4-10 수호자를 쓰러뜨리면 하나 더)' });
+    else {
+      const u = ULTIMATES[pl.cls.id][ui];
+      this.hud.setUlt({ name: u.name, icon: skillIconUrl(pl.cls.id, 6 + ui), ratio: this.combat.ultCooldown / ULT_COOLDOWN, secs: this.combat.ultCooldown, ready: pl.mp >= u.mp });
+    }
     const inv = this.run ? this.run.bag : this.progress.invBag;
     this.hud.setBagCount(inv.used, BAG_SLOTS);
   }

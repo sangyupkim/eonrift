@@ -533,6 +533,47 @@ export class Effects {
     });
   }
 
+  /** 하늘에서 떨어지는 운석: 불꼬리를 달고 내려와 onLand에 폭발 */
+  meteor(x: number, z: number, color: number, fall = 0.55, onLand?: () => void): void {
+    this.glyph(x, z, 2.6, color, fall + 0.2);
+    const group = new Group();
+    const coreMat = glow(lighten(color, 0.5), 1);
+    const shellMat = glow(color, 0.7);
+    const core = new Mesh(new SphereGeometry(0.55, 10, 8), coreMat);
+    const shell = new Mesh(new SphereGeometry(0.9, 10, 8), shellMat);
+    group.add(shell, core);
+    const sx = x - 5;
+    const sz = z - 5;
+    let landed = false;
+    this.add(group, fall, (k) => {
+      const e = k * k;
+      group.position.set(sx + (x - sx) * e, 14 * (1 - e) + 0.6, sz + (z - sz) * e);
+      if (Math.random() < 0.9) this.sparkSys.add(group.position.x, group.position.y, group.position.z, 0, 0.5, 0, Math.random() < 0.4 ? 0xffffff : color, { life: 0.4, size: 0.18, gravity: -1, drag: 1 });
+      if (k >= 1 && !landed) {
+        landed = true;
+        onLand?.();
+      }
+    });
+  }
+
+  /** 화살비: 범위 안에 빛나는 화살이 쏟아진다 */
+  arrowRain(x: number, z: number, radius: number, color: number, duration: number): void {
+    this.zone(x, z, radius, color, duration);
+    const group = new Group();
+    let acc = 0;
+    this.add(group, duration, (_k, dt) => {
+      acc += dt;
+      while (acc > 0.025) {
+        acc -= 0.025;
+        const a = Math.random() * Math.PI * 2;
+        const r = Math.sqrt(Math.random()) * radius;
+        const px = x + Math.cos(a) * r;
+        const pz = z + Math.sin(a) * r;
+        this.sparkSys.add(px, 7, pz, 0, -26, 0, Math.random() < 0.3 ? 0xffffff : color, { life: 0.3, size: 0.12, gravity: 0, drag: 0 });
+      }
+    });
+  }
+
   update(dt: number): void {
     this.sparkSys.update(dt);
     for (let i = this.list.length - 1; i >= 0; i--) {

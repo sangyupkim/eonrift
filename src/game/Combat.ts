@@ -1,4 +1,4 @@
-import type { ClassId } from '../data/classes';
+import { ULT_COOLDOWN, ULTIMATES, type ClassId } from '../data/classes';
 import type { Monster } from './Monster';
 import type { Player } from './Player';
 import type { Stats } from './Progress';
@@ -33,6 +33,10 @@ export class Combat {
   private comboTimer = 0;
   /** 스킬 번호별 재사용 대기 */
   cooldowns: number[] = [0, 0, 0, 0, 0, 0];
+  /** 궁극기 재사용 대기 */
+  ultCooldown = 0;
+  /** 시간이 걸리는 공격 (칼날 폭풍·화살비 등): 같은 던전에 있을 때만 이어진다 */
+  private timers: { at: number; every: number; left: number; d: DungeonScene; fn: () => void }[] = [];
 
   constructor(private host: CombatHost) {}
 
@@ -40,6 +44,184 @@ export class Combat {
     this.comboTimer = Math.max(0, this.comboTimer - dt);
     if (this.comboTimer === 0) this.combo = 0;
     for (let i = 0; i < this.cooldowns.length; i++) this.cooldowns[i] = Math.max(0, this.cooldowns[i] - dt);
+    this.ultCooldown = Math.max(0, this.ultCooldown - dt);
+    for (let i = this.timers.length - 1; i >= 0; i--) {
+      const t = this.timers[i];
+      if (this.host.dungeon() !== t.d) {
+        this.timers.splice(i, 1);
+        continue;
+      }
+      t.at -= dt;
+      while (t.at <= 0 && t.left > 0) {
+        t.left--;
+        t.at += t.every;
+        t.fn();
+      }
+      if (t.left <= 0) this.timers.splice(i, 1);
+    }
+  }
+
+  /** delay초 뒤부터 every초마다 times번 fn */
+  private repeat(d: DungeonScene, delay: number, every: number, times: number, fn: () => void): void {
+    this.timers.push({ at: delay, every, left: times, d, fn });
+  }
+
+  /** 궁극기 (0/1). 실패 이유를 돌려준다 */
+  useUlt(index: number): string | null {
+    const player = this.host.player;
+    const d = this.host.dungeon();
+    const ult = ULTIMATES[player.cls.id][index];
+    if (!ult) return '궁극기가 없습니다';
+    if (!d) return '궁극기는 던전에서만 쓸 수 있습니다';
+    if (player.buff('silence')) return '침묵 상태라 궁극기를 쓸 수 없습니다';
+    if (this.ultCooldown > 0) return null;
+    if (!player.canAct && player.state !== 'dash') return null;
+    if (player.mp < ult.mp) return 'MP가 부족합니다';
+    player.mp -= ult.mp;
+    this.ultCooldown = ULT_COOLDOWN;
+    const p = player.position;
+    const target = this.findTarget(14);
+    const aim = this.angleTo(target) ?? player.facing;
+    // 몬스터가 가장 많이 모인 곳 (범위 궁극기 조준)
+    const crowd = (range: number, r: number) => {
+      let best = { x: p.x + Math.sin(aim) * 5, z: p.z + Math.cos(aim) * 5, n: 0 };
+      for (const m of d.monsters) {
+        if (!m.alive || Math.hypot(m.x - p.x, m.z - p.z) > range) continue;
+        const n = d.monsters.filter((o) => o.alive && Math.hypot(o.x - m.x, o.z - m.z) < r).length;
+        if (n > best.n) best = { x: m.x, z: m.z, n };
+      }
+      return best;
+    };
+    const hitAround = (x: number, z: number, r: number, mult: number, knock: number, stun = 0, frozen = false) => {
+      for (const m of d.monsters) {
+        if (!m.alive || Math.hypot(m.x - x, m.z - z) > r + m.radius) continue;
+        this.host.damageMonster(m, mult, knock, x, z);
+        if (stun && m.alive) {
+          m.stun = Math.max(m.stun, stun);
+          m.frozen = frozen;
+        }
+      }
+    };
+    this.host.shake(0.3);
+    switch (`${player.cls.id}:${index}`) {
+      case 'sword:0': {
+        // 천검난무: 2.4초 동안 칼날 폭풍 (무적)
+        player.invulnFor(2.5);
+        player.startAction({ pose: 'spin', duration: 2.4, hitAt: 2, moveMult: 0.8, onHit: () => {} }, null);
+        d.effects.aura(p.x, p.z, 0x4aa8ff);
+        this.host.sfx('level');
+        let i = 0;
+        this.repeat(d, 0.05, 0.2, 12, () => {
+          const c = i++ % 2 ? 0x9fd8ff : 0x4aa8ff;
+          d.effects.slash(p.x, p.z, player.facing + i, 3.6, c, Math.PI * 2, 0.7 + (i % 3) * 0.3);
+          d.effects.sparks(p.x, 1, p.z, 0xdff4ff, 6, { speed: 6 });
+          hitAround(p.x, p.z, 3.8, 1.4, 0.4);
+          this.host.sfx('swing');
+        });
+        this.repeat(d, 2.4, 1, 1, () => {
+          d.effects.ring(p.x, p.z, 5, 0x4aa8ff, 0.4);
+          hitAround(p.x, p.z, 4.5, 2, 1.8);
+          this.host.shake(0.35);
+        });
+        break;
+      }
+      case 'sword:1': {
+        // 대지 붕괴: 뛰어올라 내려찍기 + 기절
+        const t = crowd(9, 3);
+        const dist = Math.min(8, Math.hypot(t.x - p.x, t.z - p.z));
+        const dir = Math.atan2(t.x - p.x, t.z - p.z);
+        player.facing = dir;
+        player.invulnFor(0.9);
+        d.effects.glyph(p.x + Math.sin(dir) * dist, p.z + Math.cos(dir) * dist, 5, 0xffa24a, 0.6);
+        player.startDash({
+          dirX: Math.sin(dir),
+          dirZ: Math.cos(dir),
+          speed: Math.max(4, dist / 0.45),
+          duration: 0.45,
+          pose: 'leap',
+          invuln: true,
+          onEnd: () => {
+            d.effects.explosion(p.x, p.z, 5, 0xff8a2a);
+            d.effects.ring(p.x, p.z, 6.5, 0xffd08a, 0.5);
+            d.particles.burst(p.x, 0.4, p.z, 0x7a5a3a, 30, 2);
+            hitAround(p.x, p.z, 5, 12, 2.2, 2.5);
+            this.host.shake(0.8);
+            this.host.hitStop(0.12);
+            this.host.sfx('slam');
+          },
+        });
+        this.host.sfx('dash');
+        break;
+      }
+      case 'mage:0': {
+        // 메테오: 운석 세 개
+        const t = crowd(13, 3.2);
+        player.startAction({ pose: 'cast', duration: 0.6, hitAt: 0.3, onHit: () => {} }, Math.atan2(t.x - p.x, t.z - p.z));
+        d.effects.glyph(p.x, p.z, 1.8, 0xff7a30, 0.9);
+        this.host.sfx('magic');
+        for (let i = 0; i < 3; i++) {
+          const a = Math.random() * Math.PI * 2;
+          const r = i === 0 ? 0 : 1.5 + Math.random() * 1.5;
+          const mx = t.x + Math.cos(a) * r;
+          const mz = t.z + Math.sin(a) * r;
+          this.repeat(d, i * 0.45, 1, 1, () =>
+            d.effects.meteor(mx, mz, 0xff6a20, 0.55, () => {
+              if (this.host.dungeon() !== d) return;
+              d.effects.explosion(mx, mz, 3.4, 0xff5a1a);
+              hitAround(mx, mz, 3.4, 6, 1.6, 0.6);
+              this.host.shake(0.45);
+              this.host.sfx('boom');
+            }),
+          );
+        }
+        break;
+      }
+      case 'mage:1': {
+        // 절대영도: 주변을 얼린다
+        player.startAction({ pose: 'cast', duration: 0.5, hitAt: 0.4, onHit: () => {} }, null);
+        d.effects.glyph(p.x, p.z, 4, 0x9ff4ff, 1.2);
+        d.effects.zone(p.x, p.z, 8, 0x6ad8ff, 3);
+        this.repeat(d, 0.35, 1, 1, () => {
+          d.effects.ring(p.x, p.z, 9, 0xdff8ff, 0.6);
+          d.effects.ring(p.x, p.z, 6, 0x6ad8ff, 0.5);
+          d.effects.sparks(p.x, 0.5, p.z, 0xdff8ff, 40, { speed: 9 });
+          hitAround(p.x, p.z, 8, 8, 0, 3, true);
+          this.host.shake(0.4);
+          this.host.sfx('ice');
+        });
+        break;
+      }
+      case 'archer:0': {
+        // 화살비
+        const t = crowd(13, 4);
+        player.startAction({ pose: 'shoot', duration: 0.5, hitAt: 0.5, onHit: () => {} }, Math.atan2(t.x - p.x, t.z - p.z));
+        d.effects.arrowRain(t.x, t.z, 4.2, 0x7aff9a, 3.2);
+        this.host.sfx('bow');
+        this.repeat(d, 0.3, 0.25, 12, () => {
+          hitAround(t.x, t.z, 4.2, 0.9, 0.1);
+          this.host.sfx('bow');
+        });
+        break;
+      }
+      case 'archer:1':
+      default: {
+        // 용의 사격: 모은 힘으로 거대한 관통 화살
+        player.invulnFor(0.7);
+        player.startAction({ pose: 'shoot', duration: 0.8, hitAt: 0.75, onHit: () => {} }, aim);
+        d.effects.glyph(p.x, p.z, 2, 0xffd04a, 0.8);
+        d.effects.sparks(p.x, 1.1, p.z, 0xffd04a, 20, { up: true, spread: 0.6 });
+        this.repeat(d, 0.6, 1, 1, () => {
+          const f = player.facing;
+          d.spawnPlayerProjectile({ x: p.x, z: p.z, angle: f, speed: 30, damage: 14, color: 0xffc04a, kind: 'wave', radius: 1.5, pierce: 99, life: 0.8, knock: 2, y: 1 });
+          d.effects.streak(p.x, p.z, p.x + Math.sin(f) * 24, p.z + Math.cos(f) * 24, 0xffd04a, 2);
+          d.effects.ring(p.x + Math.sin(f) * 1.2, p.z + Math.cos(f) * 1.2, 2.5, 0xffd04a, 0.3, 1);
+          this.host.shake(0.5);
+          this.host.sfx('boom');
+        });
+        break;
+      }
+    }
+    return null;
   }
 
   /** 자동 조준: 사거리 안의 가장 가까운 몬스터 */
