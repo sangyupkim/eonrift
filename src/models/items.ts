@@ -1,8 +1,8 @@
-import { BoxGeometry, BufferGeometry, ConeGeometry, CylinderGeometry, DodecahedronGeometry, IcosahedronGeometry, OctahedronGeometry, SphereGeometry, TorusGeometry } from 'three';
-import type { Equip } from '../data/equipment';
+import { BoxGeometry, BufferGeometry, Color, ConeGeometry, CylinderGeometry, DodecahedronGeometry, IcosahedronGeometry, OctahedronGeometry, SphereGeometry, TorusGeometry } from 'three';
+import type { Equip, SeriesId } from '../data/equipment';
 import { GRADES } from '../data/equipment';
 import { ITEMS } from '../data/items';
-import type { HeroGear } from './hero';
+import type { GearStyle, HeroGear } from './hero';
 import { merge, part } from './util';
 
 /** 아이콘용 아이템 모델. 크기는 대략 지름 1 안쪽에 맞춘다 */
@@ -205,6 +205,8 @@ export function buildItemGeometry(id: string): BufferGeometry {
   return merge(g);
 }
 
+const mixHex = (a: number, b: number, t: number) => new Color(a).lerp(new Color(b), t).getHex();
+
 /** 장비 단계별 재료 색 (구리, 철, 금, 다이아, 티타늄, 오리하르콘, 차원) */
 export const TIER_METAL = [0xd98a50, 0xaab2bc, 0xf0c848, 0xbff4ff, 0x9aa8b8, 0xff8a4a, 0x7a6cff];
 
@@ -212,6 +214,7 @@ export function buildEquipGeometry(e: Equip): BufferGeometry {
   const metal = TIER_METAL[Math.min(6, e.tier - 1)];
   const dark = shade(metal, 0.65);
   const gem = GRADES[e.grade].color;
+  const style: GearStyle = e.series ? SERIES_STYLE[e.series] : 'plate';
   let g: BufferGeometry[];
   switch (e.slot) {
     case 'weapon':
@@ -238,39 +241,86 @@ export function buildEquipGeometry(e: Equip): BufferGeometry {
         ];
       break;
     case 'helmet':
-      g = [
-        part(new SphereGeometry(0.36, 8, 5, 0, Math.PI * 2, 0, Math.PI / 2), metal, { pos: [0, -0.1, 0] }),
-        part(new CylinderGeometry(0.38, 0.38, 0.08, 10), dark, { pos: [0, -0.1, 0] }),
-        part(new BoxGeometry(0.06, 0.3, 0.06), dark, { pos: [0, -0.2, 0.36] }),
-        part(new ConeGeometry(0.06, 0.2, 5), gem, { pos: [0, 0.34, 0] }),
-      ];
+      if (style === 'cloth') {
+        const cc = shade(mixHex(0x46307a, metal, 0.2), 1);
+        g = [
+          part(new CylinderGeometry(0.46, 0.46, 0.05, 10), shade(cc, 0.8), { pos: [0, -0.2, 0] }),
+          part(new ConeGeometry(0.28, 0.5, 8), cc, { pos: [0, 0.06, 0], rot: [0, 0, 0.12] }),
+          part(new ConeGeometry(0.13, 0.28, 6), cc, { pos: [0.1, 0.38, 0], rot: [0, 0, 0.7] }),
+          part(new CylinderGeometry(0.29, 0.29, 0.07, 8), metal, { pos: [0, -0.14, 0] }),
+          part(new OctahedronGeometry(0.07, 0), gem, { pos: [0, -0.13, 0.29] }),
+        ];
+      } else if (style === 'leather') {
+        const lc = mixHex(0x4a6a34, metal, 0.15);
+        g = [
+          part(new ConeGeometry(0.38, 0.34, 4), lc, { pos: [0, 0.02, 0], rot: [0, Math.PI / 4, 0], scale: [1.3, 1, 1] }),
+          part(new BoxGeometry(0.66, 0.05, 0.56), shade(lc, 0.8), { pos: [0, -0.15, 0] }),
+          part(new BoxGeometry(0.6, 0.06, 0.5), metal, { pos: [0, -0.1, 0] }),
+          part(new BoxGeometry(0.1, 0.5, 0.03), gem, { pos: [-0.2, 0.2, 0.2], rot: [0, 0, 0.6] }),
+          part(new BoxGeometry(0.03, 0.44, 0.04), 0xf4f0e0, { pos: [-0.2, 0.2, 0.21], rot: [0, 0, 0.6] }),
+        ];
+      } else
+        g = [
+          part(new SphereGeometry(0.36, 8, 5, 0, Math.PI * 2, 0, Math.PI / 2), metal, { pos: [0, -0.1, 0] }),
+          part(new CylinderGeometry(0.38, 0.38, 0.08, 10), dark, { pos: [0, -0.1, 0] }),
+          part(new BoxGeometry(0.06, 0.3, 0.06), dark, { pos: [0, -0.2, 0.36] }),
+          part(new ConeGeometry(0.06, 0.2, 5), gem, { pos: [0, 0.34, 0] }),
+        ];
       break;
     case 'armor':
-      g = [
-        part(new BoxGeometry(0.6, 0.62, 0.3), metal, { pos: [0, -0.05, 0] }),
-        part(new BoxGeometry(0.26, 0.16, 0.34), dark, { pos: [0.34, 0.22, 0] }),
-        part(new BoxGeometry(0.26, 0.16, 0.34), dark, { pos: [-0.34, 0.22, 0] }),
-        part(new BoxGeometry(0.62, 0.08, 0.32), 0x6b4424, { pos: [0, -0.24, 0] }),
-        part(new OctahedronGeometry(0.08, 0), gem, { pos: [0, 0.08, 0.17] }),
-      ];
+      if (style === 'cloth') {
+        const cc = mixHex(0x46307a, metal, 0.2);
+        g = [
+          part(new BoxGeometry(0.5, 0.46, 0.28), cc, { pos: [0, 0.1, 0] }),
+          part(new CylinderGeometry(0.3, 0.42, 0.42, 6), shade(cc, 0.85), { pos: [0, -0.32, 0] }),
+          part(new BoxGeometry(0.66, 0.12, 0.32), shade(cc, 0.7), { pos: [0, 0.32, 0] }),
+          part(new BoxGeometry(0.07, 0.86, 0.03), metal, { pos: [0, -0.1, 0.16] }),
+          part(new OctahedronGeometry(0.08, 0), gem, { pos: [0, 0.2, 0.17] }),
+        ];
+      } else if (style === 'leather') {
+        const lc = mixHex(0x7a4e2c, metal, 0.18);
+        g = [
+          part(new BoxGeometry(0.56, 0.6, 0.28), lc, { pos: [0, -0.05, 0] }),
+          part(new BoxGeometry(0.24, 0.1, 0.32), lc, { pos: [0.32, 0.24, 0], rot: [0, 0, -0.35] }),
+          part(new BoxGeometry(0.24, 0.1, 0.32), lc, { pos: [-0.32, 0.24, 0], rot: [0, 0, 0.35] }),
+          part(new BoxGeometry(0.08, 0.8, 0.03), shade(lc, 0.65), { pos: [0, -0.02, 0.15], rot: [0, 0, -0.7] }),
+          part(new BoxGeometry(0.1, 0.1, 0.03), metal, { pos: [0.1, 0.1, 0.17], rot: [0, 0, -0.7] }),
+          part(new BoxGeometry(0.6, 0.08, 0.3), 0x5a3a20, { pos: [0, -0.26, 0] }),
+          part(new OctahedronGeometry(0.06, 0), gem, { pos: [0.1, 0.1, 0.2] }),
+        ];
+      } else
+        g = [
+          part(new BoxGeometry(0.6, 0.62, 0.3), metal, { pos: [0, -0.05, 0] }),
+          part(new BoxGeometry(0.26, 0.16, 0.34), dark, { pos: [0.34, 0.22, 0] }),
+          part(new BoxGeometry(0.26, 0.16, 0.34), dark, { pos: [-0.34, 0.22, 0] }),
+          part(new BoxGeometry(0.62, 0.08, 0.32), 0x6b4424, { pos: [0, -0.24, 0] }),
+          part(new OctahedronGeometry(0.08, 0), gem, { pos: [0, 0.08, 0.17] }),
+        ];
       break;
-    case 'pants':
+    case 'pants': {
+      const body = style === 'cloth' ? mixHex(0x46307a, metal, 0.2) : style === 'leather' ? mixHex(0x7a4e2c, metal, 0.18) : metal;
       g = [
-        part(new BoxGeometry(0.56, 0.16, 0.28), dark, { pos: [0, 0.3, 0] }),
-        part(new BoxGeometry(0.22, 0.6, 0.26), metal, { pos: [0.15, -0.08, 0] }),
-        part(new BoxGeometry(0.22, 0.6, 0.26), metal, { pos: [-0.15, -0.08, 0] }),
+        part(new BoxGeometry(0.56, 0.16, 0.28), style === 'plate' ? dark : shade(body, 0.7), { pos: [0, 0.3, 0] }),
+        part(new BoxGeometry(0.22, 0.6, 0.26), body, { pos: [0.15, -0.08, 0] }),
+        part(new BoxGeometry(0.22, 0.6, 0.26), body, { pos: [-0.15, -0.08, 0] }),
         part(new BoxGeometry(0.1, 0.08, 0.04), gem, { pos: [0, 0.3, 0.15] }),
+        ...(style !== 'plate' ? [part(new BoxGeometry(0.2, 0.08, 0.04), metal, { pos: [0.15, -0.1, 0.14] }), part(new BoxGeometry(0.2, 0.08, 0.04), metal, { pos: [-0.15, -0.1, 0.14] })] : []),
       ];
       break;
-    case 'boots':
+    }
+    case 'boots': {
+      const body = style === 'cloth' ? mixHex(0x46307a, metal, 0.2) : style === 'leather' ? mixHex(0x7a4e2c, metal, 0.18) : metal;
+      const sole = style === 'plate' ? dark : shade(body, 0.75);
       g = [
-        part(new BoxGeometry(0.2, 0.4, 0.22), metal, { pos: [0.15, 0.05, -0.05] }),
-        part(new BoxGeometry(0.22, 0.14, 0.4), dark, { pos: [0.15, -0.2, 0.05] }),
-        part(new BoxGeometry(0.2, 0.4, 0.22), metal, { pos: [-0.17, 0.08, -0.12] }),
-        part(new BoxGeometry(0.22, 0.14, 0.4), dark, { pos: [-0.17, -0.17, -0.02] }),
+        part(new BoxGeometry(0.2, 0.4, 0.22), body, { pos: [0.15, 0.05, -0.05] }),
+        part(new BoxGeometry(0.22, 0.14, 0.4), sole, { pos: [0.15, -0.2, 0.05] }),
+        part(new BoxGeometry(0.2, 0.4, 0.22), body, { pos: [-0.17, 0.08, -0.12] }),
+        part(new BoxGeometry(0.22, 0.14, 0.4), sole, { pos: [-0.17, -0.17, -0.02] }),
         part(new BoxGeometry(0.06, 0.06, 0.04), gem, { pos: [0.15, 0.18, 0.07] }),
+        ...(style !== 'plate' ? [part(new BoxGeometry(0.23, 0.06, 0.25), metal, { pos: [0.15, 0.22, -0.05] }), part(new BoxGeometry(0.23, 0.06, 0.25), metal, { pos: [-0.17, 0.25, -0.12] })] : []),
       ];
       break;
+    }
     case 'ring':
       g = [
         part(new TorusGeometry(0.3, 0.07, 6, 16), metal, { rot: [1.1, 0, 0] }),
@@ -290,6 +340,9 @@ export function buildEquipGeometry(e: Equip): BufferGeometry {
   return merge(g);
 }
 
+/** 계열 → 장비 모양 */
+export const SERIES_STYLE: Record<SeriesId, GearStyle> = { guard: 'plate', arcane: 'cloth', hunter: 'leather' };
+
 /** 착용 장비 → 캐릭터 모델에 입힐 모습 */
 export function gearLook(eq: Partial<Record<Equip['slot'], Equip>>, tools?: { pickaxe: { tier: number }; axe: { tier: number } }): HeroGear {
   const metal = (e: Equip) => TIER_METAL[Math.min(6, e.tier - 1)];
@@ -301,6 +354,11 @@ export function gearLook(eq: Partial<Record<Equip['slot'], Equip>>, tools?: { pi
   if (eq.pants) g.pants = metal(eq.pants);
   if (eq.boots) g.boots = metal(eq.boots);
   if (eq.necklace) g.necklace = gem(eq.necklace);
+  // 계열에 따라 모양이 바뀐다: 수호 판금 · 사냥 가죽 · 비전 로브 (계열이 없으면 직업 기본 모양)
+  for (const k of ['helmet', 'armor', 'pants', 'boots'] as const) {
+    const st = eq[k]?.series ? SERIES_STYLE[eq[k]!.series!] : undefined;
+    if (st) (g.style ??= {})[k] = st;
+  }
   // 강화한 부위만 빛난다
   const glow: HeroGear['glow'] = {};
   for (const k of ['weapon', 'helmet', 'armor', 'pants', 'boots'] as const) if ((eq[k]?.plus ?? 0) > 0) glow[k] = eq[k]!.plus;

@@ -108,7 +108,7 @@ export function toolIconUrl(kind: 'pickaxe' | 'axe', tier: number): string {
 }
 
 export function equipIconUrl(e: Equip): string {
-  return geoIcon(`e:${e.slot}:${e.cls ?? ''}:${e.tier}:${e.grade}`, () => buildEquipGeometry(e));
+  return geoIcon(`e:${e.slot}:${e.cls ?? ''}:${e.tier}:${e.grade}:${e.series ?? ''}`, () => buildEquipGeometry(e));
 }
 
 /** 대화창 초상화: 허리 위부터 크게 */

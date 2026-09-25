@@ -40,7 +40,12 @@ export interface HeroLook {
   gear?: HeroGear;
 }
 
+/** 장비 모양: 판금(수호) · 가죽(사냥) · 천·로브(비전) */
+export type GearStyle = 'plate' | 'leather' | 'cloth';
+
 export interface HeroGear {
+  /** 부위별 모양 (없으면 직업에 맞춰: 검사 판금, 궁수 가죽, 마법사 로브) */
+  style?: Partial<Record<'helmet' | 'armor' | 'pants' | 'boots', GearStyle>>;
   weapon?: { metal: number; gem: number };
   helmet?: { metal: number; gem: number };
   armor?: { metal: number; gem: number };
@@ -60,6 +65,15 @@ export function glowColor(plus: number): number {
 
 const darken = (c: number, k = 0.65) => (Math.round(((c >> 16) & 255) * k) << 16) | (Math.round(((c >> 8) & 255) * k) << 8) | Math.round((c & 255) * k);
 
+/** 두 색을 t만큼 섞는다 */
+const mix = (a: number, b: number, t: number) => {
+  const ch = (sh: number) => Math.round(((a >> sh) & 255) * (1 - t) + ((b >> sh) & 255) * t);
+  return (ch(16) << 16) | (ch(8) << 8) | ch(0);
+};
+/** 가죽·천 색: 기본 색에 장비 단계 재질 색이 조금 배어든다 */
+const leatherOf = (metal: number) => mix(0x7a4e2c, metal, 0.18);
+const clothOf = (metal: number) => mix(0x46307a, metal, 0.2);
+
 const C = {
   skin: 0xf2c9a0,
   pants: 0x3b3550,
@@ -74,6 +88,83 @@ const C = {
 
 export const HIP_HEIGHT = 0.6;
 
+/** 갑옷 (몸통 기준): 판금 흉갑 · 가죽 갑옷 · 로브 */
+function armorGeo(style: GearStyle, metal: number, gem: number): ReturnType<typeof part>[] {
+  if (style === 'leather') {
+    const lc = leatherOf(metal);
+    const strap = darken(lc, 0.7);
+    return [
+      // 가죽 조끼 (앞뒤), 어깨 덧댐, 가슴을 가로지르는 끈과 버클, 박음 징
+      part(new BoxGeometry(0.5, 0.42, 0.05), lc, { pos: [0, 0.27, 0.17] }),
+      part(new BoxGeometry(0.5, 0.4, 0.05), darken(lc, 0.85), { pos: [0, 0.28, -0.17] }),
+      part(new BoxGeometry(0.2, 0.08, 0.28), lc, { pos: [0.28, 0.5, 0], rot: [0, 0, -0.35] }),
+      part(new BoxGeometry(0.2, 0.08, 0.28), lc, { pos: [-0.28, 0.5, 0], rot: [0, 0, 0.35] }),
+      part(new BoxGeometry(0.07, 0.62, 0.03), strap, { pos: [0, 0.28, 0.2], rot: [0, 0, -0.75] }),
+      part(new BoxGeometry(0.08, 0.08, 0.03), metal, { pos: [0.08, 0.36, 0.215], rot: [0, 0, -0.75] }),
+      part(new BoxGeometry(0.04, 0.04, 0.03), metal, { pos: [-0.16, 0.16, 0.2] }),
+      part(new BoxGeometry(0.04, 0.04, 0.03), metal, { pos: [0.16, 0.16, 0.2] }),
+      part(new BoxGeometry(0.56, 0.12, 0.37), strap, { pos: [0, 0.02, 0] }),
+      part(new OctahedronGeometry(0.045), gem, { pos: [0.08, 0.36, 0.24] }),
+    ];
+  }
+  if (style === 'cloth') {
+    const cc = clothOf(metal);
+    return [
+      // 긴 로브: 몸통을 감싸고 허리 아래로 치맛자락, 어깨 망토, 가운데 장식 띠, 가슴 브로치
+      part(new BoxGeometry(0.54, 0.46, 0.36), cc, { pos: [0, 0.26, 0] }),
+      part(new BoxGeometry(0.64, 0.42, 0.42), darken(cc, 0.85), { pos: [0, -0.2, 0] }),
+      part(new BoxGeometry(0.66, 0.1, 0.42), darken(cc, 0.7), { pos: [0, 0.47, 0] }),
+      part(new BoxGeometry(0.4, 0.12, 0.34), cc, { pos: [0, 0.55, -0.04] }),
+      part(new BoxGeometry(0.08, 0.84, 0.03), metal, { pos: [0, 0.05, 0.195] }),
+      part(new BoxGeometry(0.66, 0.04, 0.43), metal, { pos: [0, -0.4, 0] }),
+      part(new BoxGeometry(0.57, 0.06, 0.39), metal, { pos: [0, 0.07, 0] }),
+      part(new OctahedronGeometry(0.06), gem, { pos: [0, 0.4, 0.22] }),
+    ];
+  }
+  return [
+    part(new BoxGeometry(0.44, 0.36, 0.05), metal, { pos: [0, 0.3, 0.17] }),
+    part(new BoxGeometry(0.44, 0.3, 0.05), darken(metal), { pos: [0, 0.3, -0.17] }),
+    part(new BoxGeometry(0.22, 0.12, 0.28), metal, { pos: [0.3, 0.5, 0] }),
+    part(new BoxGeometry(0.22, 0.12, 0.28), metal, { pos: [-0.3, 0.5, 0] }),
+    part(new OctahedronGeometry(0.05), gem, { pos: [0, 0.34, 0.2] }),
+  ];
+}
+
+/** 투구 (머리 기준): 판금 투구 · 깃털 꽂은 사냥꾼 모자 · 마법사 모자 */
+function helmetGeo(style: GearStyle, metal: number, gem: number, hair: number): ReturnType<typeof part>[] {
+  if (style === 'leather') {
+    const lc = mix(0x4a6a34, metal, 0.15);
+    return [
+      // 앞뒤로 긴 뾰족 모자, 앞으로 내민 챙, 띠, 옆에 꽂은 깃털
+      part(new ConeGeometry(0.4, 0.36, 4), lc, { pos: [0, 0.7, -0.02], rot: [0, Math.PI / 4, 0], scale: [1, 1, 1.3] }),
+      part(new BoxGeometry(0.6, 0.05, 0.62), darken(lc, 0.8), { pos: [0, 0.54, 0.02] }),
+      part(new BoxGeometry(0.44, 0.04, 0.2), darken(lc, 0.8), { pos: [0, 0.55, 0.36], rot: [0.3, 0, 0] }),
+      part(new BoxGeometry(0.58, 0.06, 0.6), metal, { pos: [0, 0.59, 0.01] }),
+      part(new BoxGeometry(0.03, 0.46, 0.1), gem, { pos: [0.3, 0.8, -0.14], rot: [-0.7, 0, -0.35] }),
+      part(new BoxGeometry(0.02, 0.4, 0.04), 0xf4f0e0, { pos: [0.31, 0.8, -0.14], rot: [-0.7, 0, -0.35] }),
+      part(new BoxGeometry(0.57, 0.1, 0.1), hair, { pos: [0, 0.47, -0.22] }),
+    ];
+  }
+  if (style === 'cloth') {
+    const cc = clothOf(metal);
+    return [
+      // 넓은 챙, 뒤로 꺾인 뾰족 모자, 재질 띠와 보석
+      part(new CylinderGeometry(0.5, 0.5, 0.05, 10), darken(cc, 0.8), { pos: [0, 0.58, 0] }),
+      part(new ConeGeometry(0.31, 0.5, 8), cc, { pos: [0, 0.84, -0.03], rot: [-0.15, 0, 0] }),
+      part(new ConeGeometry(0.15, 0.32, 6), cc, { pos: [0, 1.18, -0.15], rot: [-0.7, 0, 0] }),
+      part(new CylinderGeometry(0.315, 0.315, 0.07, 8), metal, { pos: [0, 0.63, 0] }),
+      part(new OctahedronGeometry(0.06), gem, { pos: [0, 0.64, 0.31] }),
+      part(new OctahedronGeometry(0.035), metal, { pos: [0, 1.25, -0.28] }),
+    ];
+  }
+  return [
+    part(new BoxGeometry(0.6, 0.2, 0.55), metal, { pos: [0, 0.57, -0.01] }),
+    part(new BoxGeometry(0.62, 0.06, 0.57), darken(metal), { pos: [0, 0.46, -0.01] }),
+    part(new BoxGeometry(0.07, 0.26, 0.07), darken(metal), { pos: [0, 0.3, 0.26] }),
+    part(new ConeGeometry(0.06, 0.18, 5), gem, { pos: [0, 0.76, 0] }),
+  ];
+}
+
 export function buildHero(material: Material, look: HeroLook): HeroRig {
   const meshes: Mesh[] = [];
   const skin = look.skin ?? C.skin;
@@ -81,6 +172,8 @@ export function buildHero(material: Material, look: HeroLook): HeroRig {
   const blade = gear.weapon?.metal ?? C.steel;
   const bladeDark = gear.weapon ? darken(gear.weapon.metal) : C.steelDark;
   const bootColor = gear.boots ?? C.boot;
+  const classStyle: GearStyle = look.weapon === 'staff' ? 'cloth' : look.weapon === 'bow' ? 'leather' : 'plate';
+  const styleOf = (slot: 'helmet' | 'armor' | 'pants' | 'boots') => gear.style?.[slot] ?? classStyle;
   const mesh = (parts: Parameters<typeof merge>[0]) => {
     const m = new Mesh(merge(parts), material);
     m.castShadow = true;
@@ -105,15 +198,53 @@ export function buildHero(material: Material, look: HeroLook): HeroRig {
     const leg = new Group();
     leg.position.set(x, 0, 0);
     leg.add(mesh([part(new BoxGeometry(0.17, 0.44, 0.19), look.pants ?? C.pants, { pos: [0, -0.22, 0] })]));
-    // 신발 (장화를 신으면 재질 색 + 발목 보호대)
-    leg.add(
-      gearMesh('boots', [
-        part(new BoxGeometry(0.19, 0.16, 0.27), bootColor, { pos: [0, -0.52, 0.03] }),
-        ...(gear.boots !== undefined ? [part(new BoxGeometry(0.2, 0.08, 0.2), darken(gear.boots), { pos: [0, -0.4, 0] })] : []),
-      ]),
-    );
-    if (gear.pants !== undefined)
-      leg.add(gearMesh('pants', [part(new BoxGeometry(0.19, 0.22, 0.05), gear.pants, { pos: [0, -0.28, 0.1] }), part(new BoxGeometry(0.19, 0.06, 0.21), darken(gear.pants), { pos: [0, -0.05, 0] })]));
+    // 신발: 판금 장화 · 가죽 장화 · 천 신발
+    const bootStyle = gear.boots !== undefined ? styleOf('boots') : null;
+    if (bootStyle === 'leather') {
+      const lc = leatherOf(gear.boots!);
+      leg.add(
+        gearMesh('boots', [
+          part(new BoxGeometry(0.2, 0.16, 0.28), darken(lc, 0.85), { pos: [0, -0.52, 0.03] }),
+          part(new BoxGeometry(0.2, 0.2, 0.21), lc, { pos: [0, -0.38, 0] }),
+          part(new BoxGeometry(0.22, 0.06, 0.23), darken(lc), { pos: [0, -0.27, 0] }),
+          part(new BoxGeometry(0.05, 0.05, 0.03), gear.boots!, { pos: [0.06, -0.38, 0.11] }),
+        ]),
+      );
+    } else if (bootStyle === 'cloth') {
+      const cc = clothOf(gear.boots!);
+      leg.add(
+        gearMesh('boots', [
+          part(new BoxGeometry(0.19, 0.13, 0.27), cc, { pos: [0, -0.53, 0.03] }),
+          part(new ConeGeometry(0.06, 0.14, 4), darken(cc, 0.8), { pos: [0, -0.5, 0.21], rot: [Math.PI / 2 - 0.4, 0, 0] }),
+          part(new BoxGeometry(0.2, 0.04, 0.21), gear.boots!, { pos: [0, -0.45, 0] }),
+        ]),
+      );
+    } else {
+      leg.add(
+        gearMesh('boots', [
+          part(new BoxGeometry(0.19, 0.16, 0.27), bootColor, { pos: [0, -0.52, 0.03] }),
+          ...(gear.boots !== undefined ? [part(new BoxGeometry(0.2, 0.08, 0.2), darken(gear.boots), { pos: [0, -0.4, 0] })] : []),
+        ]),
+      );
+    }
+    if (gear.pants !== undefined) {
+      const ps = styleOf('pants');
+      if (ps === 'leather') {
+        const lc = leatherOf(gear.pants);
+        leg.add(
+          gearMesh('pants', [
+            part(new BoxGeometry(0.19, 0.3, 0.21), lc, { pos: [0, -0.16, 0] }),
+            part(new BoxGeometry(0.12, 0.1, 0.04), gear.pants, { pos: [0, -0.3, 0.11] }),
+            part(new BoxGeometry(0.2, 0.05, 0.22), darken(lc), { pos: [0, -0.04, 0] }),
+          ]),
+        );
+      } else if (ps === 'cloth') {
+        const cc = clothOf(gear.pants);
+        leg.add(gearMesh('pants', [part(new BoxGeometry(0.2, 0.36, 0.22), cc, { pos: [0, -0.2, 0] }), part(new BoxGeometry(0.21, 0.04, 0.23), gear.pants, { pos: [0, -0.37, 0] })]));
+      } else {
+        leg.add(gearMesh('pants', [part(new BoxGeometry(0.19, 0.22, 0.05), gear.pants, { pos: [0, -0.28, 0.1] }), part(new BoxGeometry(0.19, 0.06, 0.21), darken(gear.pants), { pos: [0, -0.05, 0] })]));
+      }
+    }
     body.add(leg);
     return leg;
   };
@@ -132,8 +263,8 @@ export function buildHero(material: Material, look: HeroLook): HeroRig {
   if (look.weapon === 'sword') {
     torsoParts.push(
       part(new BoxGeometry(0.14, 0.14, 0.03), C.gold, { pos: [0, 0.33, 0.165], rot: [0, 0, Math.PI / 4] }),
-      part(new BoxGeometry(0.22, 0.12, 0.26), gear.armor?.metal ?? C.steel, { pos: [0.3, 0.49, 0] }),
-      part(new BoxGeometry(0.22, 0.12, 0.26), gear.armor?.metal ?? C.steel, { pos: [-0.3, 0.49, 0] }),
+      part(new BoxGeometry(0.22, 0.12, 0.26), gear.armor && styleOf('armor') === 'plate' ? gear.armor.metal : C.steel, { pos: [0.3, 0.49, 0] }),
+      part(new BoxGeometry(0.22, 0.12, 0.26), gear.armor && styleOf('armor') === 'plate' ? gear.armor.metal : C.steel, { pos: [-0.3, 0.49, 0] }),
     );
   } else if (look.weapon === 'staff') {
     // 긴 로브 자락
@@ -145,15 +276,7 @@ export function buildHero(material: Material, look: HeroLook): HeroRig {
     torsoParts.push(part(new CylinderGeometry(0.09, 0.08, 0.5, 6), C.belt, { pos: [0.12, 0.35, -0.22], rot: [0, 0, -0.35] }));
     torsoParts.push(part(new BoxGeometry(0.14, 0.08, 0.1), 0xe8e0d0, { pos: [0.21, 0.62, -0.22], rot: [0, 0, -0.35] }));
   }
-  const armorParts = gear.armor
-    ? [
-        part(new BoxGeometry(0.44, 0.36, 0.05), gear.armor.metal, { pos: [0, 0.3, 0.17] }),
-        part(new BoxGeometry(0.44, 0.3, 0.05), darken(gear.armor.metal), { pos: [0, 0.3, -0.17] }),
-        part(new BoxGeometry(0.22, 0.12, 0.28), gear.armor.metal, { pos: [0.3, 0.5, 0] }),
-        part(new BoxGeometry(0.22, 0.12, 0.28), gear.armor.metal, { pos: [-0.3, 0.5, 0] }),
-        part(new OctahedronGeometry(0.05), gear.armor.gem, { pos: [0, 0.34, 0.2] }),
-      ]
-    : null;
+  const armorParts = gear.armor ? armorGeo(styleOf('armor'), gear.armor.metal, gear.armor.gem) : null;
   if (gear.necklace !== undefined) torsoParts.push(part(new OctahedronGeometry(0.045), gear.necklace, { pos: [0, 0.44, 0.19] }));
   if (look.apron) torsoParts.push(part(new BoxGeometry(0.44, 0.6, 0.04), look.apron, { pos: [0, 0.12, 0.17] }));
   torso.add(mesh(torsoParts));
@@ -174,14 +297,7 @@ export function buildHero(material: Material, look: HeroLook): HeroRig {
     part(new BoxGeometry(0.07, 0.11, 0.02), C.eye, { pos: [0.11, 0.24, 0.235] }),
     part(new BoxGeometry(0.07, 0.11, 0.02), C.eye, { pos: [-0.11, 0.24, 0.235] }),
   ];
-  const helmetParts = gear.helmet
-    ? [
-        part(new BoxGeometry(0.6, 0.2, 0.55), gear.helmet.metal, { pos: [0, 0.57, -0.01] }),
-        part(new BoxGeometry(0.62, 0.06, 0.57), darken(gear.helmet.metal), { pos: [0, 0.46, -0.01] }),
-        part(new BoxGeometry(0.07, 0.26, 0.07), darken(gear.helmet.metal), { pos: [0, 0.3, 0.26] }),
-        part(new ConeGeometry(0.06, 0.18, 5), gear.helmet.gem, { pos: [0, 0.76, 0] }),
-      ]
-    : null;
+  const helmetParts = gear.helmet ? helmetGeo(styleOf('helmet'), gear.helmet.metal, gear.helmet.gem, look.hair) : null;
   if (!helmetParts && look.hat === 'wizard') {
     headParts.push(part(new CylinderGeometry(0.46, 0.46, 0.05, 8), look.tunicDark, { pos: [0, 0.6, 0] }));
     headParts.push(part(new ConeGeometry(0.3, 0.6, 8), look.tunic, { pos: [0, 0.9, -0.04], rot: [-0.2, 0, 0] }));
