@@ -7,6 +7,11 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '7.6.1',
+    date: '2026-09-25',
+    items: ['의견 보내기가 실패하면 원인(연결 실패·시트 스크립트 오류 등)을 함께 보여 준다'],
+  },
+  {
     version: '7.6',
     date: '2026-09-25',
     items: [

@@ -567,12 +567,12 @@ export class Screens {
         sending = true;
         status = '';
         render();
-        void sendFeedback(kind, name.trim(), text.trim(), info).then((ok) => {
+        void sendFeedback(kind, name.trim(), text.trim(), info).then((r) => {
           sending = false;
-          if (ok) {
+          if (r.ok) {
             text = '';
             status = '<b class="ok">보냈습니다! 소중한 의견 고맙습니다 :)</b>';
-          } else status = '<span class="bad">보내지 못했습니다. 인터넷 연결을 확인하고 다시 시도해 주세요</span>';
+          } else status = `<span class="bad">보내지 못했습니다. 잠시 뒤 다시 시도해 주세요</span><br><small class="dim">원인: ${r.reason.replace(/</g, '&lt;')}</small>`;
           render();
         });
       });

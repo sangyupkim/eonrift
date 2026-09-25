@@ -56,8 +56,11 @@ export interface FeedbackInfo {
   progress?: string;
 }
 
-/** 보내기. 성공하면 true (보낸 시각을 기억해 10분 동안 막는다) */
-export async function sendFeedback(kind: string, name: string, message: string, info: FeedbackInfo): Promise<boolean> {
+/** 보내기 결과: 실패하면 원인 (화면에 보여 준다) */
+export type FeedbackResult = { ok: true } | { ok: false; reason: string };
+
+/** 보내기. 성공하면 보낸 시각을 기억해 10분 동안 막는다 */
+export async function sendFeedback(kind: string, name: string, message: string, info: FeedbackInfo): Promise<FeedbackResult> {
   const body = JSON.stringify({
     kind,
     name: name.slice(0, FEEDBACK_NAME_MAX),
@@ -69,26 +72,34 @@ export async function sendFeedback(kind: string, name: string, message: string, 
     player: playerId(),
   });
   // text/plain 이면 브라우저가 사전 확인 없이 바로 보낸다 (앱스 스크립트는 사전 확인을 받지 못한다)
-  const init: RequestInit = { method: 'POST', body, headers: { 'Content-Type': 'text/plain;charset=utf-8' } };
-  let ok = false;
+  const init: RequestInit = { method: 'POST', body, headers: { 'Content-Type': 'text/plain;charset=utf-8' }, redirect: 'follow' };
+  let result: FeedbackResult;
   try {
     const res = await fetch(FEEDBACK_URL, init);
-    const j = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
-    // 응답을 못 읽었어도 요청 자체는 갔다
-    ok = res.ok && (j?.ok ?? true);
-    if (j?.error === 'too_fast') ok = true;
-  } catch {
+    const raw = await res.text().catch(() => '');
+    let j: { ok?: boolean; error?: string } | null = null;
+    try {
+      j = JSON.parse(raw);
+    } catch {
+      j = null;
+    }
+    if (j?.ok || j?.error === 'too_fast') result = { ok: true };
+    else if (j) result = { ok: false, reason: `시트 스크립트 오류: ${j.error ?? '알 수 없음'}` };
+    else if (!res.ok) result = { ok: false, reason: `HTTP ${res.status}` };
+    // JSON이 아닌 응답 (구글 로그인 화면·오류 페이지): 웹 앱 접근 권한이 '모든 사용자'가 아니거나 배포가 안 된 경우
+    else result = { ok: false, reason: `시트 스크립트가 JSON 대신 다른 페이지를 돌려줬습니다 (${raw.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80)})` };
+  } catch (e) {
     // 응답을 읽지 못하게 막힌 경우: 답을 보지 않는 방식으로 한 번 더 보낸다 (중복은 시트 쪽에서 막는다)
     try {
       await fetch(FEEDBACK_URL, { ...init, mode: 'no-cors' });
-      ok = true;
-    } catch {
-      ok = false;
+      result = { ok: true };
+    } catch (e2) {
+      result = { ok: false, reason: `연결 실패 (${String((e2 as Error)?.message ?? e2 ?? e)})` };
     }
   }
-  if (ok) {
+  if (result.ok) {
     set(LAST_KEY, String(Date.now()));
     set(NAME_KEY, name);
   }
-  return ok;
+  return result;
 }
