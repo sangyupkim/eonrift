@@ -80,6 +80,10 @@ describe('각인', () => {
     const c5 = engraveCost(5).items;
     expect(c5[TIER_PLATE[5]]).toBeGreaterThan(0);
     expect(c5[TIER_PLATE[6]]).toBeGreaterThan(0);
+    // 4·5단은 마력 티타늄판·마력 오리하르콘판
+    expect(engraveCost(4).items.mana_titanium_plate).toBe(4);
+    expect(c5.mana_orichalcum_plate).toBe(5);
+    expect(engraveCost(2).items.mana_copper_plate).toBe(2);
     expect(c5.dim_shard).toBeGreaterThan(engraveCost(1).items.dim_shard);
   });
   it('착용 장비의 각인이 능력치에 더해지고, 한도가 있다', () => {
@@ -145,7 +149,7 @@ describe('차원 가루 → 차원 응축기', () => {
   it('가루와 정수로 차원 파편·차원 마력 정수를 만들고, 레일로 내보낸다', async () => {
     const { Factory } = await import('../src/factory/sim');
     const f = new Factory({ sizeLevel: 0, buildings: [] }, 8);
-    f.place('box', 0, 0, 0)!.buffer = { dim_dust: 24, essence_high: 2, essence_supreme: 2 };
+    f.place('box', 0, 0, 0)!.buffer = { dim_dust: 24, essence_high: 2, essence_supreme: 2, titanium_plate: 2, orichalcum_ingot: 2 };
     f.place('belt', 1, 0, 0);
     f.place('condenser', 2, 0, 0);
     const out = f.place('box', 3, 0, 0)!;
@@ -155,5 +159,65 @@ describe('차원 가루 → 차원 응축기', () => {
     f.simulate(1500);
     expect(out.buffer!.dim_shard).toBe(2);
     expect(out.buffer!.essence_dim).toBe(2);
+  });
+});
+
+describe('티타늄·오리하르콘 사용처', () => {
+  it('상급 차원 합금은 균열 11단계 이상과 보스 러시 지옥 입장에 쓴다', async () => {
+    const { riftEntry, rushEntry } = await import('../src/data/endgame');
+    expect(riftEntry(10).id).toBe('dim_alloy');
+    expect(riftEntry(11).id).toBe('dim_alloy2');
+    expect(rushEntry(2, 0)).toEqual({ dim_alloy2: 1 });
+    expect(rushEntry(0, 0)).toEqual({});
+    expect(rushEntry(1, 3)).toEqual({ dim_alloy: 2 });
+    const r = RECIPES.find((x) => x.output === 'dim_alloy2')!;
+    expect(r.inputs.titanium_plate).toBeGreaterThan(0);
+    expect(r.inputs.orichalcum_plate).toBeGreaterThan(0);
+    expect(RECIPES.find((x) => x.output === 'dim_shard')!.inputs.titanium_plate).toBe(1);
+    expect(RECIPES.find((x) => x.output === 'essence_dim')!.inputs.orichalcum_ingot).toBe(1);
+  });
+});
+
+describe('주간 차원 시련', () => {
+  it('주 번호와 이번 주 맵은 정해져 있다', async () => {
+    const { weekKey, trialSpec } = await import('../src/data/endgame');
+    expect(weekKey(new Date(2026, 8, 21))).toBe(weekKey(new Date(2026, 8, 27)));
+    expect(weekKey(new Date(2026, 8, 27))).not.toBe(weekKey(new Date(2026, 8, 28)));
+    const a = trialSpec('2026-W39');
+    expect(trialSpec('2026-W39')).toEqual(a);
+    expect(a.affixes).toHaveLength(2);
+    expect(a.tier).toBeGreaterThanOrEqual(1);
+  });
+  it('점수와 등급', async () => {
+    const { trialScore, trialGrade } = await import('../src/data/endgame');
+    const fast = trialScore(true, 300, 5, 0, 20, 80);
+    expect(fast.total).toBe(10000 + 600 * 10 + 20 * 25 - 5 * 40);
+    expect(trialScore(true, 300, 30, 2, 5, 80).total).toBeLessThan(fast.total);
+    expect(trialScore(false, 900, 0, 0, 0, 50).total).toBe(1000);
+    expect(trialGrade(5000)).toBe(-1);
+    expect(trialGrade(fast.total)).toBe(3);
+  });
+  it('시련 중에는 장비·각인과 관계없이 모두 같은 능력치', () => {
+    const a = new Progress(newSave());
+    const b = new Progress(newSave());
+    b.cls.equipment.weapon!.eng = [{ k: 'atk', v: 0.5 }];
+    b.data.research = 10;
+    a.trial = b.trial = true;
+    expect(a.stats()).toEqual(b.stats());
+    expect(a.stats().atk).toBeGreaterThan(new Progress(newSave()).stats().atk * 10);
+    expect(a.ultLevel(0)).toBe(1);
+  });
+  it('주가 바뀌면 기록이 지난 기록으로 넘어가고, 기록 코드는 되읽힌다', async () => {
+    const { newTrial, rollTrialWeek, trialCode, readTrialCode } = await import('../src/data/endgame');
+    let t = newTrial('2026-W39');
+    t.best = 15000;
+    t.claimed = [0, 1];
+    t = rollTrialWeek(t, '2026-W40');
+    expect(t.best).toBe(0);
+    expect(t.claimed).toEqual([]);
+    expect(t.history[0]).toMatchObject({ week: '2026-W39', best: 15000 });
+    const code = trialCode('2026-W40', 'mage', 16000, 312, 7);
+    expect(readTrialCode(code)).toEqual({ week: '2026-W40', cls: 'mage', score: 16000, seconds: 312, hits: 7 });
+    expect(readTrialCode(code.slice(0, -2) + 'AA')).toBeNull();
   });
 });

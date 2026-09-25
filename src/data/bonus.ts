@@ -90,7 +90,8 @@ export function engraveCost(stage: number): { gold: number; items: Record<string
     [TIER_PLATE[k - 1]]: 6 + k * 2,
     [TIER_PLATE[k]]: 3 + k,
   };
-  if (k >= 2) items[TIER_MANA_PLATE[k - 2]] = k;
+  // 마력판: 2단 마력 구리판, 3단 마력 철판, 4단 마력 티타늄판, 5단 마력 오리하르콘판
+  if (k >= 2) items[TIER_MANA_PLATE[k <= 3 ? k - 2 : k]] = k;
   if (k >= 5) items[TIER_PLATE[6]] = 3;
   return { gold: 1500 * k * k, items };
 }
@@ -103,6 +104,9 @@ export interface TitleCtx {
   transcend: number;
   /** 새긴 5단 각인 줄 수 */
   engrave5: number;
+  /** 주간 시련: 가장 높았던 등급 번호, 기록을 남긴 주 수 */
+  trialTop?: number;
+  trialWeeks?: number;
 }
 
 export interface TitleDef {
@@ -127,6 +131,9 @@ export const TITLES: TitleDef[] = [
   { id: 'rift20', name: '심연의 주인', cond: '심연 균열 20단계 돌파', bonus: { atk: 0.04 }, check: (c) => c.end.riftBest >= 20 },
   { id: 'trans10', name: '초월자', cond: '초월 레벨 10', bonus: { crit: 1 }, check: (c) => c.transcend >= 10 },
   { id: 'trans50', name: '경지를 넘은 자', cond: '초월 레벨 50', bonus: { atk: 0.03 }, check: (c) => c.transcend >= 50 },
+  { id: 'trial_gold', name: '시련의 강자', cond: '주간 차원 시련 골드 등급', bonus: { hp: 0.02 }, check: (c) => (c.trialTop ?? -1) >= 2 },
+  { id: 'trial_dim', name: '차원 시련의 정점', cond: '주간 차원 시련 차원 등급', bonus: { atk: 0.03 }, check: (c) => (c.trialTop ?? -1) >= 4 },
+  { id: 'trial_5', name: '꾸준한 도전자', cond: '주간 차원 시련 5주 참여', bonus: { gold: 0.1 }, check: (c) => (c.trialWeeks ?? 0) >= 5 },
   { id: 'engrave5', name: '각인 장인', cond: '5단 각인 새기기', bonus: { def: 0.03 }, check: (c) => c.engrave5 >= 1 },
 ];
 

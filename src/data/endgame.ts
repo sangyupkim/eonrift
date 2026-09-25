@@ -12,6 +12,8 @@ export const SHARD = 'dim_shard';
 export const DUST_PER_SHARD = 8;
 /** 공장에서 여러 단계 판을 섞어 만드는 엔드 콘텐츠 입장 재료 */
 export const ALLOY = 'dim_alloy';
+/** 높은 단계 입장 재료 (티타늄·오리하르콘판) */
+export const ALLOY2 = 'dim_alloy2';
 
 // ---------------- 무한의 탑 ----------------
 
@@ -69,6 +71,11 @@ export const RUSH_ORDER: { tier: number; kind: 'midboss' | 'boss' }[] = Array.fr
 /** 하루 무료 도전 횟수. 더 하려면 차원 합금 */
 export const RUSH_DAILY = 3;
 export const RUSH_EXTRA_ALLOY = 2;
+/** 보스 러시 입장 비용: 지옥은 매번 상급 차원 합금 1 (무료 횟수와 별개), 일반·하드는 하루 3번 뒤 차원 합금 2 */
+export function rushEntry(diff: RushDiff, usedToday: number): Record<string, number> {
+  if (diff === 2) return { [ALLOY2]: 1 };
+  return usedToday >= RUSH_DAILY ? { [ALLOY]: RUSH_EXTRA_ALLOY } : {};
+}
 
 /** 걸린 시간(초)에 따른 등급 */
 export function rushGrade(seconds: number): 'S' | 'A' | 'B' | 'C' {
@@ -125,8 +132,12 @@ export function riftAffixes(level: number, dayKey: string): AffixId[] {
 
 /** 균열 제한 시간(초) */
 export const RIFT_TIME = 300;
-/** 균열 입장: 차원 합금 1개 */
+/** 균열 입장: 1~10단계 차원 합금 1개, 11단계부터 상급 차원 합금 1개 */
 export const RIFT_ALLOY = 1;
+export const RIFT_ALLOY2_FROM = 11;
+export function riftEntry(level: number): { id: string; n: number } {
+  return { id: level >= RIFT_ALLOY2_FROM ? ALLOY2 : ALLOY, n: RIFT_ALLOY };
+}
 
 /** 균열 채집 배율: 단계마다 +10% (광맥·나무에서 더 많이) */
 export function riftYield(level: number): number {
@@ -159,6 +170,8 @@ export interface EndgameState {
   rushGradeBest: string[];
   /** 심연 균열: 시간 안에 깬 가장 높은 단계 */
   riftBest: number;
+  /** 주간 차원 시련 */
+  trial?: TrialRecord;
 }
 
 export function newEndgame(): EndgameState {
@@ -169,10 +182,123 @@ export function newEndgame(): EndgameState {
 export type EndRun =
   | { kind: 'tower'; floor: number }
   | { kind: 'rush'; diff: RushDiff; index: number }
-  | { kind: 'rift'; tier: number; level: number; affixes: AffixId[]; timeLeft: number };
+  | { kind: 'rift'; tier: number; level: number; affixes: AffixId[]; timeLeft: number }
+  | { kind: 'trial'; week: string; hits: number; potions: number; kills: number; combo: number; chain: number; lastKill: number };
 
 /** 초 → "m:ss" */
 export function formatClock(seconds: number): string {
   const t = Math.max(0, Math.round(seconds));
   return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
+}
+
+// ---------------- 주간 차원 시련 (기록형) ----------------
+
+/**
+ * 일주일마다 모두에게 같은 맵·몬스터·변이가 주어지고, 능력치는 고정 스펙으로 바뀐다 (장비·각인·초월 무시).
+ * 실력으로 점수를 겨루고, 그 주의 최고 점수 등급에 따라 보상을 받는다.
+ */
+export const TRIAL_TIME = 900;
+
+/** 월요일 기준 주 번호 ("2026-W39") */
+export function weekKey(d = new Date()): string {
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const day = t.getUTCDay() || 7;
+  t.setUTCDate(t.getUTCDate() + 4 - day);
+  const y = t.getUTCFullYear();
+  const w = Math.ceil(((t.getTime() - Date.UTC(y, 0, 1)) / 86400000 + 1) / 7);
+  return `${y}-W${String(w).padStart(2, '0')}`;
+}
+
+function hashStr(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+  return h >>> 0;
+}
+
+/** 이번 주 시련: 맵 시드, 테마(단계), 변이 2개 */
+export function trialSpec(week: string): { seed: number; tier: number; affixes: AffixId[] } {
+  const seed = hashStr(`trial:${week}`);
+  const ids = AFFIX_IDS.filter((a) => a !== 'swarm');
+  const a = ids[seed % ids.length];
+  const rest = ids.filter((x) => x !== a);
+  const b = rest[Math.floor(seed / 7) % rest.length];
+  return { seed, tier: (seed % 7) + 1, affixes: [a, b] };
+}
+
+export interface TrialScore {
+  total: number;
+  base: number;
+  timeBonus: number;
+  hitPenalty: number;
+  potionPenalty: number;
+  comboBonus: number;
+}
+
+/** 점수: 클리어 10000 + 남은 시간×10 + 최고 연속 처치×25 − 피격×40 − 물약×400. 실패하면 처치 수×20 */
+export function trialScore(cleared: boolean, seconds: number, hits: number, potions: number, combo: number, kills: number): TrialScore {
+  if (!cleared) return { total: kills * 20, base: kills * 20, timeBonus: 0, hitPenalty: 0, potionPenalty: 0, comboBonus: 0 };
+  const s = { base: 10000, timeBonus: Math.max(0, Math.round(TRIAL_TIME - seconds)) * 10, hitPenalty: hits * 40, potionPenalty: potions * 400, comboBonus: combo * 25 };
+  return { ...s, total: Math.max(0, s.base + s.timeBonus + s.comboBonus - s.hitPenalty - s.potionPenalty) };
+}
+
+/** 등급과 주간 보상 (등급마다 한 주에 한 번, 낮은 등급 보상도 함께) */
+export const TRIAL_GRADES: { name: string; min: number; color: number; gold: number; items: Record<string, number> }[] = [
+  { name: '브론즈', min: 6000, color: 0xc98a50, gold: 5000, items: { dim_dust: 16 } },
+  { name: '실버', min: 10000, color: 0xc8d2e0, gold: 10000, items: { dim_dust: 24 } },
+  { name: '골드', min: 13000, color: 0xffd23a, gold: 20000, items: { dim_dust: 40, dim_alloy2: 1 } },
+  { name: '플래티넘', min: 15500, color: 0x7ff4ff, gold: 30000, items: { dim_dust: 64, dim_shard: 3 } },
+  { name: '차원', min: 17500, color: 0xb67cff, gold: 50000, items: { dim_dust: 100, dim_shard: 5 } },
+];
+
+/** 점수의 등급 번호 (-1 = 등급 없음) */
+export function trialGrade(score: number): number {
+  let g = -1;
+  TRIAL_GRADES.forEach((t, i) => {
+    if (score >= t.min) g = i;
+  });
+  return g;
+}
+
+export interface TrialRecord {
+  week: string;
+  best: number;
+  time: number;
+  hits: number;
+  cls: string;
+  /** 이번 주에 받은 등급 보상 */
+  claimed: number[];
+  /** 기록을 남긴 주 수 */
+  weeks: number;
+  /** 가장 높았던 등급 (칭호용) */
+  topGrade: number;
+  history: { week: string; best: number; grade: number; cls: string }[];
+}
+
+export function newTrial(week: string): TrialRecord {
+  return { week, best: 0, time: 0, hits: 0, cls: '', claimed: [], weeks: 0, topGrade: -1, history: [] };
+}
+
+/** 주가 바뀌었으면 지난 주 기록을 역사로 옮기고 새로 시작 */
+export function rollTrialWeek(t: TrialRecord, week: string): TrialRecord {
+  if (t.week === week) return t;
+  if (t.best > 0) t.history = [{ week: t.week, best: t.best, grade: trialGrade(t.best), cls: t.cls }, ...t.history].slice(0, 10);
+  return { ...t, week, best: 0, time: 0, hits: 0, cls: '', claimed: [] };
+}
+
+/** 기록 코드: 친구와 점수를 비교할 때 주고받는다 */
+export function trialCode(week: string, cls: string, score: number, seconds: number, hits: number): string {
+  const body = `${week}|${cls}|${score}|${Math.round(seconds)}|${hits}`;
+  return `DT-${btoa(`${body}|${hashStr(body) % 100000}`).replace(/=+$/, '')}`;
+}
+
+export function readTrialCode(code: string): { week: string; cls: string; score: number; seconds: number; hits: number } | null {
+  try {
+    const raw = atob(code.trim().replace(/^DT-/, ''));
+    const [week, cls, score, secs, hits, check] = raw.split('|');
+    const body = `${week}|${cls}|${score}|${secs}|${hits}`;
+    if (Number(check) !== hashStr(body) % 100000) return null;
+    return { week, cls, score: Number(score), seconds: Number(secs), hits: Number(hits) };
+  } catch {
+    return null;
+  }
 }

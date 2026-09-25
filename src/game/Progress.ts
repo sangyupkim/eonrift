@@ -350,10 +350,28 @@ export class Progress {
     return out;
   }
 
-  stats(clsId: ClassId = this.data.currentClass): Stats {
-    const c = this.data.classes[clsId];
+  /** 주간 차원 시련 중: 능력치를 고정 스펙으로 (저장하지 않는다) */
+  trial = false;
+
+  /** 시련용 고정 스펙: 99레벨, 스탯은 주 스탯 60% · 체력 30% · 민첩 10%, 전 부위 7단계 유니크 +5, 추가 보너스 없음 */
+  trialState(clsId: ClassId): ClassState {
     const def = CLASSES[clsId];
-    const b = this.baseStats(clsId);
+    const pts = (MAX_LEVEL - 1) * POINTS_PER_LEVEL;
+    const alloc = zeroStats();
+    alloc[def.damage === 'physical' ? 'str' : 'int'] = Math.round(pts * 0.6);
+    alloc.vit = Math.round(pts * 0.3);
+    alloc.dex = pts - alloc[def.damage === 'physical' ? 'str' : 'int'] - alloc.vit;
+    const equipment: ClassState['equipment'] = {};
+    for (const slot of ['weapon', 'helmet', 'armor', 'pants', 'boots', 'ring', 'necklace'] as EquipSlot[])
+      equipment[slot] = { uid: `trial-${slot}`, slot, cls: slot === 'weapon' ? clsId : undefined, tier: 7, grade: 4, plus: 5 };
+    return { ...this.data.classes[clsId], level: MAX_LEVEL, alloc, equipment, tpts: {} };
+  }
+
+  stats(clsId: ClassId = this.data.currentClass): Stats {
+    const c = this.trial ? this.trialState(clsId) : this.data.classes[clsId];
+    const def = CLASSES[clsId];
+    const b = zeroStats();
+    for (const k of STAT_KEYS) b[k] = def.baseStats[k] + c.alloc[k];
     const lv = c.level - 1;
     const main = def.damage === 'physical' ? b.str : b.int;
     const s: Stats = {
@@ -375,8 +393,8 @@ export class Progress {
       s.maxMp += st.mp;
       s.crit += st.crit;
     }
-    // 몬스터 도감 연구 보너스
-    const rb = 1 + (this.data.research ?? 0) * RESEARCH_BONUS;
+    // 몬스터 도감 연구 보너스 (시련에서는 없음)
+    const rb = this.trial ? 1 : 1 + (this.data.research ?? 0) * RESEARCH_BONUS;
     s.atk *= rb;
     s.maxHp = Math.round(s.maxHp * rb);
     // 각인 · 칭호 · 초월 · 음식
@@ -396,6 +414,7 @@ export class Progress {
   bonuses(clsId: ClassId = this.data.currentClass): Bonus {
     const c = this.data.classes[clsId];
     const b: Bonus = {};
+    if (this.trial) return b;
     for (const e of Object.values(c.equipment)) if (e && durability(e) > 0) for (const l of e.eng ?? []) addBonus(b, { [l.k]: l.v });
     for (const t of TITLES) if (this.data.titles?.includes(t.id)) addBonus(b, t.bonus);
     for (const ts of TRANSCEND_STATS) addBonus(b, { [ts.key]: ts.per }, c.tpts?.[ts.key] ?? 0);
@@ -432,6 +451,7 @@ export class Progress {
   }
   /** 궁극기 레벨 (기본 1) */
   ultLevel(index: number, clsId: ClassId = this.data.currentClass): number {
+    if (this.trial) return 1;
     return this.data.classes[clsId].ultLv?.[index] ?? 1;
   }
   /** 지금 쓸 궁극기 (없으면 -1) */

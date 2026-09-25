@@ -20,7 +20,7 @@ import { gearLook } from '../models/items';
 import { equipIconUrl, heroPortraitUrl, itemIconUrl, monsterIconUrl, skillIconUrl, toolIconUrl } from './itemIcons';
 import { BESTIARY, BESTIARY_BY_ID, COLLECTION_MILESTONES, killMilestones, milestoneReward, RESEARCH_BONUS, type BestiaryReward } from '../data/bestiary';
 import { DEBUFF_INFO, TRAIT_TEXT, type Faction } from '../data/species';
-import { AFFIXES, ALLOY, formatClock, riftAffixes, riftMult, riftReward, riftYield, RIFT_ALLOY, RIFT_TIME, rushReward, RUSH_DAILY, RUSH_DIFFS, RUSH_EXTRA_ALLOY, RUSH_ORDER, SHARD, DUST, DUST_PER_SHARD, towerBoss, towerDaily, towerFirstClear, towerMult, towerStartFloor, type RushDiff } from '../data/endgame';
+import { AFFIXES, ALLOY, ALLOY2, RIFT_ALLOY2_FROM, riftEntry, rushEntry, formatClock, riftAffixes, riftMult, riftReward, riftYield, RIFT_ALLOY, RIFT_TIME, rushReward, RUSH_DAILY, RUSH_DIFFS, RUSH_EXTRA_ALLOY, RUSH_ORDER, SHARD, DUST, DUST_PER_SHARD, readTrialCode, trialCode, trialGrade, TRIAL_GRADES, trialSpec, TRIAL_TIME, weekKey, towerBoss, towerDaily, towerFirstClear, towerMult, towerStartFloor, type RushDiff } from '../data/endgame';
 import { BONUS_NAMES, bonusText, TRANSCEND_STATS, transcendCost, transcendExp, engraveCost, engraveRange, ENGRAVE_STAGES, ENGRAVE_STAGE_NAMES, rollEngrave, TITLES, type BonusKey } from '../data/bonus';
 import { Rng } from '../core/rng';
 import type { Archetype } from '../data/monsters';
@@ -316,7 +316,7 @@ export class Screens {
   // ---------------- 차원의 끝 (엔드 콘텐츠) ----------------
   endgame(
     p: Progress,
-    h: { tower: (floor: number) => void; towerDaily: () => void; rush: (diff: RushDiff) => void; rift: (tier: number, level: number) => void },
+    h: { tower: (floor: number) => void; towerDaily: () => void; rush: (diff: RushDiff) => void; rift: (tier: number, level: number) => void; trial: () => void; trialClaim: (grade: number) => void },
     onClose: () => void,
     message?: string,
     sel?: { tier: number; level: number },
@@ -325,6 +325,7 @@ export class Screens {
     const today = todayKey();
     const cur = { tier: sel?.tier ?? Math.min(7, p.maxTier), level: sel?.level ?? Math.max(1, e.riftBest + 1) };
     const alloy = p.count(ALLOY);
+    const alloy2 = p.count(ALLOY2);
     const shardTxt = (n: number) => (n ? ` · ${inlineGem(DUST)}차원 가루 ${n}` : '');
     // 무한의 탑
     const start = towerStartFloor(e.towerBest);
@@ -344,13 +345,14 @@ export class Screens {
     // 보스 러시
     const used = e.rushDate === today ? e.rushUsed : 0;
     const rush = `<section class="end-card">
-        <h3>${SPK('skull', '☠')} 보스 러시 <small>오늘 무료 ${Math.max(0, RUSH_DAILY - used)}/${RUSH_DAILY}${used >= RUSH_DAILY ? ` · 추가 도전 ${inlineGem(ALLOY)}차원 합금 ${RUSH_EXTRA_ALLOY} (보유 ${alloy})` : ''}</small></h3>
+        <h3>${SPK('skull', '☠')} 보스 러시 <small>일반·하드 오늘 무료 ${Math.max(0, RUSH_DAILY - used)}/${RUSH_DAILY}${used >= RUSH_DAILY ? ` · 추가 도전 ${inlineGem(ALLOY)}차원 합금 ${RUSH_EXTRA_ALLOY} (보유 ${alloy})` : ''} · 지옥은 매번 ${inlineGem(ALLOY2)}상급 차원 합금 1 (보유 ${alloy2})</small></h3>
         <p class="hint">1단계 파수꾼부터 7단계 수호자까지 ${RUSH_ORDER.length}번 연속. 보스 사이에 체력 25%만 회복. 10분 안 S · 15분 A · 20분 B. 보상은 완주했을 때 한꺼번에.</p>
         <div class="rush-row">${RUSH_DIFFS.map((d, i) => {
           const locked = i > 0 && !e.rushGradeBest[i - 1];
           const best = e.rushBest[i] ? `최고 ${formatClock(e.rushBest[i])} · ${e.rushGradeBest[i]}등급` : '기록 없음';
           const r = rushReward(i as RushDiff, 'S');
-          return `<button class="rush-btn ${locked ? 'locked' : ''}" data-rush="${i}" ${locked ? 'disabled' : ''}><b>${d.name}</b><small>${locked ? `${RUSH_DIFFS[i - 1].name} 완주 후 열림` : d.desc}</small><small class="dim">${best} · S ${r.gold} G${shardTxt(r.dust)}</small></button>`;
+          const short = !locked && !p.hasAll(rushEntry(i as RushDiff, used));
+          return `<button class="rush-btn ${locked || short ? 'locked' : ''}" data-rush="${i}" ${locked || short ? 'disabled' : ''}><b>${d.name}</b><small>${locked ? `${RUSH_DIFFS[i - 1].name} 완주 후 열림` : d.desc}</small><small class="dim">${best} · S ${r.gold} G${shardTxt(r.dust)}</small></button>`;
         }).join('')}</div>
       </section>`;
     // 심연 균열
@@ -360,7 +362,7 @@ export class Screens {
     const tiers = THEMES.map((t) => `<button class="chip ${t.tier === cur.tier ? 'on' : ''}" data-rtier="${t.tier}" ${t.tier > p.maxTier ? 'disabled' : ''} style="--c:${hex(t.portalColor)}">${t.tier} ${t.name}</button>`).join('');
     const rift = `<section class="end-card">
         <h3>${SPK('portal', '◎')} 심연 균열 <small>최고 ${e.riftBest}단계</small></h3>
-        <p class="hint">원하는 맵(1~7단계)을 7단계보다 강한 난이도로 엽니다. 맵의 광맥·나무가 단계만큼 더 많이 나오고(+10%/단계), 좋은 장비 확률도 오릅니다. ${Math.floor(RIFT_TIME / 60)}분 안에 모두 쓰러뜨리면 다음 단계가 열립니다. 입장: ${inlineGem(ALLOY)}차원 합금 ${RIFT_ALLOY} (보유 ${alloy})</p>
+        <p class="hint">원하는 맵(1~7단계)을 7단계보다 강한 난이도로 엽니다. 맵의 광맥·나무가 단계만큼 더 많이 나오고(+10%/단계), 좋은 장비 확률도 오릅니다. ${Math.floor(RIFT_TIME / 60)}분 안에 모두 쓰러뜨리면 다음 단계가 열립니다. 입장: 1~${RIFT_ALLOY2_FROM - 1}단계 ${inlineGem(ALLOY)}차원 합금 ${RIFT_ALLOY} (보유 ${alloy}) · ${RIFT_ALLOY2_FROM}단계부터 ${inlineGem(ALLOY2)}상급 차원 합금 ${RIFT_ALLOY} (보유 ${alloy2})</p>
         <div class="chips">${tiers}</div>
         <div class="menu row stepper">
           <button data-rlv="-1" ${cur.level <= 1 ? 'disabled' : ''}>−</button>
@@ -369,7 +371,30 @@ export class Screens {
           <span class="dim">몬스터 ×${riftMult(cur.level).toFixed(2)} · 채집 ×${riftYield(cur.level).toFixed(1)} · 보상 ${rr.gold} G${shardTxt(rr.dust)}</span>
         </div>
         <p class="dim">오늘의 변이: ${affixes.length ? affixes.map((a) => `<span class="affix" style="color:${hex(AFFIXES[a].color)}">${AFFIXES[a].name}</span> (${AFFIXES[a].text})`).join(' · ') : '없음'}</p>
-        <div class="menu row"><button class="primary" data-rift ${alloy < RIFT_ALLOY ? 'disabled' : ''}>${cur.tier}단계 맵 · 균열 ${cur.level}단계 입장</button></div>
+        <div class="menu row"><button class="primary" data-rift ${p.count(riftEntry(cur.level).id) < riftEntry(cur.level).n ? 'disabled' : ''}>${cur.tier}단계 맵 · 균열 ${cur.level}단계 입장</button></div>
+      </section>`;
+    // 주간 차원 시련
+    const tr = e.trial;
+    const spec = trialSpec(weekKey());
+    const g = tr ? trialGrade(tr.best) : -1;
+    const gradeTag = (i: number) => (i >= 0 ? `<b style="color:${hex(TRIAL_GRADES[i].color)}">${TRIAL_GRADES[i].name}</b>` : '<span class="dim">등급 없음</span>');
+    const claims = TRIAL_GRADES.map((t, i) => {
+      const got = tr?.claimed.includes(i);
+      const ok = !got && g >= i;
+      const rew = `${t.gold} G · ${Object.entries(t.items).map(([id, n]) => `${inlineGem(id)}${ITEMS[id].name} ${n}`).join(' · ')}`;
+      return `<button class="rush-btn ${ok ? '' : 'locked'}" data-tclaim="${i}" ${ok ? '' : 'disabled'}><b style="color:${hex(t.color)}">${t.name} <small>${t.min}점</small></b><small>${rew}</small><small class="dim">${got ? '받음' : g >= i ? '받을 수 있음' : '미달성'}</small></button>`;
+    }).join('');
+    const code = tr && tr.best ? trialCode(tr.week, tr.cls, tr.best, tr.time, tr.hits) : '';
+    const hist = tr?.history.length ? tr.history.slice(0, 5).map((x) => `${x.week} ${x.best}점 ${x.grade >= 0 ? TRIAL_GRADES[x.grade].name : '-'} (${CLASSES[x.cls as ClassId]?.name ?? ''})`).join(' · ') : '없음';
+    const trialCard = `<section class="end-card">
+        <h3>${SPK('hourglass', '⏳')} 주간 차원 시련 <small>${weekKey()} · 이번 주 최고 ${tr?.best ?? 0}점 ${gradeTag(g)}</small></h3>
+        <p class="hint">일주일 동안 모두 같은 맵·몬스터·변이. 능력치는 <b>고정 스펙</b>(99레벨·7단계 유니크 +5 전 부위, 배운 스킬은 최고 레벨, 궁극기 Lv.1, 각인·초월·칭호·음식 무시)으로 바뀌어 실력만 겨룹니다. 물약은 중급 3개가 주어지고, 쓰러져도 짐을 잃지 않습니다. 몇 번이든 도전할 수 있고, 그 주의 최고 점수로 등급 보상을 받습니다.</p>
+        <p class="dim">점수: 클리어 10000 + 남은 시간(${formatClock(TRIAL_TIME)} 기준)×10 + 최고 연속 처치×25 − 피격×40 − 물약×400 · 이번 주: ${THEMES[spec.tier - 1].name} · 변이 ${spec.affixes.map((a) => `<span class="affix" style="color:${hex(AFFIXES[a].color)}">${AFFIXES[a].name}</span>`).join(' · ')}</p>
+        <div class="menu row"><button class="primary" data-trial>도전하기</button>${tr?.best ? `<span class="dim">최고 기록: ${formatClock(tr.time)} · 피격 ${tr.hits} · ${CLASSES[tr.cls as ClassId]?.name ?? ''}</span>` : ''}</div>
+        <div class="rush-row trial-row">${claims}</div>
+        ${code ? `<p class="dim">기록 코드 (친구와 비교): <input class="code-box" readonly value="${code}"></p>` : ''}
+        <p class="dim">친구 코드 확인: <input class="code-box" data-tcode placeholder="DT-..."> <span data-tcode-out></span></p>
+        <p class="dim">지난 기록: ${hist}</p>
       </section>`;
     // 칭호
     const titles = TITLES.map((t) => {
@@ -380,11 +405,11 @@ export class Screens {
       'endgame',
       `<div class="panel wide tall">
          <button class="close">${ICONS.close}</button>
-         <h2>차원의 끝 <small>${inlineGem(DUST)}차원 가루 ${p.count(DUST)} · ${inlineGem(SHARD)}차원 파편 ${p.count(SHARD)} · ${inlineGem(ALLOY)}차원 합금 ${alloy}</small></h2>
-         <p class="hint">보상은 차원 가루로 받습니다. 차원집의 <b>차원 응축기</b>(세라의 도면)에서 가루 ${DUST_PER_SHARD}개 + 상급 정수로 차원 파편을, 가루 4개 + 최상급 정수로 차원 마력 정수를 만듭니다.</p>
+         <h2>차원의 끝 <small>${inlineGem(DUST)}차원 가루 ${p.count(DUST)} · ${inlineGem(SHARD)}차원 파편 ${p.count(SHARD)} · ${inlineGem(ALLOY)}차원 합금 ${alloy} · ${inlineGem(ALLOY2)}상급 ${alloy2}</small></h2>
+         <p class="hint">보상은 차원 가루로 받습니다. 차원집의 <b>차원 응축기</b>(세라의 도면)에서 가루 ${DUST_PER_SHARD}개 + 상급 정수 + 티타늄판으로 차원 파편을, 가루 4개 + 최상급 정수 + 오리하르콘 주괴로 차원 마력 정수를 만듭니다.</p>
          ${message ? `<div class="notice">${message}</div>` : ''}
          <div class="scroll">
-           ${tower}${rush}${rift}
+           ${tower}${rush}${rift}${trialCard}
            <section class="end-card"><h3>${SPK('sparkle', '✦')} 칭호 <small>${p.data.titles?.length ?? 0}/${TITLES.length} · 얻은 칭호의 보너스는 모두 적용</small></h3><ul class="list">${titles}</ul></section>
          </div>
        </div>`,
@@ -397,6 +422,14 @@ export class Screens {
     this.on(s, '[data-rtier]', (b) => again(message, { ...cur, tier: Number(b.dataset.rtier) }));
     this.on(s, '[data-rlv]', (b) => again(message, { ...cur, level: Math.max(1, Math.min(maxLevel, cur.level + Number(b.dataset.rlv))) }));
     this.on(s, '[data-rift]', () => h.rift(cur.tier, cur.level));
+    this.on(s, '[data-trial]', () => h.trial());
+    this.on(s, '[data-tclaim]', (b) => h.trialClaim(Number(b.dataset.tclaim)));
+    const input = s.querySelector<HTMLInputElement>('[data-tcode]');
+    const out = s.querySelector<HTMLElement>('[data-tcode-out]');
+    input?.addEventListener('input', () => {
+      const r = readTrialCode(input.value);
+      if (out) out.innerHTML = !input.value.trim() ? '' : r ? `<b>${r.week}</b> ${CLASSES[r.cls as ClassId]?.name ?? r.cls} · <b>${r.score}점</b> ${r.score >= 0 && trialGrade(r.score) >= 0 ? TRIAL_GRADES[trialGrade(r.score)].name : ''} · ${formatClock(r.seconds)} · 피격 ${r.hits}` : '<span class="bad">올바르지 않은 코드</span>';
+    });
   }
 
   /** 워프 게이트: 다음 방으로 갈지, 마을로 갈지 */
@@ -592,9 +625,10 @@ export class Screens {
         ['essence_high', '6챕터 몬스터'],
         ['essence_supreme', '7챕터 몬스터'],
         ['dim_dust', '파수꾼(6~8)·수호자(16~24) 확정, 7챕터 정예(가끔), 무한의 탑 첫 돌파·소탕, 보스 러시 완주, 심연 균열, 촌장 납품 의뢰'],
-        ['dim_shard', '차원 응축기: 차원 가루 8 + 상급 정수 → 궁극기 강화 · 각인'],
-        ['essence_dim', '차원 응축기: 차원 가루 4 + 최상급 정수 → 최고 연료'],
-        ['dim_alloy', '차원집 제작대 (구리·철·황금·다이아판 + 상급 정수) → 심연 균열 입장, 보스 러시 추가 도전'],
+        ['dim_shard', '차원 응축기: 차원 가루 8 + 상급 정수 + 티타늄판 → 궁극기 강화 · 각인 · 초월'],
+        ['essence_dim', '차원 응축기: 차원 가루 4 + 최상급 정수 + 오리하르콘 주괴 → 최고 연료'],
+        ['dim_alloy', '차원집 제작대 Lv.4 (구리·철·황금·다이아판 + 상급 정수) → 심연 균열 1~10단계 입장, 보스 러시 추가 도전'],
+        ['dim_alloy2', '차원집 제작대 Lv.6 (티타늄·오리하르콘판 + 마력 티타늄판 + 최상급 정수) → 심연 균열 11단계 이상, 보스 러시 지옥'],
         ['gear_part', '5챕터 톱니 잔해'],
         ['magi_alloy', '5챕터 합금 잔해'],
         ['potion', '상인 무트 (기본 물약만 판매)'],

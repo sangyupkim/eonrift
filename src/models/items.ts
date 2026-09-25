@@ -196,7 +196,7 @@ export function buildItemGeometry(id: string): BufferGeometry {
   else if (id === 'bag_kit') g = bag(c);
   else if (id === 'resonator') g = resonator(c);
   else if (id === 'dim_shard') g = shards(c);
-  else if (id === 'dim_alloy') g = [...ingot(c, 0x5ef0ff), part(new OctahedronGeometry(0.1, 0), 0x5ef0ff, { pos: [0.15, 0.25, 0] })];
+  else if (id === 'dim_alloy' || id === 'dim_alloy2') g = [...ingot(c, 0x5ef0ff), part(new OctahedronGeometry(0.1, 0), 0x5ef0ff, { pos: [0.15, 0.25, 0] })];
   else if (id.startsWith('food_')) g = bowl(c);
   else if (id === 'gear_part') g = gear(c);
   else if (id === 'gold') g = coins();

@@ -34,7 +34,7 @@ import { objectiveNeed, objectiveProgress, Quests } from './Quests';
 import { bonusText, FOOD_MINUTES, FOODS, TITLES, type BonusKey } from '../data/bonus';
 import { hasStory, objective, questLines, scriptFor } from './Story';
 import { todayKey } from './Quests';
-import { ALLOY, AFFIXES, riftAffixes, riftLuck, riftMult, riftReward, riftYield, RIFT_ALLOY, RIFT_TIME, rushGrade, rushReward, RUSH_DAILY, RUSH_DIFFS, RUSH_EXTRA_ALLOY, RUSH_ORDER, DUST, formatClock, towerBoss, towerDaily, towerFirstClear, towerMult, towerTheme, type EndRun } from '../data/endgame';
+import { rushEntry, riftEntry, AFFIXES, riftAffixes, riftLuck, riftMult, riftReward, riftYield, RIFT_TIME, rushGrade, rushReward, RUSH_DIFFS, RUSH_ORDER, DUST, formatClock, newTrial, rollTrialWeek, trialGrade, TRIAL_GRADES, trialScore, trialSpec, TRIAL_TIME, weekKey, type TrialRecord, towerBoss, towerDaily, towerFirstClear, towerMult, towerTheme, type EndRun } from '../data/endgame';
 import { DungeonScene, type DungeonMods, type NodeInstance } from './scenes/DungeonScene';
 import { HomeScene } from './scenes/HomeScene';
 import type { Interactable, Level } from './scenes/Level';
@@ -409,7 +409,8 @@ export class Game {
       shake: (a) => (this.shakeT = Math.max(this.shakeT, a)),
       hitStop: (t) => (this.hitStopT = Math.max(this.hitStopT, t)),
       sfx: (n) => this.audio.play(n),
-      skillLevel: (i) => this.progress.cls.skills[i] ?? 0,
+      // 시련: 배운 스킬은 모두 최고 레벨로 (같은 조건)
+      skillLevel: (i) => (this.progress.trial && (this.progress.cls.skills[i] ?? 0) > 0 ? MAX_SKILL_LEVEL : (this.progress.cls.skills[i] ?? 0)),
       bonus: (k) => this.progress.bonus(k),
       autoAim: () => this.progress.data.settings.autoAim !== false,
     });
@@ -454,7 +455,7 @@ export class Game {
       const e = this.endLayout(end);
       tier = e.tier;
       stage = e.stage;
-      data = generateDungeon(randomSeed(), tier, stage, e.gen);
+      data = generateDungeon(e.seed ?? randomSeed(), tier, stage, e.gen);
       mods = e.mods;
     } else data = generateDungeon(randomSeed(), tier, stage, farm ? { farm } : { boss });
     // 채집 특화 맵은 들어갈 때 30분 대기가 시작된다 (이어 하기는 제외)
@@ -1135,8 +1136,20 @@ export class Game {
 
   // =============== 차원의 끝 (엔드 콘텐츠) ===============
   /** 엔드 콘텐츠 한 판의 맵과 몬스터 배율 */
-  private endLayout(end: EndRun): { tier: number; stage: number; gen: GenOptions; mods: DungeonMods } {
+  private endLayout(end: EndRun): { tier: number; stage: number; gen: GenOptions; mods: DungeonMods; seed?: number } {
     switch (end.kind) {
+      case 'trial': {
+        // 주간 시련: 이번 주 모두 같은 맵·변이. 몬스터는 7단계 기준 고정
+        const t = trialSpec(end.week);
+        const a = t.affixes;
+        return {
+          tier: t.tier,
+          stage: 10,
+          seed: t.seed,
+          gen: { boss: 'present', rooms: [6, 7], eliteChance: a.includes('elite') ? 0.15 : 0 },
+          mods: { statTier: 7, statStage: 10, hp: 1.4 * (a.includes('fortified') ? 1.3 : 1), atk: 1.4 * (a.includes('enraged') ? 1.25 : 1), speed: a.includes('haste') ? 1.2 : 1, affixes: a },
+        };
+      }
       case 'tower': {
         const b = towerBoss(end.floor);
         const m = towerMult(end.floor);
@@ -1171,6 +1184,7 @@ export class Game {
   }
 
   private endLabel(end: EndRun, theme: string): string {
+    if (end.kind === 'trial') return `주간 차원 시련 · ${theme} · :hourglass: ${formatClock(Math.max(0, TRIAL_TIME - (this.run?.time ?? 0)))} · 피격 ${end.hits}`;
     if (end.kind === 'tower') return `무한의 탑 ${end.floor}층 · ${theme}`;
     if (end.kind === 'rush') return `보스 러시 ${RUSH_DIFFS[end.diff].name} ${end.index + 1}/${RUSH_ORDER.length}`;
     const t = Math.max(0, Math.ceil(end.timeLeft));
@@ -1178,6 +1192,8 @@ export class Game {
   }
 
   private endIntro(end: EndRun): string {
+    if (end.kind === 'trial')
+      return `주간 차원 시련 (${end.week}) — 고정 스펙으로 ${formatClock(TRIAL_TIME)} 안에 모두 쓰러뜨리자 · 변이: ${trialSpec(end.week).affixes.map((a) => AFFIXES[a].name).join(' · ')} · 피격·물약은 감점`;
     if (end.kind === 'tower') {
       const b = towerBoss(end.floor);
       return `무한의 탑 ${end.floor}층 — 몬스터 ×${towerMult(end.floor).toFixed(2)}${b ? ` · ${b.kind === 'boss' ? '수호자' : '파수꾼'}가 기다립니다` : ''}${end.floor > 10 && end.floor % 10 === 1 ? ' · :warning: 새 구간: 몬스터가 한꺼번에 강해졌다' : ''}`;
@@ -1205,6 +1221,7 @@ export class Game {
     const p = this.progress;
     const e = p.data.end!;
     this.rushUsedToday();
+    this.trialRecord();
     this.openMenu(() =>
       this.screens.endgame(
         p,
@@ -1226,19 +1243,31 @@ export class Game {
           rush: (diff) => {
             if (diff > 0 && !e.rushGradeBest[diff - 1]) return;
             const used = this.rushUsedToday();
-            if (used >= RUSH_DAILY) {
-              if (p.count(ALLOY) < RUSH_EXTRA_ALLOY) return this.openEndgameMenu(`오늘 무료 도전 ${RUSH_DAILY}번을 다 썼습니다. 차원 합금 ${RUSH_EXTRA_ALLOY}개가 필요합니다`);
-              p.take(ALLOY, RUSH_EXTRA_ALLOY);
-            }
-            e.rushUsed = used + 1;
+            const cost = rushEntry(diff, used);
+            if (!p.hasAll(cost)) return this.openEndgameMenu(`입장 재료가 부족합니다: ${Object.entries(cost).map(([id, n]) => `${ITEMS[id].name} ${n}개`).join(', ')}`);
+            p.takeAll(cost);
+            if (diff < 2) e.rushUsed = used + 1;
             this.saveNow();
             this.afterMenu = () => this.enterDungeon(1, 1, false, undefined, { kind: 'rush', diff, index: 0 });
             this.screens.close();
           },
+          trial: () => this.startTrial(),
+          trialClaim: (g) => {
+            const t = this.trialRecord();
+            if (t.claimed.includes(g) || trialGrade(t.best) < g) return;
+            const r = TRIAL_GRADES[g];
+            t.claimed.push(g);
+            p.data.gold += r.gold;
+            for (const [id, n] of Object.entries(r.items)) p.add(id, n);
+            this.audio.play('coin');
+            this.saveNow();
+            this.openEndgameMenu(`주간 시련 ${r.name} 보상: +${r.gold} G · ${Object.entries(r.items).map(([id, n]) => `${ITEMS[id].name} ${n}`).join(' · ')}`);
+          },
           rift: (tier, level) => {
             if (level > e.riftBest + 1 || tier > p.maxTier) return;
-            if (p.count(ALLOY) < RIFT_ALLOY) return this.openEndgameMenu(`심연 균열에 들어가려면 차원 합금 ${RIFT_ALLOY}개가 필요합니다 (차원집 제작대에서 여러 단계의 판으로 제작)`);
-            p.take(ALLOY, RIFT_ALLOY);
+            const cost = riftEntry(level);
+            if (p.count(cost.id) < cost.n) return this.openEndgameMenu(`심연 균열 ${level}단계에 들어가려면 ${ITEMS[cost.id].name} ${cost.n}개가 필요합니다 (차원집 제작대)`);
+            p.take(cost.id, cost.n);
             this.saveNow();
             this.afterMenu = () => this.enterDungeon(tier, 1, false, undefined, { kind: 'rift', tier, level, affixes: riftAffixes(level, todayKey()), timeLeft: RIFT_TIME });
             this.screens.close();
@@ -1256,6 +1285,8 @@ export class Game {
     const ctx = {
       end: p.data.end!,
       transcend: Math.max(...CLASS_ORDER.map((c) => p.data.classes[c].tlv ?? 0)),
+      trialTop: p.data.end?.trial?.topGrade ?? -1,
+      trialWeeks: p.data.end?.trial?.weeks ?? 0,
       engrave5: CLASS_ORDER.reduce((a, c) => a + Object.values(p.data.classes[c].equipment).filter((e) => (e?.eng?.length ?? 0) >= 5).length, 0) + p.data.equips.filter((e) => (e.eng?.length ?? 0) >= 5).length,
     };
     const got = (p.data.titles ??= []);
@@ -1266,6 +1297,52 @@ export class Game {
       this.hud.toast(`:sparkle: 칭호 획득: 「${t.name}」 — ${Object.entries(t.bonus).map(([k, v]) => bonusText(k as BonusKey, v!)).join(', ')}`, 4500);
     }
     this.applyStats();
+  }
+
+  /** 이번 주 시련 기록 (주가 바뀌었으면 지난 기록을 넘긴다) */
+  private trialRecord(): TrialRecord {
+    const e = this.progress.data.end!;
+    const wk = weekKey();
+    e.trial = rollTrialWeek(e.trial ?? newTrial(wk), wk);
+    return e.trial;
+  }
+
+  /** 주간 시련 시작: 능력치를 고정 스펙으로 바꾸고 이번 주 맵으로 */
+  private startTrial(): void {
+    this.progress.trial = true;
+    this.afterMenu = () => this.enterDungeon(1, 1, false, undefined, { kind: 'trial', week: weekKey(), hits: 0, potions: 0, kills: 0, combo: 0, chain: 0, lastKill: -99 });
+    this.screens.close();
+  }
+
+  /** 주간 시련 끝: 점수를 매기고 기록한 뒤 마을로 (쓰러져도 짐은 그대로) */
+  private finishTrial(cleared: boolean): void {
+    const run = this.run;
+    if (!run || run.end?.kind !== 'trial') return;
+    const end = run.end;
+    const t = this.trialRecord();
+    const sc = trialScore(cleared, run.time, end.hits, end.potions, end.combo, end.kills);
+    const grade = trialGrade(sc.total);
+    let best = '';
+    // 다른 주에 시작한 도전은 기록하지 않는다
+    if (end.week === t.week && sc.total > t.best) {
+      if (t.best === 0) t.weeks++;
+      t.best = sc.total;
+      t.time = Math.round(run.time);
+      t.hits = end.hits;
+      t.cls = this.progress.data.currentClass;
+      t.topGrade = Math.max(t.topGrade, grade);
+      best = ' · 이번 주 최고 기록!';
+    }
+    run.pouch = [];
+    this.progress.trial = false;
+    this.mode = 'play';
+    this.player.hp = Math.max(1, this.player.hp);
+    // 고정 스펙에서 원래 능력치로 (체력은 비율로 옮긴다)
+    this.applyStats();
+    this.checkTitles();
+    const gname = grade >= 0 ? TRIAL_GRADES[grade].name : '등급 없음';
+    this.hud.toast(`주간 시련 ${cleared ? '완료' : '실패'}: ${sc.total}점 (${gname})${best}`, 5000);
+    this.finishRun(`주간 시련 ${cleared ? '완료' : '실패'} · ${sc.total}점 · ${gname}`);
   }
 
   /** 엔드 콘텐츠의 방을 다 정리했을 때: 기록과 보상 */
@@ -1301,6 +1378,7 @@ export class Game {
       this.checkTitles();
       return `보스 러시 ${RUSH_DIFFS[end.diff].name} 완주! ${formatClock(secs)} · ${grade}등급 ${give(r.gold, r.dust)}`;
     }
+    if (end.kind !== 'rift') return '';
     const inTime = end.timeLeft > 0;
     const r = riftReward(end.level, inTime);
     if (inTime && end.level > e.riftBest) e.riftBest = end.level;
@@ -1365,6 +1443,10 @@ export class Game {
     }
     if (pl.isInvulnerable) return 0;
     pl.inCombat();
+    if (this.run?.end?.kind === 'trial') {
+      this.run.end.hits++;
+      if (this.level instanceof DungeonScene) this.hud.setLocation(this.endLabel(this.run.end, this.level.theme.name), this.level.theme.portalColor);
+    }
     const st = this.buffedStats();
     const head = this.toScreen(pl.position.x, 2, pl.position.z);
     // 수호의 방패: 공격을 통째로 막는다
@@ -1502,6 +1584,25 @@ export class Game {
       this.hud.toast(this.quests.isDone('m_research') ? `도감에 새 몬스터 등록: ${name} — 연구자 노아에게 보상을 받자` : `새 몬스터 발견: ${name}`, 2600);
     }
 
+    // 주간 시련: 전리품·경험치 없이 연속 처치만 센다 (3초 안에 다음 처치)
+    if (run.end?.kind === 'trial') {
+      const e = run.end;
+      e.kills++;
+      e.chain = run.time - e.lastKill <= 3 ? e.chain + 1 : 1;
+      e.lastKill = run.time;
+      e.combo = Math.max(e.combo, e.chain);
+      if (e.chain >= 5 && e.chain % 5 === 0) {
+        const s = this.toScreen(m.x, 2.2, m.z);
+        this.hud.floatText(s.x, s.y, `${e.chain} 연속!`, '#b67cff', 'crit');
+      }
+      if (m.isBoss) {
+        this.hud.setBoss(null);
+        this.audio.playMusic('dungeon');
+      }
+      this.refreshHud();
+      return;
+    }
+
     const weapon = this.progress.cls.equipment.weapon;
     if (weapon && durability(weapon) > 0 && Math.random() < 0.12) this.wearEquip(weapon);
 
@@ -1600,6 +1701,7 @@ export class Game {
     const run = this.run!;
     run.roomCleared = true;
     run.stagesCleared++;
+    if (run.end?.kind === 'trial') return this.finishTrial(true);
     if (run.end) {
       const msg = this.endRoomClear(run.end);
       this.audio.play('portal');
@@ -1885,6 +1987,8 @@ export class Game {
   private fall(timeOver = false): void {
     const run = this.run;
     if (!run) return;
+    // 주간 시련은 쓰러져도 짐을 잃지 않는다 (처치 수만큼 점수)
+    if (run.end?.kind === 'trial') return this.finishTrial(false);
     const p = this.progress;
     const lost = run.bag.totals();
     const lostEquips = run.bag.equips().length;
@@ -2386,6 +2490,10 @@ export class Game {
         this.audio.playMusic('boss');
       }
       const end = this.run.end;
+      if (end?.kind === 'trial' && !this.run.roomCleared) {
+        if (Math.floor(this.run.time) !== Math.floor(this.run.time - dt)) this.hud.setLocation(this.endLabel(end, level.theme.name), level.theme.portalColor);
+        if (this.run.time >= TRIAL_TIME) return this.finishTrial(false);
+      }
       if (end?.kind === 'rift' && !this.run.roomCleared) {
         const before = Math.ceil(end.timeLeft);
         end.timeLeft -= dt;
@@ -2447,6 +2555,7 @@ export class Game {
     pl.hp = Math.min(pl.maxHp, pl.hp + pl.maxHp * heal);
     pl.mp = Math.min(pl.maxMp, pl.mp + pl.maxMp * heal);
     this.potionCd = POTION_COOLDOWN;
+    if (this.run?.end?.kind === 'trial') this.run.end.potions++;
     this.level.effects.ring(pl.position.x, pl.position.z, 2, 0xff7a9a, 0.4);
     this.audio.play('pickup');
   }
@@ -2455,6 +2564,11 @@ export class Game {
   private fillPouch(): void {
     const run = this.run;
     if (!run) return;
+    // 시련: 모두 같은 물약 3개 (가방의 물약은 쓰지 않고, 끝나면 사라진다)
+    if (run.end?.kind === 'trial') {
+      if (!run.pouch.length) run.pouch = ['potion_mid', 'potion_mid', 'potion_mid'];
+      return;
+    }
     const before = run.pouch.length;
     while (run.pouch.length < POTION_POUCH) {
       const id = POTION_KINDS.find(([k]) => this.progress.count(k) > 0)?.[0];
