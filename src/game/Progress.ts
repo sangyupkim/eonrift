@@ -23,6 +23,8 @@ export interface ClassState {
   quick: number[];
   /** 고른 궁극기 (0/1) */
   ult?: number;
+  /** 궁극기 레벨 [0번, 1번] (없으면 1) */
+  ultLv?: number[];
 }
 
 export interface RunCheckpoint {
@@ -365,6 +367,10 @@ export class Progress {
   /** 열린 궁극기 번호들 (수호자의 차원석으로 열린다) */
   unlockedUlts(clsId: ClassId = this.data.currentClass): number[] {
     return ULTIMATES[clsId].map((u, i) => (this.data.dimStones.includes(u.stone) ? i : -1)).filter((i) => i >= 0);
+  }
+  /** 궁극기 레벨 (기본 1) */
+  ultLevel(index: number, clsId: ClassId = this.data.currentClass): number {
+    return this.data.classes[clsId].ultLv?.[index] ?? 1;
   }
   /** 지금 쓸 궁극기 (없으면 -1) */
   get ultIndex(): number {

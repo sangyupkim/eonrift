@@ -2689,3 +2689,12 @@ img.mico-inline {
   font-weight: 800;
   font-size: 11px;
 }
+
+/* 교관 훈련장: 궁극기 강화 머리글 */
+.list li.sub-head {
+  background: none;
+  border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  margin-top: 6px;
+  padding-top: 10px;
+}

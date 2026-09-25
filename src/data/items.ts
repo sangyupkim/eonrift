@@ -41,6 +41,8 @@ const defs: ItemDef[] = [
   { id: 'essence_high', name: '상급 마력 정수', color: 0xd76fff, kind: 'essence', value: 30, description: '6단계 몬스터에게서 나온다. 발전기에서 10분 동안 타고, 생산 속도 ×1.3.' },
   { id: 'essence_supreme', name: '최상급 마력 정수', color: 0xffc84a, kind: 'essence', value: 70, description: '7단계 몬스터에게서 나온다. 발전기에서 20분 동안 타고, 생산 속도 ×1.5.' },
   { id: 'essence_dim', name: '차원 마력 정수', color: 0x5ef0ff, kind: 'essence', value: 160, description: '파수꾼·수호자(5단계 이상)와 7단계 정예가 가끔 떨어뜨린다. 발전기에서 40분 동안 타고, 생산 속도 ×1.8.' },
+  // 궁극기 강화
+  { id: 'dim_shard', name: '차원 파편', color: 0x5ef0ff, kind: 'material', value: 500, description: '파수꾼·수호자가 떨어뜨리는 차원의 조각. 교관 카엘에게 가져가면 궁극기를 강화할 수 있다.' },
   // 가공품
   { id: 'copper_ingot', name: '구리 주괴', color: 0xe89a60, kind: 'processed', value: 8, description: '제작대에서 판자와 합성해 판을 만든다. 장비·도구 제작 재료.' },
   { id: 'iron_ingot', name: '철 주괴', color: 0xb5bcc8, kind: 'processed', value: 12, description: '제작대에서 판자와 합성해 판을 만든다. 장비·도구 제작 재료.' },

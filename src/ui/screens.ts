@@ -1,7 +1,8 @@
 import { BUILD_ID, GAME_VERSION } from '../config';
 import { PATCH_NOTES } from '../data/patchnotes';
 import { applyUpdate, fetchRemoteVersion, isNewer, type RemoteVersion } from './update';
-import { CLASSES, CLASS_ORDER, expToNext, MAX_LEVEL, MAX_SKILL_LEVEL, SKILL_LEARN, skillUpgradeCost, STAT_INFO, STAT_KEYS, ULT_COOLDOWN, ULTIMATES, type ClassId, type StatKey } from '../data/classes';
+import { CLASSES, CLASS_ORDER, expToNext, MAX_LEVEL, MAX_SKILL_LEVEL, SKILL_LEARN, skillUpgradeCost, STAT_INFO, STAT_KEYS, MAX_ULT_LEVEL, ultCooldown, ultPower, ULTIMATES, type ClassId, type StatKey } from '../data/classes';
+import { ultUpgradeCost } from '../data/ultUpgrade';
 import { TOOL_KIND_NAMES, TOOL_TIER_NAMES, toolBonusChance, toolEnhanceCost, toolMaxDur, toolName, toolRepair, toolSpeed, type ToolKind, type ToolState } from '../data/tools';
 import { equipCraftCost, equipManaCraftCost, MANA_PLATE_OF, manaPlateCraftCost, plateCraftCost, toolCraftCost, workbenchUpgradeCost, type CraftCost } from '../data/crafting';
 import { durability, EQUIP_SLOTS, EQUIP_MAX_DUR, enhanceCost, repairCost, type EquipSlot, equipName, equipStats, equipValue, GRADES, slotName, type Equip } from '../data/equipment';
@@ -491,6 +492,7 @@ export class Screens {
         ['essence_high', '6챕터 몬스터'],
         ['essence_supreme', '7챕터 몬스터'],
         ['essence_dim', '5챕터 이상 파수꾼·수호자, 7챕터 정예 (드묾)'],
+        ['dim_shard', '모든 파수꾼(1개)·수호자(2~3개) 확정 → 교관 카엘에게서 궁극기 강화'],
         ['gear_part', '5챕터 톱니 잔해'],
         ['magi_alloy', '5챕터 합금 잔해'],
         ['potion', '상인 무트 (기본 물약만 판매)'],
@@ -687,7 +689,7 @@ export class Screens {
       const ultRows = ULTIMATES[p.data.currentClass]
         .map((u, i) => {
           const got = open.includes(i);
-          return `<li class="${cur === i ? 'sel' : ''} ${got ? '' : 'locked'}" ${got ? `data-ult="${i}"` : ''}><img class="gem ico" src="${skillIconUrl(p.data.currentClass, 6 + i)}" alt=""><div><b>${u.name} ${cur === i ? '<span class="ok">[장착]</span>' : got ? '<span class="dim">(누르면 장착)</span>' : `<span class="dim">(${u.stone}-10 수호자 처치 시 획득)</span>`}</b><small>${u.description} · MP ${u.mp} · ${ULT_COOLDOWN}초</small></div></li>`;
+          return `<li class="${cur === i ? 'sel' : ''} ${got ? '' : 'locked'}" ${got ? `data-ult="${i}"` : ''}><img class="gem ico" src="${skillIconUrl(p.data.currentClass, 6 + i)}" alt=""><div><b>${u.name} ${cur === i ? '<span class="ok">[장착]</span>' : got ? '<span class="dim">(누르면 장착)</span>' : `<span class="dim">(${u.stone}-10 수호자 처치 시 획득)</span>`}</b><small>${got ? `Lv.${p.ultLevel(i)} · 위력 ${Math.round(ultPower(p.ultLevel(i)) * 100)}% · ` : ''}${u.description} · MP ${u.mp} · ${ultCooldown(p.ultLevel(i))}초</small></div></li>`;
         })
         .join('');
       body = `<div class="scroll">
@@ -1549,7 +1551,7 @@ export class Screens {
   }
 
   // ---------------- 교관: 스킬 배우기·강화 ----------------
-  skillShop(p: Progress, onBuy: (i: number) => void, onClose: () => void, message?: string): void {
+  skillShop(p: Progress, onBuy: (i: number) => void, onClose: () => void, message?: string, onUlt?: (i: number) => void): void {
     const c = p.cls;
     const cls = CLASSES[p.data.currentClass];
     const rows = cls.skills
@@ -1568,6 +1570,22 @@ export class Screens {
           <button data-skill="${i}" ${ok ? '' : 'disabled'}>${label}</button></li>`;
       })
       .join('');
+    const open = p.unlockedUlts();
+    const ultRows = ULTIMATES[p.data.currentClass]
+      .map((u, i) => {
+        const got = open.includes(i);
+        const lv = p.ultLevel(i);
+        const cost = got ? ultUpgradeCost(lv) : null;
+        const ok = cost && c.level >= cost.level && p.data.gold >= cost.gold && p.hasAll(cost.items);
+        const itemsTxt = cost ? ' · ' + Object.entries(cost.items).map(([id, n]) => `<span class="${p.count(id) >= n ? '' : 'bad'}">${inlineGem(id)}${ITEMS[id].name} ${p.count(id)}/${n}</span>`).join(' · ') : '';
+        const req = cost ? `필요 레벨 ${cost.level}${c.level < cost.level ? ' <span class="bad">(부족)</span>' : ''} · <span class="${p.data.gold >= cost.gold ? '' : 'bad'}">${cost.gold} G</span>${itemsTxt}` : '';
+        const next = cost ? ` → Lv.${lv + 1}: 위력 ${Math.round(ultPower(lv + 1) * 100)}% · ${ultCooldown(lv + 1)}초` : '';
+        return `<li class="${got ? '' : 'locked'}"><img class="gem ico" src="${skillIconUrl(p.data.currentClass, 6 + i)}" alt=""><div><b>${u.name} ${got ? `<span class="ok">Lv.${lv}</span>` : `<span class="dim">(${u.stone}-10 수호자 처치 시 획득)</span>`}</b>
+          <small>${u.description} · 위력 ${Math.round(ultPower(lv) * 100)}% · ${ultCooldown(lv)}초${next}</small>
+          <small class="dim">${req}</small></div>
+          <button data-ult="${i}" ${ok ? '' : 'disabled'}>${!got ? '잠김' : cost ? '강화' : '최대'}</button></li>`;
+      })
+      .join('');
     const s = this.open(
       'skills',
       `<div class="panel wide tall">
@@ -1575,11 +1593,14 @@ export class Screens {
          <h2>교관 카엘의 훈련장 <small>${cls.name} · <span class="gold">${p.data.gold} G</span></small></h2>
          ${message ? `<div class="notice">${message}</div>` : ''}
          <p class="hint">스킬은 직업마다 따로 배웁니다. 강화할 때마다 공격 스킬은 위력 +15%, 방어·보조 스킬은 지속 시간이 늘고, 재사용 대기 -6% (최대 Lv.${MAX_SKILL_LEVEL}). 상위 스킬은 판·마력 금속이 필요합니다. 배운 스킬은 캐릭터 → 스킬에서 퀵슬롯에 놓으세요.</p>
-         <ul class="list scroll">${rows}</ul>
+         <ul class="list scroll">${rows}
+           <li class="sub-head"><div><b>궁극기 강화</b><small class="dim">${inlineGem('dim_shard')}차원 파편은 파수꾼(중간보스)과 수호자(최종보스)가 떨어뜨립니다. 레벨마다 위력 +25%, 재사용 대기 -5초 (최대 Lv.${MAX_ULT_LEVEL}).</small></div></li>
+           ${ultRows}</ul>
        </div>`,
       onClose,
     );
     this.on(s, '[data-skill]', (b) => onBuy(Number(b.dataset.skill)));
+    this.on(s, '[data-ult]', (b) => onUlt?.(Number(b.dataset.ult)));
   }
 
   // ---------------- 직업의 전당 ----------------

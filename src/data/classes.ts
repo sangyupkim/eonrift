@@ -49,6 +49,16 @@ export interface UltDef {
   stone: number;
 }
 export const ULT_COOLDOWN = 60;
+/** 궁극기 최대 레벨 (차원 파편으로 강화) */
+export const MAX_ULT_LEVEL = 5;
+/** 궁극기 레벨별 위력 배율: 레벨마다 +25% */
+export function ultPower(lv: number): number {
+  return 1 + 0.25 * (Math.max(1, lv) - 1);
+}
+/** 궁극기 레벨별 재사용 대기 (레벨마다 -5초) */
+export function ultCooldown(lv: number): number {
+  return ULT_COOLDOWN - 5 * (Math.max(1, lv) - 1);
+}
 export const ULTIMATES: Record<ClassId, [UltDef, UltDef]> = {
   sword: [
     { name: '천검난무', mp: 30, stone: 1, description: '2.4초 동안 칼날 폭풍이 되어 주변을 끊임없이 벤다. 그동안 피해를 받지 않는다.' },

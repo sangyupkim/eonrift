@@ -1,4 +1,4 @@
-import { ULT_COOLDOWN, ULTIMATES, type ClassId } from '../data/classes';
+import { ultCooldown, ultPower, ULT_COOLDOWN, ULTIMATES, type ClassId } from '../data/classes';
 import type { Monster } from './Monster';
 import type { Player } from './Player';
 import type { Stats } from './Progress';
@@ -35,6 +35,8 @@ export class Combat {
   cooldowns: number[] = [0, 0, 0, 0, 0, 0];
   /** 궁극기 재사용 대기 */
   ultCooldown = 0;
+  /** 마지막으로 쓴 궁극기의 재사용 대기 (HUD 비율용) */
+  ultCooldownMax = ULT_COOLDOWN;
   /** 시간이 걸리는 공격 (칼날 폭풍·화살비 등): 같은 던전에 있을 때만 이어진다 */
   private timers: { at: number; every: number; left: number; d: DungeonScene; fn: () => void }[] = [];
 
@@ -67,7 +69,7 @@ export class Combat {
   }
 
   /** 궁극기 (0/1). 실패 이유를 돌려준다 */
-  useUlt(index: number): string | null {
+  useUlt(index: number, level = 1): string | null {
     const player = this.host.player;
     const d = this.host.dungeon();
     const ult = ULTIMATES[player.cls.id][index];
@@ -78,7 +80,8 @@ export class Combat {
     if (!player.canAct && player.state !== 'dash') return null;
     if (player.mp < ult.mp) return 'MP가 부족합니다';
     player.mp -= ult.mp;
-    this.ultCooldown = ULT_COOLDOWN;
+    this.ultCooldownMax = this.ultCooldown = ultCooldown(level);
+    const pow = ultPower(level);
     const p = player.position;
     const target = this.findTarget(14);
     const aim = this.angleTo(target) ?? player.facing;
@@ -95,7 +98,7 @@ export class Combat {
     const hitAround = (x: number, z: number, r: number, mult: number, knock: number, stun = 0, frozen = false) => {
       for (const m of d.monsters) {
         if (!m.alive || Math.hypot(m.x - x, m.z - z) > r + m.radius) continue;
-        this.host.damageMonster(m, mult, knock, x, z);
+        this.host.damageMonster(m, mult * pow, knock, x, z);
         if (stun && m.alive) {
           m.stun = Math.max(m.stun, stun);
           m.frozen = frozen;
@@ -212,7 +215,7 @@ export class Combat {
         d.effects.sparks(p.x, 1.1, p.z, 0xffd04a, 20, { up: true, spread: 0.6 });
         this.repeat(d, 0.6, 1, 1, () => {
           const f = player.facing;
-          d.spawnPlayerProjectile({ x: p.x, z: p.z, angle: f, speed: 30, damage: 14, color: 0xffc04a, kind: 'wave', radius: 1.5, pierce: 99, life: 0.8, knock: 2, y: 1 });
+          d.spawnPlayerProjectile({ x: p.x, z: p.z, angle: f, speed: 30, damage: 14 * pow, color: 0xffc04a, kind: 'wave', radius: 1.5, pierce: 99, life: 0.8, knock: 2, y: 1 });
           d.effects.streak(p.x, p.z, p.x + Math.sin(f) * 24, p.z + Math.cos(f) * 24, 0xffd04a, 2);
           d.effects.ring(p.x + Math.sin(f) * 1.2, p.z + Math.cos(f) * 1.2, 2.5, 0xffd04a, 0.3, 1);
           this.host.shake(0.5);

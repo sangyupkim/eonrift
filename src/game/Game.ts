@@ -9,7 +9,8 @@ import { BAG_SLOTS, CAMERA_OFFSET, PLAYER, SCREEN_UP, TILE, VIEW_HEIGHT } from '
 import { Audio } from '../core/audio';
 import { Input } from '../core/input';
 import { Rng, randomSeed } from '../core/rng';
-import { CLASSES, CLASS_ORDER, expToNext, MAX_SKILL_LEVEL, SKILL_LEARN, skillUpgradeCost, ULT_COOLDOWN, ULTIMATES, type ClassId } from '../data/classes';
+import { CLASSES, CLASS_ORDER, expToNext, MAX_SKILL_LEVEL, SKILL_LEARN, skillUpgradeCost, ULTIMATES, type ClassId } from '../data/classes';
+import { ultUpgradeCost } from '../data/ultUpgrade';
 import { durability, equipName, GRADE, GRADES, newUid, rollEquip, type Equip } from '../data/equipment';
 import { rollManaGrade } from '../data/crafting';
 import { BUILDINGS, FACTORY_SIZES, OFFLINE_CAP_HOURS, type BuildingType, upgradeBlueprintCost } from '../data/factory';
@@ -944,6 +945,22 @@ export class Game {
         },
         () => this.resume(),
         message,
+        (u) => {
+          const p = this.progress;
+          const c = p.cls;
+          if (!p.unlockedUlts().includes(u)) return;
+          const lv = p.ultLevel(u);
+          const cost = ultUpgradeCost(lv);
+          if (!cost || c.level < cost.level || p.data.gold < cost.gold || !p.hasAll(cost.items)) return;
+          p.data.gold -= cost.gold;
+          p.takeAll(cost.items);
+          const lvs = c.ultLv ?? [1, 1];
+          lvs[u] = lv + 1;
+          c.ultLv = lvs;
+          this.audio.play('level');
+          this.saveNow();
+          this.openSkillShop(`궁극기 ${ULTIMATES[p.data.currentClass][u].name} Lv.${lv + 1}!`);
+        },
       ),
     );
   }
@@ -1292,6 +1309,15 @@ export class Game {
     if (dimN) {
       const added = run.bag.add('essence_dim', dimN);
       if (added) loot(`+${added} ${ITEMS.essence_dim.name}`, hex(ITEMS.essence_dim.color));
+    }
+    // 차원 파편 (궁극기 강화): 파수꾼 1개, 수호자 2~3개. 높은 단계일수록 하나 더 나올 수 있다
+    if (m.kind === 'boss' || m.kind === 'midboss') {
+      const shardN = (m.kind === 'boss' ? 2 + (rng.chance(0.5) ? 1 : 0) : 1) + (rng.chance(tier * 0.05) ? 1 : 0);
+      const added = run.bag.add('dim_shard', shardN);
+      // 가방이 가득 차면 창고로 바로 보낸다 (귀한 재료라 잃지 않게)
+      const stored = added < shardN ? this.progress.depositItem('dim_shard', shardN - added) : 0;
+      if (added + stored) loot(`+${added + stored} ${ITEMS.dim_shard.name}`, hex(ITEMS.dim_shard.color));
+      if (stored) this.hud.toast(`가방이 가득 차서 차원 파편 ${stored}개를 창고로 보냈습니다`);
     }
     // 장비: 중간보스는 좋은 장비를 넉넉히
     const eqCount = m.kind === 'boss' ? 2 : m.kind === 'midboss' ? 2 : rng.chance(m.kind === 'elite' ? 0.4 + run.stage * 0.02 : 0.008 + run.stage * 0.0008) ? 1 : 0;
@@ -2015,7 +2041,7 @@ export class Game {
     }
     if (input.consume('ult')) {
       const ui = this.progress.ultIndex;
-      const msg = ui < 0 ? '궁극기는 1-10 수호자를 처음 쓰러뜨리면 얻습니다' : this.combat.useUlt(ui);
+      const msg = ui < 0 ? '궁극기는 1-10 수호자를 처음 쓰러뜨리면 얻습니다' : this.combat.useUlt(ui, this.progress.ultLevel(ui));
       if (msg) this.hud.toast(msg);
       else if (ui >= 0) {
         this.gathering = null;
@@ -2218,7 +2244,7 @@ export class Game {
     if (ui < 0) this.hud.setUlt({ name: '궁극기', icon: '', ratio: 0, secs: 0, ready: true, lockedMsg: '궁극기는 1-10 수호자를 처음 쓰러뜨리면 얻습니다 (4-10 수호자를 쓰러뜨리면 하나 더)' });
     else {
       const u = ULTIMATES[pl.cls.id][ui];
-      this.hud.setUlt({ name: u.name, icon: skillIconUrl(pl.cls.id, 6 + ui), ratio: this.combat.ultCooldown / ULT_COOLDOWN, secs: this.combat.ultCooldown, ready: pl.mp >= u.mp });
+      this.hud.setUlt({ name: u.name, icon: skillIconUrl(pl.cls.id, 6 + ui), ratio: this.combat.ultCooldown / this.combat.ultCooldownMax, secs: this.combat.ultCooldown, ready: pl.mp >= u.mp });
     }
     const inv = this.run ? this.run.bag : this.progress.invBag;
     this.hud.setBagCount(inv.used, BAG_SLOTS);
@@ -2246,6 +2272,20 @@ export class Game {
         }
         const s = this.toScreen(it.x, isNpc ? 2.3 : it.id === 'portal' ? 4.6 : 3.3, it.z);
         labels.push({ text: `${mark}${it.title}`, x: s.x, y: s.y, accent: !!mark });
+      }
+    }
+    // 채집 자원 이름: 가까이 있고 주변에 몬스터가 없을 때 (참나무·적송처럼 닮은 자원을 구분)
+    if (this.level instanceof DungeonScene && !this.building) {
+      const d = this.level;
+      for (const n of d.nodes) {
+        if (!n.alive || n.dying > 0 || n.def.style === 'chest') continue;
+        if (Math.hypot(n.x - p.x, n.z - p.z) > n.def.radius + 5 || d.monsterNear(n.x, n.z)) continue;
+        const key: ToolKind = n.def.style === 'tree' ? 'axe' : 'pickaxe';
+        const t = this.progress.data.tools[key];
+        const has = this.progress.flag(key === 'axe' ? 'tool_axe' : 'tool_pickaxe') > 0;
+        const need = !has ? ` (${TOOL_KIND_NAMES[key]} 필요)` : toolWear(t, n.def.tier) === null ? ` (${TOOL_TIER_NAMES[Math.max(0, n.def.tier - 2)]} ${TOOL_KIND_NAMES[key]} 이상)` : '';
+        const s = this.toScreen(n.x, n.def.style === 'tree' ? 3.6 : 2.2, n.z);
+        labels.push({ text: `${n.def.name}${need}`, x: s.x, y: s.y, accent: !need });
       }
     }
     // 보관상자 위에 투입/출하 표시
