@@ -84,6 +84,11 @@ export interface GroundOptions {
   paved?: (x: number, z: number) => number;
   /** 판 노이즈에 곱하는 값 (방 안은 1, 복도는 낮게 등) */
   pavedBias?: (x: number, z: number) => number;
+  /**
+   * 칸마다 한 장씩 깐 바닥 타일 (정점 색으로): 칸 경계는 줄눈 색, 칸 안은 장마다 조금씩 다른 색.
+   * area가 참인 칸에만 (차원집 공장 바닥처럼 격자에 맞춰야 할 때)
+   */
+  cellTiles?: { grout: number; tint: number; area: (cx: number, cy: number) => boolean };
   /** 소품을 두지 않을 곳 (건물 밑 등) */
   avoid?: (x: number, z: number) => boolean;
 }
@@ -256,6 +261,25 @@ export const VILLAGE_GROUND: GroundStyle = {
     { kind: 'flower', colors: [0xf0e070, 0xf4f4f0, 0xe87a8a, 0xb88ae8, 0xf0a040], per: 0.5, on: 0 },
     { kind: 'pebble', colors: [0x9a9484, 0x8a8474], per: 0.35, on: 'path' },
     { kind: 'pebble', colors: [0x8a8a7e], per: 0.12, on: 'open' },
+  ],
+};
+
+/** 차원집: 보랏빛 돌 타일 공장 바닥 (칸에 맞춘 줄눈), 희미한 룬 결, 입구는 따뜻한 돌판 광장 */
+export const HOME_GROUND: GroundStyle = {
+  base: 0x4c4766,
+  jitter: 0.08,
+  layers: [
+    { color: 0x5a5478, scale: 0.12, lo: 0.45, hi: 0.66 },
+    { color: 0x3c3854, scale: 0.16, lo: 0.6, hi: 0.76 },
+  ],
+  path: 0x5e5048,
+  edgeShade: 0.4,
+  paved: { colors: [0x8a7a68, 0x7e6e5e, 0x948470, 0x6e6152], per: 2, gap: 0.07, wobble: 0.04, scale: 0, lo: 0, hi: 1, missing: 0.03 },
+  scatter: [
+    { kind: 'crack', colors: [0x363250], per: 0.25, on: 0 },
+    { kind: 'crack', colors: [0x5a4e42], per: 0.35, on: 'paved' },
+    { kind: 'chip', colors: [0xc28cff, 0x8ad8ff], per: 0.8, on: 'path' },
+    { kind: 'pebble', colors: [0x5a5470, 0x6a6480], per: 0.3, on: 'path' },
   ],
 };
 
@@ -504,6 +528,22 @@ export function buildGround(grid: Grid, style: GroundStyle, opts: GroundOptions)
     }
     const p = pathAt(x, z);
     if (pathColor && p > 0) base.lerp(pathColor, p * (0.65 + 0.35 * fbm(x * 0.5, z * 0.5, seed + 5)));
+    const ct = opts.cellTiles;
+    if (ct) {
+      const onEdge = vx % SUB === 0 || vz % SUB === 0;
+      const cx = Math.min(width - 1, Math.floor(gx));
+      const cy = Math.min(height - 1, Math.floor(gz));
+      // 줄눈: 경계 정점이 타일 칸에 닿아 있으면 (양옆 어느 칸이든)
+      const xs = vx % SUB === 0 ? [vx / SUB - 1, vx / SUB] : [Math.floor(gx)];
+      const zs = vz % SUB === 0 ? [vz / SUB - 1, vz / SUB] : [Math.floor(gz)];
+      const touches = onEdge && xs.some((x) => zs.some((z) => ct.area(x, z)));
+      if (touches) base.lerp(tmp.setHex(ct.grout), 0.75);
+      else if (!onEdge && ct.area(cx, cy)) {
+        // 칸마다 정해진 흔들림 (같은 칸 안 정점은 같은 값)
+        const h = Math.sin(cx * 127.1 + cy * 311.7 + seed) * 43758.5453;
+        base.multiplyScalar(1 + (h - Math.floor(h) - 0.5) * 2 * ct.tint);
+      }
+    }
     const d = edgeDistance(grid, gx, gz);
     base.multiplyScalar(1 - style.edgeShade * (1 - smoothstep(0, 0.9, d)));
     const idx = positions.length / 3;

@@ -23,7 +23,9 @@ import { DIRS, MACHINE_TYPES, type BuildingState, type Factory } from '../../fac
 import { buildBuildingGeometry } from '../../models/factory';
 import { buildItemGeometry } from '../../models/items';
 import { NODES } from '../../data/nodes';
-import { buildNodeGeometry, buildPortalFrame } from '../../models/props';
+import { buildDecorGeometry, buildNodeGeometry, buildPortalFrame } from '../../models/props';
+import { HOME_GROUND } from '../../models/terrain';
+import { smoothstep } from '../../core/noise';
 import { merge } from '../../models/util';
 import { Level } from './Level';
 
@@ -81,13 +83,19 @@ export class HomeScene extends Level {
       decor: [],
     };
     this.setupLights(0x120e22, 0xe0d8ff, 0xfff0e0, 1.9, 2.2);
-    this.buildTiles(this.grid, { floorA: 0x4a4660, floorB: 0x524e6a, wallSide: 0x2e2a44, wallTop: 0x6a5a9a }, new Rng(3), 1.4);
-
-    // 입구 구역은 색이 다른 바닥
-    const entrance = new Mesh(new BoxGeometry(n * TILE, 0.05, 3 * TILE), new MeshLambertMaterial({ color: 0x2a2640 }));
-    entrance.position.set((n * TILE) / 2, 0.02, (n + 1.5) * TILE);
-    entrance.receiveShadow = true;
-    this.scene.add(entrance);
+    this.buildTiles(this.grid, { floorA: 0x4a4660, floorB: 0x524e6a, wallSide: 0x2e2a44, wallTop: 0x6a5a9a }, new Rng(3), 1.4, false);
+    // 바닥: 공장 칸마다 한 장씩 깐 돌 타일 (건설 격자와 딱 맞는다), 아래쪽 입구는 돌판 광장
+    const factoryEnd = n * TILE;
+    const entrance = (z: number) => smoothstep(factoryEnd - 0.2, factoryEnd + 0.6, z);
+    const ex0 = (Math.floor(n / 2) + 0.5) * TILE;
+    this.buildGround(this.grid, HOME_GROUND, {
+      seed: 31,
+      path: entrance,
+      // 입구 광장: 가운데 길은 촘촘히, 양옆은 드문드문
+      paved: (x, z) => (z < factoryEnd + 0.1 ? 0 : Math.abs(x - ex0) < 3.2 ? 1 : 0.55),
+      cellTiles: { grout: 0x2a2640, tint: 0.07, area: (cx, cy) => cx >= 0 && cy >= 0 && cx < n && cy < n },
+    });
+    this.buildWallCrystals(n, h);
 
     const ex = (Math.floor(n / 2) + 0.5) * TILE;
     const ez = (n + 2) * TILE;
@@ -133,6 +141,30 @@ export class HomeScene extends Level {
     this.scene.add(this.gridLines);
 
     this.rebuild();
+  }
+
+  /** 벽 위에 자란 차원 수정 무리 (보기만) */
+  private buildWallCrystals(n: number, h: number): void {
+    const rng = new Rng(77);
+    const parts: BufferGeometry[] = [];
+    const add = (x: number, z: number) => {
+      const g = buildDecorGeometry('shard', rng.pick([0xc28cff, 0x8ad8ff, 0x9a6aff]), rng);
+      g.scale(rng.range(1.6, 2.6), rng.range(1.8, 3), rng.range(1.6, 2.6));
+      g.rotateY(rng.range(0, 6));
+      g.translate(x, 1.4 * 1.05, z);
+      parts.push(g);
+    };
+    for (let x = -1; x <= n; x++) {
+      if (rng.chance(0.35)) add((x + 0.5) * TILE + rng.range(-0.5, 0.5), -0.5 * TILE);
+    }
+    for (let y = 0; y < h; y++) {
+      if (rng.chance(0.35)) add(-0.5 * TILE, (y + 0.5) * TILE + rng.range(-0.5, 0.5));
+      if (rng.chance(0.35)) add((n + 0.5) * TILE, (y + 0.5) * TILE + rng.range(-0.5, 0.5));
+    }
+    if (!parts.length) return;
+    const mat = new MeshLambertMaterial({ vertexColors: true, flatShading: true, emissive: 0x3a2070 });
+    const mesh = new Mesh(merge(parts), mat);
+    this.scene.add(mesh);
   }
 
   get center(): { x: number; z: number } {

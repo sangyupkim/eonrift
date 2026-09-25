@@ -2885,3 +2885,40 @@ h3.sub { margin: 10px 0 6px; font-size: 14px; display: flex; align-items: center
 .qty-row button { padding: 5px 9px; border-radius: 6px; border: 1px solid var(--panel-line); background: rgba(255, 255, 255, 0.06); color: inherit; font: inherit; cursor: pointer; }
 .drop-row { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
 .tool-sm.danger { background: #8a2a2a; border-color: #ff6a6a; color: #fff; }
+
+/* ---------- v7.2: 각인 버튼 · 스크롤바 · 가로 스크롤 없애기 ---------- */
+.eng-line { flex-wrap: wrap; min-width: 0; }
+.eng-line b { overflow-wrap: anywhere; }
+.eng-line button {
+  margin-left: auto;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  padding: 5px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--panel-line);
+  background: rgba(94, 224, 255, 0.14);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 800;
+  touch-action: manipulation;
+}
+.eng-line button.primary { background: linear-gradient(#3a8ef0, #2862c4); border-color: #6ab0ff; color: #fff; }
+.eng-line button:disabled { opacity: 0.4; cursor: default; }
+.eng-line button:not(:disabled):hover { filter: brightness(1.2); }
+
+/* 두 칸 화면이 내용 때문에 넓어지지 않게 (가로 스크롤 방지) */
+.split { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.split > * { min-width: 0; }
+.panel, .panel .scroll, .panel.tall > .list, .panel.tall > .split, .split .detail { overflow-x: hidden; }
+.detail, .item-info, .hint { overflow-wrap: anywhere; }
+
+/* 스크롤바: 얇고 둥근 청록빛 막대 */
+* { scrollbar-width: thin; scrollbar-color: rgba(122, 200, 255, 0.45) transparent; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(122, 200, 255, 0.35); border-radius: 6px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(122, 200, 255, 0.6); }
+::-webkit-scrollbar-corner, ::-webkit-scrollbar-button { display: none; background: transparent; }
+/* 가로로 넘기는 탭 줄은 막대 없이 손가락·휠로만 넘긴다 */
+.build-tools, .tier-tabs, .recipe-tabs { scrollbar-width: none; }
+.build-tools::-webkit-scrollbar, .tier-tabs::-webkit-scrollbar, .recipe-tabs::-webkit-scrollbar { display: none; }
