@@ -7,6 +7,14 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '7.6',
+    date: '2026-09-25',
+    items: [
+      '배경음 추가: 마을에 새 곡(Dreamy Ambient Loop) — 두 곡을 번갈아 튼다 (마을에 들어올 때마다, 오래 머물면 2분 반마다 서서히 바뀜)',
+      '보스전 배경음: 합성음 대신 새 곡(Melodic Groove Bass Synth Loop). 수호자·파수꾼·보스 러시·탑 보스 모두',
+    ],
+  },
+  {
     version: '7.5',
     date: '2026-09-25',
     items: [

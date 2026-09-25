@@ -630,7 +630,7 @@ export class Screens {
            <button data-a="title">타이틀로 (자동 저장)</button>
          </div>
          ${opts.seed !== undefined ? `<div class="seed">던전 시드 ${opts.seed}</div>` : ''}
-         <div class="keys">배경음: Dreamy Analog Synth Loop · Smooth Electro Ambient Bossa Nova Loop · Relaxing Dreamy Synth Rhodes Loop — orangefreesounds.com (CC BY 4.0)</div>
+         <div class="keys">배경음: Dreamy Analog Synth Loop · Dreamy Ambient Loop · Smooth Electro Ambient Bossa Nova Loop · Relaxing Dreamy Synth Rhodes Loop · Melodic Groove Bass Synth Loop — orangefreesounds.com (CC BY 4.0)</div>
          <div class="keys">PC 조작: WASD 이동 · J/클릭 공격 · Space 회피(검사 구르기 · 마법사 블링크 · 궁수 후방 도약) · 1·2·3 스킬 · 4/F 궁극기 · Q 물약 · E 상호작용·채집 · M 지도 · I 가방 · B 건설 · Esc 메뉴</div>
        </div>`,
       opts.onClose,
