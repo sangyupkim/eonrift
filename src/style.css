@@ -2936,3 +2936,11 @@ h3.sub { margin: 10px 0 6px; font-size: 14px; display: flex; align-items: center
 .fb-foot button { margin-left: auto; padding: 8px 16px; border-radius: 10px; border: 1px solid var(--panel-line); font-weight: 800; }
 .fb-foot button.primary { background: linear-gradient(#3a8ef0, #2862c4); color: #fff; }
 .fb-foot button:disabled { opacity: 0.5; }
+/* 타이틀 메뉴: 큰 버튼(이어하기·새로 시작)은 한 줄에 하나, 작은 버튼은 두 칸씩 → 가로 휴대폰에서도 다 보인다 */
+.title-menu { grid-template-columns: 1fr 1fr; width: min(460px, 86vw); gap: 8px; }
+.title-menu button:not(.update):not(.install) { grid-column: 1 / -1; }
+.title-menu button.update, .title-menu button.install { padding: 8px 6px; font-size: 13px; }
+@media (max-height: 430px) {
+  .title-box h1 { font-size: clamp(34px, 10vh, 64px); margin: 4px 0 8px; }
+  .title-menu button:not(.update):not(.install) { padding: 9px; font-size: 15px; }
+}

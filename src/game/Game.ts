@@ -269,7 +269,13 @@ export class Game {
           () => start(old),
           () => start(makeTestSave()),
         );
-      }
+      },
+      // 저장 코드 만들기: 이 기기에 저장된 진행을 코드로
+      () => {
+        const data = loadSave();
+        if (!data) return;
+        void encodeSave(data).then((code) => this.screens.saveCode(code, () => this.showTitle()));
+      },
     );
   }
 

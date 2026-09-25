@@ -7,6 +7,11 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '7.6.3',
+    date: '2026-09-25',
+    items: ['타이틀 화면에 [저장 코드 만들기] (이 기기의 저장을 코드로)', '타이틀 메뉴를 두 칸으로 정리해 가로 휴대폰 화면에서도 모든 버튼이 보인다'],
+  },
+  {
     version: '7.6.2',
     date: '2026-09-25',
     items: ['마을 배경음: 4초짜리 짧은 반복 곡을 빼고 Dreamy Ambient Loop만 튼다', '의견함: 30초에 한 번 보낼 수 있다'],

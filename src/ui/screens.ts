@@ -224,7 +224,8 @@ export class Screens {
   }
 
   // ---------------- 타이틀 ----------------
-  title(hasSave: boolean, onNew: () => void, onContinue: () => void, onLoadCode?: () => void, onTest?: () => void): void {
+  title(hasSave: boolean, onNew: () => void, onContinue: () => void, onLoadCode?: () => void, onTest?: () => void, onSaveCode?: () => void): void {
+    const again = () => this.title(hasSave, onNew, onContinue, onLoadCode, onTest, onSaveCode);
     const s = this.open(
       'title',
       `<div class="title-box">
@@ -234,6 +235,7 @@ export class Screens {
            ${hasSave ? '<button class="primary" data-a="continue">이어하기</button>' : ''}
            <button class="${hasSave ? '' : 'primary'}" data-a="new">새로 시작</button>
            ${canInstall() ? `<button class="install" data-a="install">${SPK('phone', '📲')} 앱으로 설치</button>` : ''}
+           ${hasSave && onSaveCode ? `<button class="update" data-a="savecode">${SPK('disk', '💾')} 저장 코드 만들기</button>` : ''}
            <button class="update" data-a="loadcode">${SPK('key', '📥')} 저장 코드로 불러오기</button>
            <button class="update" data-a="update">${SPK('refresh', '🔄')} 업데이트 확인</button>
            <button class="update" data-a="feedback">${SPK('scroll', '✉')} 의견 보내기</button>
@@ -246,6 +248,7 @@ export class Screens {
     this.on(s, '[data-a="continue"]', onContinue);
     this.on(s, '[data-a="install"]', () => void promptInstall());
     if (onLoadCode) this.on(s, '[data-a="loadcode"]', onLoadCode);
+    if (onSaveCode) this.on(s, '[data-a="savecode"]', onSaveCode);
     // 숨은 입구: 왼쪽 위 빈 곳을 3초 안에 5번 누르면 테스트 캐릭터
     if (onTest) {
       let taps: number[] = [];
@@ -258,8 +261,8 @@ export class Screens {
         }
       });
     }
-    this.on(s, '[data-a="patch"]', () => this.patchNotes(() => this.title(hasSave, onNew, onContinue, onLoadCode, onTest)));
-    this.on(s, '[data-a="feedback"]', () => this.feedback({ version: GAME_VERSION }, () => this.title(hasSave, onNew, onContinue, onLoadCode, onTest)));
+    this.on(s, '[data-a="patch"]', () => this.patchNotes(again));
+    this.on(s, '[data-a="feedback"]', () => this.feedback({ version: GAME_VERSION }, again));
     // 업데이트 확인 → 새 버전이 있으면 같은 버튼이 "업데이트" 버튼으로 바뀐다
     let remote: RemoteVersion | null = null;
     this.on(s, '[data-a="update"]', (b) => {
