@@ -2,7 +2,7 @@
  * 의견함: 게임 안에서 쓴 의견을 구글 스프레드시트(앱스 스크립트 웹 앱)로 보낸다.
  * 한 사람당 10분에 한 번, 500자까지.
  */
-export const FEEDBACK_URL = 'https://script.google.com/macros/s/AKfycby9zIAgmZNELF9DZDwPFXYCxCN4hxEJ83JvFjEY4kZxvCDVniIhVMAKh-7coyxoHOqP/exec';
+export const FEEDBACK_URL = 'https://script.google.com/macros/s/AKfycbzi7ZgPeylLIPiPTGutrl6t6dXJoWJSAt2c8iqlgyPLxAa6QzeJnVvAGiTVq6SfhZXw/exec';
 export const FEEDBACK_MAX = 500;
 export const FEEDBACK_NAME_MAX = 20;
 export const FEEDBACK_COOLDOWN_MS = 10 * 60 * 1000;
