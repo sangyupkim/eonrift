@@ -2714,7 +2714,7 @@ export class Game {
           this.audio.play('stone');
         }
         const clock = `:hourglass: ${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, '0')}`;
-        const tag = boss.dooming ? ' · :skull: 틈새 붕괴' : boss.shielded ? ` · 보호막 (수호병 ${boss.guardsLeft})` : boss.phase2 ? ' · 격노' : '';
+        const tag = boss.dooming ? ' · :skull: 틈새 붕괴' : boss.shielded ? ` · 보호막 (수호병 ${boss.guardsLeft})` : boss.exposed ? ' · 빈틈!' : boss.phase2 ? ' · 격노' : '';
         this.hud.setBoss(`${boss.name}${tag}  ${clock}`, boss.hp / boss.maxHp, boss.bars, boss.shielded, left < 60);
         this.audio.playMusic('boss');
       }

@@ -36,7 +36,9 @@ type BossPattern =
   // 보스 전용 추가 패턴
   | 'crossX' | 'sweep' | 'spiral' | 'leap' | 'farblast' | 'chase' | 'frostring' | 'miasma' | 'hex'
   // 보스마다의 고유 패턴
-  | 'rush' | 'whirlwind' | 'warcry' | 'roots' | 'quake' | 'icicles' | 'blink' | 'prism' | 'missiles' | 'overheat' | 'eruption' | 'flameCharge' | 'lunge' | 'voidZones';
+  | 'rush' | 'whirlwind' | 'warcry' | 'roots' | 'quake' | 'icicles' | 'blink' | 'prism' | 'missiles' | 'overheat' | 'eruption' | 'flameCharge' | 'lunge' | 'voidZones'
+  // 패턴 사이의 보스 기본 공격
+  | 'basic';
 
 export interface ProjectileSpec {
   x: number;
@@ -210,6 +212,17 @@ export class Monster {
   private whirl: { left: number; hitCd: number } | null = null;
   /** 전투 함성 격노 남은 시간 */
   private rageT = 0;
+  /**
+   * 보스 리듬: 패턴 → (지침·빈틈) → 기본 공격 2~3번 → 패턴 …
+   * basicLeft: 다음 패턴 전에 남은 기본 공격 수 · tired: 패턴 뒤 숨 고르는 시간 · lastBasic: 방금 한 게 기본 공격인지
+   */
+  private basicLeft = 0;
+  private tired = 0;
+  private lastBasic = false;
+  /** 패턴을 끝내고 숨을 고르는 중 (공격할 틈) */
+  get exposed(): boolean {
+    return this.isBoss && this.state === 'recover' && !this.lastBasic && this.tired > 0 && !this.busy;
+  }
   /** 여러 단계 패턴이 아직 진행 중인지 (끝날 때까지 다음 패턴을 쓰지 않는다) */
   private get busy(): boolean {
     return this.timed.length > 0 || !!this.sweep || !!this.spiral || !!this.leapTo || this.later.length > 0 || !!this.whirl;
@@ -843,6 +856,19 @@ export class Monster {
         const wantDist = this.isBoss ? 0 : KEEP_DIST[this.arch] ?? 0;
         if (!this.isBoss && this.special(world, dist, toPlayer)) break;
         if (this.isBoss) {
+          // 패턴 사이에는 기본 공격 몇 번: 다가와서 휘두르거나(근접) 마탄을 쏜다(마법사형)
+          if (this.basicLeft > 0) {
+            const ranged = this.arch === 'caster';
+            const reach = this.radius + 2.2;
+            if ((ranged ? dist < 10 : dist <= reach) && this.t > 0.45) this.beginBossBasic(world, toPlayer, ranged);
+            // 멀리 도망 다니면 오래 쫓지 않고 패턴으로 넘어간다
+            else if (this.t > 3.2) this.basicLeft = 0;
+            else if (!ranged ? dist > reach * 0.8 : dist > 8) {
+              move(Math.sin(this.facing) * this.speed * speedMul * dt, Math.cos(this.facing) * this.speed * speedMul * dt);
+              moving = true;
+            }
+            break;
+          }
           if (this.t > (this.phase2 ? 0.5 : 0.9)) this.beginBossPattern(world, dist, toPlayer);
           else if (dist > 3) {
             move(Math.sin(this.facing) * this.speed * speedMul * dt, Math.cos(this.facing) * this.speed * speedMul * dt);
@@ -923,8 +949,21 @@ export class Monster {
         break;
       }
       case 'recover': {
-        const rec = this.isBoss ? (this.phase2 ? 0.6 : 0.9) : this.def.recover;
-        if (this.t >= rec && !(this.isBoss && this.busy)) this.setState('chase');
+        if (this.isBoss && this.busy) {
+          // 여러 단계 패턴이 끝날 때까지 기다리고, 끝난 뒤부터 숨 고르기를 센다
+          this.t = 0;
+          break;
+        }
+        const rec = this.isBoss ? (this.lastBasic ? 0.5 : (this.phase2 ? 0.5 : 0.7) + this.tired) : this.def.recover;
+        if (this.exposed && Math.random() < dt * 5) world.effects.sparks(this.x, this.rig.height * this.rig.root.scale.y, this.z, 0xe0e8ff, 1, { up: true, spread: 0.5 });
+        if (this.t >= rec) {
+          if (this.isBoss && !this.lastBasic) {
+            // 패턴을 마쳤으면 다음 패턴 전에 기본 공격 몇 번
+            this.basicLeft = this.phase2 ? 1 + Math.floor(Math.random() * 2) : 2 + Math.floor(Math.random() * 2);
+            this.tired = 0;
+          }
+          this.setState('chase');
+        }
         break;
       }
     }
@@ -1071,6 +1110,18 @@ export class Monster {
       return true;
     }
     return false;
+  }
+
+  /** 보스 기본 공격: 짧은 예고 뒤 앞을 휘두르거나 마탄 세 발 */
+  private beginBossBasic(world: MonsterWorld, toPlayer: number, ranged: boolean): void {
+    this.basicLeft--;
+    this.lastBasic = true;
+    this.pattern = 'basic';
+    this.facing = toPlayer;
+    const wind = this.phase2 ? 0.5 : 0.62;
+    if (ranged) this.startTelegraph(world, { kind: 'line', length: 10, width: 1.2 }, this.x, this.z, toPlayer, wind);
+    else this.startTelegraph(world, { kind: 'cone', r: this.radius + 2.6, angle: 1.7 }, this.x, this.z, toPlayer, wind);
+    this.setState('windup');
   }
 
   /** 보스 고유 패턴. 처리했으면 true */
@@ -1285,6 +1336,9 @@ export class Monster {
     const speed = this.phase2 ? 0.75 : 1;
     const sig = SIGNATURE_NAME[pattern];
     if (sig) world.announce(`${this.name}: ${sig}`);
+    this.lastBasic = false;
+    // 패턴 뒤 숨 고르기: 고유 패턴은 길게 (이때가 공격할 틈)
+    this.tired = sig ? (this.phase2 ? 1.3 : 1.8) : this.phase2 ? 0.5 : 0.8;
     if (this.signature(world, pattern, toPlayer, speed)) return;
     switch (pattern) {
       case 'slam':
@@ -1464,6 +1518,16 @@ export class Monster {
           hitIf(tel, 1.2);
           world.effects.slash(this.x, this.z, this.facing, 7, 0xff8a5a, 2.1, 0.6);
           world.shake(0.25);
+          break;
+        case 'basic':
+          if (this.arch === 'caster') {
+            const color = this.species.glow ?? MONSTER_COLORS[this.tier - 1].accent;
+            for (let i = -1; i <= 1; i++) world.fireEnemyProjectile({ x: this.x, z: this.z, angle: this.facing + i * 0.18, speed: 10, damage: this.atk * 0.6, color, radius: 0.3 });
+          } else {
+            hitIf(tel, 0.85);
+            world.effects.slash(this.x, this.z, this.facing, this.radius + 2.6, 0xffc07a, 1.7, 0.9);
+            world.shake(0.12);
+          }
           break;
         case 'charge':
         case 'rush':

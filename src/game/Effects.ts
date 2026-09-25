@@ -42,7 +42,7 @@ export class Telegraph {
     public facing: number,
     readonly duration: number,
   ) {
-    const outlineMat = new MeshBasicMaterial({ color: 0xff3030, transparent: true, opacity: 0.28, depthWrite: false, side: DoubleSide });
+    const outlineMat = new MeshBasicMaterial({ color: 0xff3030, transparent: true, opacity: 0.34, depthWrite: false, side: DoubleSide });
     const fillMat = new MeshBasicMaterial({ color: 0xff2a2a, transparent: true, opacity: 0.4, depthWrite: false, side: DoubleSide });
     const geo = () => {
       let g: BufferGeometry;
@@ -61,8 +61,11 @@ export class Telegraph {
     };
     const outline = new Mesh(geo(), outlineMat);
     this.fill = new Mesh(geo(), fillMat);
-    outline.position.y = 0.04;
-    this.fill.position.y = 0.05;
+    // 바닥 판(돌판·금속판, 높이 0.05)과 소품 위로 올려서 잘 보이게
+    outline.position.y = 0.1;
+    this.fill.position.y = 0.11;
+    outline.renderOrder = 3;
+    this.fill.renderOrder = 4;
     this.fill.scale.setScalar(0.001);
     this.group.add(outline, this.fill);
     this.sync();
@@ -355,7 +358,7 @@ export class Effects {
   /** 바닥 장판: 빛나는 테두리 + 안쪽 무늬가 돌고, 입자가 피어오른다 */
   zone(x: number, z: number, radius: number, color: number, duration: number): void {
     const group = new Group();
-    group.position.set(x, 0.06, z);
+    group.position.set(x, 0.09, z);
     const disc = new CircleGeometry(radius, 36);
     disc.rotateX(-Math.PI / 2);
     const fillMat = new MeshBasicMaterial({ color, transparent: true, opacity: 0.3, depthWrite: false, blending: NormalBlending });
