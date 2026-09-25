@@ -7,6 +7,13 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '7.5',
+    date: '2026-09-25',
+    items: [
+      '의견함: 타이틀 화면과 메뉴(일시정지)의 [의견 보내기]로 개발자에게 바로 의견을 보낼 수 있다. 종류(버그·밸런스·건의·칭찬·기타), 이름, 내용 500자까지, 10분에 한 번. 버전·직업·레벨·진행도·기기 정보가 함께 전달된다',
+    ],
+  },
+  {
     version: '7.4',
     date: '2026-09-25',
     items: [

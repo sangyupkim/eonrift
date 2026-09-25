@@ -6,7 +6,7 @@ import { BOSS_RESPAWN_MS, BOSS_TIME_LIMIT, FARM_COOLDOWN_MS, FARM_NAMES, playerD
 import { DEBUFF_INFO, type DebuffId, type DebuffSpec } from '../data/species';
 import { newTool, TOOL_KIND_NAMES, TOOL_TIER_NAMES, toolBonusChance, toolName, toolSpeed, toolWear, type ToolKind } from '../data/tools';
 import { MeshLambertMaterial, OrthographicCamera, PCFShadowMap, Plane, Raycaster, Vector2, Vector3, WebGLRenderer } from 'three';
-import { BAG_SLOTS, CAMERA_OFFSET, PLAYER, SCREEN_UP, TILE, VIEW_HEIGHT } from '../config';
+import { BAG_SLOTS, CAMERA_OFFSET, GAME_VERSION, PLAYER, SCREEN_UP, TILE, VIEW_HEIGHT } from '../config';
 import { Audio } from '../core/audio';
 import { Input } from '../core/input';
 import { Rng, randomSeed } from '../core/rng';
@@ -660,6 +660,19 @@ export class Game {
         },
         onGiveUp: () => this.fall(),
         onBestiary: this.quests.isDone('m_research') ? () => this.openBestiary(false) : undefined,
+        onFeedback: () => {
+          const c = this.progress.cls;
+          const cleared = this.progress.data.cleared;
+          const where = this.run ? ` · 지금 ${this.run.end ? this.run.end.kind : `${this.run.tier}-${this.run.stage}`}` : '';
+          this.screens.feedback(
+            {
+              version: GAME_VERSION,
+              cls: `${CLASSES[this.progress.data.currentClass].name} Lv.${c.level}`,
+              progress: `${cleared >= 70 ? '전체 클리어' : `진행 ${Math.floor(cleared / 10) + 1}-${(cleared % 10) + 1}`}${this.progress.flag('endgame') ? ' · 엔딩 뒤' : ''}${where}`,
+            },
+            () => this.openPause(),
+          );
+        },
         foods: Object.keys(FOODS).map((id) => ({ id, count: this.progress.count(id) })).filter((f) => f.count > 0),
         foodLeft: d.food && d.food.until > Date.now() ? `${ITEMS[d.food.id].name} (${Math.ceil((d.food.until - Date.now()) / 60000)}분)` : undefined,
         onEat: (id) => {

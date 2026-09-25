@@ -1,4 +1,5 @@
 import { BUILD_ID, GAME_VERSION } from '../config';
+import { FEEDBACK_KINDS, FEEDBACK_MAX, FEEDBACK_NAME_MAX, feedbackWait, savedFeedbackName, sendFeedback, type FeedbackInfo } from '../core/feedback';
 import { PATCH_NOTES } from '../data/patchnotes';
 import { applyUpdate, fetchRemoteVersion, isNewer, type RemoteVersion } from './update';
 import { CLASSES, CLASS_ORDER, expToNext, MAX_LEVEL, MAX_SKILL_LEVEL, SKILL_LEARN, skillUpgradeCost, STAT_INFO, STAT_KEYS, MAX_ULT_LEVEL, ultCooldown, ultPower, ULTIMATES, type ClassId, type StatKey } from '../data/classes';
@@ -235,6 +236,7 @@ export class Screens {
            ${canInstall() ? `<button class="install" data-a="install">${SPK('phone', '📲')} 앱으로 설치</button>` : ''}
            <button class="update" data-a="loadcode">${SPK('key', '📥')} 저장 코드로 불러오기</button>
            <button class="update" data-a="update">${SPK('refresh', '🔄')} 업데이트 확인</button>
+           <button class="update" data-a="feedback">${SPK('scroll', '✉')} 의견 보내기</button>
          </div>
        </div>
        ${onTest ? '<div class="secret-spot" data-a="secret" aria-hidden="true"></div>' : ''}
@@ -257,6 +259,7 @@ export class Screens {
       });
     }
     this.on(s, '[data-a="patch"]', () => this.patchNotes(() => this.title(hasSave, onNew, onContinue, onLoadCode, onTest)));
+    this.on(s, '[data-a="feedback"]', () => this.feedback({ version: GAME_VERSION }, () => this.title(hasSave, onNew, onContinue, onLoadCode, onTest)));
     // 업데이트 확인 → 새 버전이 있으면 같은 버튼이 "업데이트" 버튼으로 바뀐다
     let remote: RemoteVersion | null = null;
     this.on(s, '[data-a="update"]', (b) => {
@@ -513,6 +516,70 @@ export class Screens {
   }
 
   // ---------------- 일시정지 ----------------
+  // ---------------- 의견함 (구글 시트로 보낸다) ----------------
+  feedback(info: FeedbackInfo, onBack: () => void): void {
+    let kind: string = FEEDBACK_KINDS[0];
+    let name = savedFeedbackName();
+    let text = '';
+    let status = '';
+    let sending = false;
+    const render = () => {
+      const wait = feedbackWait();
+      const mins = Math.ceil(wait / 60000);
+      const s = this.open(
+        'feedback',
+        `<div class="panel">
+           <button class="close">${ICONS.close}</button>
+           <h2>의견 보내기 <small>개발자에게 바로 전달됩니다</small></h2>
+           <div class="fb-kinds">${FEEDBACK_KINDS.map((k) => `<button class="chip ${k === kind ? 'on' : ''}" data-kind="${k}">${k}</button>`).join('')}</div>
+           <label class="fb-label">이름 <input class="fb-name" maxlength="${FEEDBACK_NAME_MAX}" placeholder="닉네임 (필수)" value="${name.replace(/"/g, '&quot;')}"/></label>
+           <textarea class="fb-text" maxlength="${FEEDBACK_MAX}" placeholder="버그, 어려웠던 점, 바라는 점… 무엇이든 적어 주세요">${text.replace(/</g, '&lt;')}</textarea>
+           <div class="fb-foot"><small class="dim"><span data-count>${text.length}</span>/${FEEDBACK_MAX}자 · 버전·직업·레벨·기기 정보가 함께 보내집니다</small>
+             <button class="primary" data-a="send" ${wait > 0 || sending ? 'disabled' : ''}>${sending ? '보내는 중…' : wait > 0 ? `${mins}분 뒤에 다시 보낼 수 있어요` : '보내기'}</button></div>
+           ${status ? `<div class="notice">${status}</div>` : ''}
+         </div>`,
+        onBack,
+      );
+      const nameEl = s.querySelector<HTMLInputElement>('.fb-name')!;
+      const textEl = s.querySelector<HTMLTextAreaElement>('.fb-text')!;
+      const count = s.querySelector<HTMLElement>('[data-count]')!;
+      nameEl.addEventListener('input', () => (name = nameEl.value));
+      textEl.addEventListener('input', () => {
+        text = textEl.value.slice(0, FEEDBACK_MAX);
+        count.textContent = String(text.length);
+      });
+      // 입력 중에는 게임 단축키가 먹지 않게
+      for (const el of [nameEl, textEl]) el.addEventListener('keydown', (e) => e.stopPropagation());
+      this.on(s, '[data-kind]', (b) => {
+        kind = b.dataset.kind!;
+        render();
+      });
+      this.on(s, '[data-a="send"]', () => {
+        if (sending || feedbackWait() > 0) return;
+        if (!name.trim()) {
+          status = '<span class="bad">이름을 적어 주세요</span>';
+          return render();
+        }
+        if (text.trim().length < 2) {
+          status = '<span class="bad">내용을 적어 주세요</span>';
+          return render();
+        }
+        sending = true;
+        status = '';
+        render();
+        void sendFeedback(kind, name.trim(), text.trim(), info).then((ok) => {
+          sending = false;
+          if (ok) {
+            text = '';
+            status = '<b class="ok">보냈습니다! 소중한 의견 고맙습니다 :)</b>';
+          } else status = '<span class="bad">보내지 못했습니다. 인터넷 연결을 확인하고 다시 시도해 주세요</span>';
+          render();
+        });
+      });
+    };
+    render();
+  }
+
   pause(opts: {
     inDungeon: boolean;
     seed?: number;
@@ -532,6 +599,8 @@ export class Screens {
     onTitle: () => void;
     onSaveCode: () => void;
     onBestiary?: () => void;
+    /** 의견 보내기 */
+    onFeedback?: () => void;
     /** 가진 음식 (먹으면 30분 버프) */
     foods?: { id: string; count: number }[];
     foodLeft?: string;
@@ -557,6 +626,7 @@ export class Screens {
            ${opts.foods?.length ? `<div class="food-row">${opts.foodLeft ? `<small class="dim">먹은 음식: ${opts.foodLeft}</small>` : ''}${opts.foods.map((f) => `<button data-eat="${f.id}">${inlineGem(f.id)}${ITEMS[f.id].name} 먹기 (${f.count})</button>`).join('')}</div>` : ''}
            ${opts.onBestiary ? `<button data-a="bestiary">${SPK('book', '📖')} 몬스터 도감</button>` : ''}
            <button data-a="savecode">${SPK('disk', '💾')} 저장 코드 만들기</button>
+           ${opts.onFeedback ? `<button data-a="feedback">${SPK('scroll', '✉')} 의견 보내기</button>` : ''}
            <button data-a="title">타이틀로 (자동 저장)</button>
          </div>
          ${opts.seed !== undefined ? `<div class="seed">던전 시드 ${opts.seed}</div>` : ''}
@@ -574,6 +644,7 @@ export class Screens {
     });
     this.on(s, '[data-a="title"]', opts.onTitle);
     this.on(s, '[data-a="savecode"]', opts.onSaveCode);
+    this.on(s, '[data-a="feedback"]', () => opts.onFeedback?.());
     s.querySelector<HTMLInputElement>('[data-t="shadow"]')!.addEventListener('change', (e) => opts.onToggleShadows((e.target as HTMLInputElement).checked));
     s.querySelector<HTMLInputElement>('[data-t="sound"]')!.addEventListener('change', (e) => opts.onToggleSound((e.target as HTMLInputElement).checked));
     s.querySelectorAll<HTMLButtonElement>('[data-aim]').forEach((b) =>

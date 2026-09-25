@@ -2922,3 +2922,17 @@ h3.sub { margin: 10px 0 6px; font-size: 14px; display: flex; align-items: center
 /* 가로로 넘기는 탭 줄은 막대 없이 손가락·휠로만 넘긴다 */
 .build-tools, .tier-tabs, .recipe-tabs { scrollbar-width: none; }
 .build-tools::-webkit-scrollbar, .tier-tabs::-webkit-scrollbar, .recipe-tabs::-webkit-scrollbar { display: none; }
+/* 의견함 */
+.fb-kinds { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; }
+.fb-label { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 8px; }
+.fb-name, .fb-text {
+  font: inherit; color: var(--ink); background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--panel-line); border-radius: 8px; padding: 6px 10px;
+}
+.fb-name { flex: 1; min-width: 0; }
+.fb-text { width: 100%; box-sizing: border-box; min-height: 110px; resize: vertical; font-size: 14px; line-height: 1.5; }
+.fb-name:focus, .fb-text:focus { outline: none; border-color: var(--accent); }
+.fb-foot { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.fb-foot button { margin-left: auto; padding: 8px 16px; border-radius: 10px; border: 1px solid var(--panel-line); font-weight: 800; }
+.fb-foot button.primary { background: linear-gradient(#3a8ef0, #2862c4); color: #fff; }
+.fb-foot button:disabled { opacity: 0.5; }
