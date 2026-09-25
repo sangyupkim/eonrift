@@ -1,26 +1,37 @@
 import { describe, expect, it } from 'vitest';
-import { newSave, Progress, STORAGE_START_SLOTS, STORE_STACK } from '../src/game/Progress';
+import { newSave, parseSave, Progress, STORAGE_MAX_LEVEL, storageSlotsFor, storageUpgradeCost, STORE_STACK } from '../src/game/Progress';
 import { Factory } from '../src/factory/sim';
 
 describe('공유 창고 칸', () => {
-  it('한 칸에 99개, 칸이 모자라면 들어가는 만큼만', () => {
+  it('한 칸에 100개, 칸이 모자라면 들어가는 만큼만', () => {
     const p = new Progress(newSave());
     p.data.storage = {};
-    p.data.storageSlots = 2;
+    p.data.equips = [];
+    p.data.storageLevel = 1;
+    const cap = p.storageCapacity;
+    expect(cap).toBe(40);
+    p.data.storage.iron_ore = (cap - 2) * STORE_STACK;
     expect(p.depositItem('wood', 150)).toBe(150);
-    expect(p.storageUsed).toBe(2);
-    expect(p.depositItem('wood', 100)).toBe(48);
-    expect(p.stored('wood')).toBe(198);
+    expect(p.depositItem('wood', 100)).toBe(50);
+    expect(p.stored('wood')).toBe(200);
     expect(p.depositItem('copper_ore', 5)).toBe(0);
   });
 
-  it('확장 비용이 점점 오르고 최대가 있다', () => {
+  it('레벨 1~10: 레벨마다 20칸, 비용은 골드와 판·판자, 10레벨이 끝', () => {
     const p = new Progress(newSave());
-    const c1 = p.storageExpandCost!;
-    p.data.storageSlots = STORAGE_START_SLOTS + 10;
-    expect(p.storageExpandCost!).toBeGreaterThan(c1);
-    p.data.storageSlots = 200;
-    expect(p.storageExpandCost).toBeNull();
+    expect(storageSlotsFor(10)).toBe(220);
+    const c1 = storageUpgradeCost(1)!;
+    const c9 = storageUpgradeCost(9)!;
+    expect(c9.gold).toBeGreaterThan(c1.gold);
+    expect(Object.keys(c9.items).length).toBe(2);
+    expect(storageUpgradeCost(STORAGE_MAX_LEVEL)).toBeNull();
+    p.data.storageLevel = 10;
+    expect(p.storageUpgrade).toBeNull();
+  });
+
+  it('예전 저장의 칸 수는 잃지 않는 레벨로 옮긴다', () => {
+    const d = parseSave(JSON.stringify({ ...newSave(), storageSlots: 130, storageLevel: undefined }))!;
+    expect(storageSlotsFor(d.storageLevel!)).toBeGreaterThanOrEqual(130);
   });
 });
 

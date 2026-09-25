@@ -688,26 +688,23 @@ export class Combat {
         this.host.sfx('level');
         break;
       case 'mage:4': {
-        // 점멸: 보는 방향으로 빠르게 미끄러지며 무적
-        const dir = target ? aim : player.facing;
-        const bx = p.x;
-        const bz = p.z;
-        d.effects.sparks(bx, 1, bz, 0xc8a8ff, 18, { speed: 4, up: true, spread: 0.5 });
-        d.effects.ring(bx, bz, 1.4, 0xa070ff, 0.25, 0.8);
-        player.startDash({
-          dirX: Math.sin(dir),
-          dirZ: Math.cos(dir),
-          speed: 40,
-          duration: 0.14 + lv * 0.01,
-          pose: 'leap',
-          invuln: true,
-          onEnd: () => {
-            d.effects.streak(bx, bz, p.x, p.z, 0xa070ff, 0.7);
-            d.effects.ring(p.x, p.z, 1.6, 0xc8a8ff, 0.3, 0.8);
-            d.effects.sparks(p.x, 1, p.z, 0xc8a8ff, 14, { speed: 4 });
-          },
+        // 번개 폭풍: 2초 동안 주변 적에게 번개가 여러 번 떨어진다 (맞은 적은 잠깐 감전)
+        player.startAction({ pose: 'cast', duration: 0.4, hitAt: 0.3, onHit: () => {} }, null);
+        d.effects.glyph(p.x, p.z, 2.2, 0x9fe8ff, 1);
+        d.effects.zone(p.x, p.z, 9, 0x6ab8ff, 2.2);
+        this.host.sfx('magic');
+        const strikes = 8 + lv;
+        this.repeat(d, 0.25, 0.22, strikes, () => {
+          const near = d.monsters.filter((m) => m.alive && Math.hypot(m.x - p.x, m.z - p.z) < 9 + m.radius);
+          if (!near.length) return;
+          const m = near[Math.floor(Math.random() * near.length)];
+          d.effects.bolt(m.x, m.z - 0.01, m.x, m.z, 0xbfe8ff);
+          d.effects.pillar(m.x, m.z, 0x9fe8ff, 3);
+          d.effects.sparks(m.x, 0.5, m.z, 0xdff4ff, 8, { speed: 5 });
+          dmg(m, 1.5, 0.3, m.x, m.z);
+          if (m.alive) m.stun = Math.max(m.stun, m.isBoss ? 0.1 : 0.35);
+          this.host.sfx('hit');
         });
-        this.host.sfx('dash');
         break;
       }
       case 'mage:5':

@@ -12,7 +12,7 @@ import { Input } from '../core/input';
 import { Rng, randomSeed } from '../core/rng';
 import { CLASSES, CLASS_ORDER, expToNext, MAX_SKILL_LEVEL, SKILL_LEARN, skillUpgradeCost, ULTIMATES, type ClassId } from '../data/classes';
 import { ultUpgradeCost } from '../data/ultUpgrade';
-import { durability, equipName, GRADE, GRADES, newUid, rollEquip, type Equip } from '../data/equipment';
+import { durability, equipName, GRADE, GRADES, newUid, rollEquip, rollSeries, type Equip } from '../data/equipment';
 import { rollManaGrade } from '../data/crafting';
 import { BUILDINGS, FACTORY_SIZES, OFFLINE_CAP_HOURS, type BuildingType, upgradeBlueprintCost } from '../data/factory';
 import { essenceForTier, ITEMS, TIER_PLATE, ORE_TIERS, TIER_MANA_PLATE } from '../data/items';
@@ -413,6 +413,8 @@ export class Game {
     const st = this.progress.stats();
     this.player.maxHp = st.maxHp;
     this.player.maxMp = st.maxMp;
+    this.player.moveBonus = this.progress.bonus('move');
+    this.player.mpRegenBonus = this.progress.bonus('mpRegen');
     this.applyAura();
     // 게임을 막 불러왔으면 저장된 HP, 아니면 직전 장면의 HP를 이어받는다
     const carried = prev && !this.freshLoad ? prev.hp : (this.progress.data.hp ?? st.maxHp);
@@ -775,8 +777,10 @@ export class Game {
     this.player.maxMp = st.maxMp;
     this.player.hp = Math.max(1, Math.round(st.maxHp * hpRatio));
     this.player.mp = Math.min(this.player.mp, st.maxMp);
-    this.player.moveBonus = this.progress.bonus('move');
     this.refreshGear();
+    // 장비 모습이 바뀌면 플레이어를 새로 만들므로 그 뒤에 넣는다
+    this.player.moveBonus = this.progress.bonus('move');
+    this.player.mpRegenBonus = this.progress.bonus('mpRegen');
   }
 
   private gearKey = '';
@@ -804,9 +808,16 @@ export class Game {
     next.maxMp = prev.maxMp;
     next.hp = prev.hp;
     next.mp = prev.mp;
+    // 버프·재사용 대기·보너스도 그대로 옮긴다 (예전엔 장비를 바꾸면 사라졌다)
+    next.buffs = prev.buffs;
+    next.rollCooldown = prev.rollCooldown;
+    next.dodgeMax = prev.dodgeMax;
+    next.moveBonus = prev.moveBonus;
+    next.mpRegenBonus = prev.mpRegenBonus;
     prev.rig.root.parent?.remove(prev.rig.root);
     this.level.scene.add(next.rig.root);
     this.player = next;
+    this.applyAura();
     this.updatePortrait();
   }
 
@@ -2173,6 +2184,7 @@ export class Game {
           this.hud.toast(`제작대: ${toolName(k, p.data.tools[k])} 완성! (지금 도구와 교체)`);
         } else if (j.kind === 'equip') {
           const e: Equip = { ...workJobEquip(j), uid: newUid(), grade: j.mana ? rollManaGrade(Math.random()) : 0 };
+          e.series = rollSeries(e.slot, Math.random());
           p.data.equips.push(e);
           this.hud.toast(`제작대: ${j.mana ? `:sparkle: [${GRADES[e.grade].name}] ` : ''}${equipName(e)} 완성! (창고)`);
         }

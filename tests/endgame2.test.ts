@@ -71,3 +71,27 @@ describe('보스 패턴', () => {
     expect(DEBUFF_INFO.stun.name).toBe('기절');
   });
 });
+
+describe('장비 계열 (수호·비전·사냥)', () => {
+  it('방어구·장신구에 계열 옵션이 붙고 능력치 보너스로 들어간다', async () => {
+    const { seriesBonus, rollEquip } = await import('../src/data/equipment');
+    const { newSave, Progress } = await import('../src/game/Progress');
+    const { Rng } = await import('../src/core/rng');
+    const arc = seriesBonus({ uid: 'x', slot: 'armor', tier: 7, grade: 4, plus: 5, series: 'arcane' });
+    expect(arc.cdr).toBeGreaterThan(0);
+    expect(arc.mpRegen).toBeGreaterThan(0);
+    expect(seriesBonus({ uid: 'w', slot: 'weapon', tier: 7, grade: 4, plus: 5, series: 'arcane' })).toEqual({});
+    const p = new Progress(newSave());
+    p.cls.equipment.boots = { uid: 'b', slot: 'boots', tier: 3, grade: 2, plus: 0, series: 'hunter' };
+    expect(p.bonus('speed')).toBeGreaterThan(0);
+    // 드롭 무기는 모든 직업 것이 나온다
+    const rng = new Rng(3);
+    const classes = new Set<string>();
+    for (let i = 0; i < 300; i++) {
+      const e = rollEquip(rng, 3, 'sword', 0);
+      if (e.slot === 'weapon') classes.add(e.cls!);
+      else expect(e.series).toBeDefined();
+    }
+    expect(classes.size).toBe(3);
+  });
+});

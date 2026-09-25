@@ -1,8 +1,8 @@
 import { CLASSES, CLASS_ORDER, ULTIMATES, expToNext, MAX_LEVEL, POINTS_PER_LEVEL, STAT_KEYS, type BaseStats, type ClassId, type StatKey } from '../data/classes';
-import { durability, equipStats, type Equip, type EquipSlot } from '../data/equipment';
+import { durability, equipStats, seriesBonus, type Equip, type EquipSlot } from '../data/equipment';
 import { newTool, type ToolKind, type ToolState } from '../data/tools';
 import { FACTORY_SIZES, RECIPES, RECIPE_RENAMES } from '../data/factory';
-import { ITEM_RENAMES } from '../data/items';
+import { ITEM_RENAMES, TIER_PLANK, TIER_PLATE } from '../data/items';
 import type { BuildingState, FactoryState } from '../factory/sim';
 import { newEndgame, type EndgameState } from '../data/endgame';
 import { addBonus, BONUS_CAP, FOODS, TITLES, TRANSCEND_STATS, transcendCost, transcendExp, type Bonus, type BonusKey } from '../data/bonus';
@@ -93,8 +93,10 @@ export interface SaveData {
   bestiaryClaim?: Record<string, number>;
   /** 도감: 받은 수집 보상 수 (= 연구 보너스 단계) */
   research?: number;
-  /** 공유 창고 칸 수 (확장하면 늘어난다) */
+  /** (예전) 공유 창고 칸 수. 지금은 storageLevel */
   storageSlots?: number;
+  /** 공유 창고 레벨 1~10 */
+  storageLevel?: number;
   /** 차원집 일반 창고 (차원집 안의 모든 일반 창고가 함께 쓰는 보관함) */
   homeStorage?: Record<string, number>;
   settings: { shadows: boolean; sound: boolean; music?: number; sfx?: number; autoAim?: boolean; timersOpen?: boolean };
@@ -179,10 +181,16 @@ export function loadSave(): SaveData | null {
 }
 
 /** 공유 창고·일반 창고 한 칸에 쌓이는 수 */
-export const STORE_STACK = 99;
-export const STORAGE_START_SLOTS = 60;
-export const STORAGE_EXPAND_STEP = 10;
-export const STORAGE_MAX_SLOTS = 200;
+export const STORE_STACK = 100;
+/** 공유 창고 레벨 (1~10): 레벨마다 20칸씩, Lv.1 40칸 → Lv.10 220칸 */
+export const STORAGE_MAX_LEVEL = 10;
+export const storageSlotsFor = (level: number) => 40 + 20 * (Math.max(1, Math.min(STORAGE_MAX_LEVEL, level)) - 1);
+/** 창고 레벨 L → L+1 비용: 골드 + 그 무렵 단계의 판·판자 */
+export function storageUpgradeCost(level: number): { gold: number; items: Record<string, number> } | null {
+  if (level >= STORAGE_MAX_LEVEL) return null;
+  const t = Math.min(6, Math.floor(level * 0.7));
+  return { gold: 1500 * level * level, items: { [TIER_PLATE[t]]: 6 + level * 2, [TIER_PLANK[t]]: 8 + level * 2 } };
+}
 /** 일반 창고 레벨별 칸 수 */
 export const warehouseSlots = (level: number) => 20 * level;
 const slotsOf = (r: Record<string, number>) => Object.values(r).reduce((a, n) => a + (n > 0 ? Math.ceil(n / STORE_STACK) : 0), 0);
@@ -239,10 +247,13 @@ function migrate(d: SaveData & { maxTier?: number }): SaveData {
     }
     if (b.type === 'generator') b.buffer ??= {};
   }
-  // 창고 칸 수가 생기기 전 저장: 지금 쓰는 칸보다 넉넉하게 시작한다
-  if (d.storageSlots === undefined) {
+  // 창고 레벨: 예전 칸 수(확장한 만큼)를 잃지 않는 레벨로 옮긴다. 칸 수가 없던 저장은 쓰는 칸보다 넉넉하게
+  if (d.storageLevel === undefined) {
     const used = Object.values(d.storage).reduce((a, n) => a + (n > 0 ? Math.ceil(n / STORE_STACK) : 0), 0) + d.equips.length;
-    d.storageSlots = Math.min(STORAGE_MAX_SLOTS, Math.max(STORAGE_START_SLOTS, Math.ceil((used + 10) / STORAGE_EXPAND_STEP) * STORAGE_EXPAND_STEP));
+    const want = Math.max(d.storageSlots ?? 60, used + 10);
+    let lv = 1;
+    while (lv < STORAGE_MAX_LEVEL && storageSlotsFor(lv) < want) lv++;
+    d.storageLevel = lv;
   }
   // 조립기는 제작대로 합쳐졌다: 지어 둔 조립기는 제작대로 바꾸고, 산 도면 값은 골드로 돌려준다
   for (const b of d.factory.buildings as (Omit<BuildingState, 'type'> & { type: string; energy?: number })[]) {
@@ -428,6 +439,8 @@ export class Progress {
     const b: Bonus = {};
     if (this.trial) return b;
     for (const e of Object.values(c.equipment)) if (e && durability(e) > 0) for (const l of e.eng ?? []) addBonus(b, { [l.k]: l.v });
+    // 방어구·장신구 계열 옵션 (수호·비전·사냥)
+    for (const e of Object.values(c.equipment)) if (e) addBonus(b, seriesBonus(e));
     for (const t of TITLES) if (this.data.titles?.includes(t.id)) addBonus(b, t.bonus);
     for (const ts of TRANSCEND_STATS) addBonus(b, { [ts.key]: ts.per }, c.tpts?.[ts.key] ?? 0);
     const food = this.data.food;
@@ -561,7 +574,7 @@ export class Progress {
 
   // ---- 공유 창고 칸 (한 칸에 99개, 장비는 한 칸) ----
   get storageCapacity(): number {
-    return this.data.storageSlots ?? STORAGE_START_SLOTS;
+    return storageSlotsFor(this.data.storageLevel ?? 1);
   }
   get storageUsed(): number {
     return slotsOf(this.data.storage) + this.data.equips.length;
@@ -584,11 +597,9 @@ export class Progress {
   get storageHasSlot(): boolean {
     return this.storageUsed < this.storageCapacity;
   }
-  /** 다음 창고 확장 비용 (없으면 최대) */
-  get storageExpandCost(): number | null {
-    const cap = this.storageCapacity;
-    if (cap >= STORAGE_MAX_SLOTS) return null;
-    return 2000 * (1 + (cap - STORAGE_START_SLOTS) / STORAGE_EXPAND_STEP);
+  /** 다음 창고 레벨업 비용 (없으면 최대) */
+  get storageUpgrade(): { gold: number; items: Record<string, number> } | null {
+    return storageUpgradeCost(this.data.storageLevel ?? 1);
   }
 
   // ---- 차원집 일반 창고 ----

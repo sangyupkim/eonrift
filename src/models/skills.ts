@@ -71,8 +71,14 @@ export function buildSkillGeometry(cls: ClassId, index: number): BufferGeometry 
     case 'mage:3': // 마나 실드: 방울 + 수정
       g = [part(new IcosahedronGeometry(0.42, 1), 0x6ab4ff), part(new OctahedronGeometry(0.15), 0xd8f0ff, { scale: [1, 1.4, 1] })];
       break;
-    case 'mage:4': // 점멸: 화살표 + 반짝
-      g = [part(new BoxGeometry(0.5, 0.14, 0.08), 0x9fe8ff, { pos: [-0.1, 0, 0] }), part(new ConeGeometry(0.2, 0.3, 3), 0x9fe8ff, { pos: [0.3, 0, 0], rot: [0, 0, -Math.PI / 2] }), part(new OctahedronGeometry(0.08), 0xffffff, { pos: [-0.35, 0.22, 0] }), part(new OctahedronGeometry(0.06), 0xffffff, { pos: [-0.2, -0.24, 0] })];
+    case 'mage:4': // 번개 폭풍: 구름과 번개
+      g = [
+        part(new SphereGeometry(0.2, 8, 6), 0x8a9ab8, { pos: [-0.18, 0.28, 0] }),
+        part(new SphereGeometry(0.24, 8, 6), 0x9aaac8, { pos: [0.08, 0.32, 0] }),
+        part(new SphereGeometry(0.18, 8, 6), 0x8a9ab8, { pos: [0.3, 0.26, 0] }),
+        part(new BoxGeometry(0.08, 0.32, 0.05), 0xffe45a, { pos: [0, 0.02, 0.05], rot: [0, 0, 0.5] }),
+        part(new BoxGeometry(0.08, 0.3, 0.05), 0xffe45a, { pos: [0.08, -0.24, 0.05], rot: [0, 0, -0.5] }),
+      ];
       break;
     case 'mage:5': // 마력 순환: 구슬 + 두 고리
       g = [part(new SphereGeometry(0.2, 10, 8), 0x7fd6ff), part(new TorusGeometry(0.38, 0.035, 5, 18), 0xb67cff, { rot: [1.1, 0.3, 0] }), part(new TorusGeometry(0.38, 0.035, 5, 18), 0x5ee0ff, { rot: [-0.4, 1.2, 0] })];

@@ -33,7 +33,7 @@ export function makeTestSave(): SaveData {
   d.gold = 10_000_000;
   d.cleared = 70;
   d.dimStones = [1, 2, 3, 4, 5, 6, 7];
-  d.storageSlots = 200;
+  d.storageLevel = 10;
   const st: Record<string, number> = {};
   for (const list of [TIER_PLATE, TIER_MANA_PLATE, TIER_INGOT, TIER_MANA_METAL, TIER_PLANK, TIER_MANA_PLANK, ORE_TIERS, WOOD_TIERS]) for (const id of list) st[id] = 99;
   for (const id of ESSENCE_TIERS) st[id] = 99;

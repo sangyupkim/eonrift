@@ -2872,3 +2872,11 @@ h3.sub { margin: 10px 0 6px; font-size: 14px; display: flex; align-items: center
 }
 .dlg-box.narration { border-image: none; border-width: 0; background: rgba(0, 0, 0, 0.55); padding: 14px 18px 18px; border-radius: 14px; }
 .panel > .close { top: -8px; right: -8px; }
+/* 테두리 에셋이 생기면서 초상화가 대사 줄까지 내려와 겹치던 것: 초상화는 이름 줄까지만 걸치게 */
+.dlg-box .dlg-portrait { bottom: calc(100% - 12px); left: 0; }
+.dlg-box.has-portrait .dlg-name { padding-left: 128px; min-height: 20px; }
+.dlg-box .dlg-text { margin-top: 4px; }
+@media (max-height: 380px) {
+  .dlg-box .dlg-portrait { bottom: calc(100% - 10px); }
+  .dlg-box.has-portrait .dlg-name { padding-left: 100px; }
+}

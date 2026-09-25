@@ -72,6 +72,8 @@ export class Player {
   private speed = 0;
   /** 이동 속도 보너스 (각인·칭호) */
   moveBonus = 0;
+  /** 전투 중에도 차는 MP (초당 최대 MP 비율, 비전 장비) */
+  mpRegenBonus = 0;
   private walkPhase = 0;
   private time = 0;
   private action: (ActionSpec & { t: number; done: boolean }) | null = null;
@@ -329,6 +331,7 @@ export class Player {
     // MP는 전투 중에는 차지 않는다: 3초 동안 때리지도 맞지도 않아야 회복된다
     this.combatT += dt;
     if (this.combatT >= MP_REGEN_DELAY) this.mp = Math.min(this.maxMp, this.mp + dt * (2 + this.maxMp * 0.02));
+    else if (this.mpRegenBonus > 0) this.mp = Math.min(this.maxMp, this.mp + dt * this.maxMp * this.mpRegenBonus);
 
     const d = Player.worldDir(ctx.move);
     const mag = Math.min(1, Math.hypot(ctx.move.x, ctx.move.y));

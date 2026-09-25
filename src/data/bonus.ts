@@ -6,7 +6,7 @@ import { TIER_MANA_PLATE, TIER_PLATE } from './items';
  * 엔딩 이후 성장: 각인 · 칭호 · 초월 · 음식. 모두 같은 '보너스' 이름표로 능력치에 더해진다.
  * % 보너스는 비율(0.03 = 3%), 치명타만 %p.
  */
-export type BonusKey = 'atk' | 'hp' | 'def' | 'crit' | 'speed' | 'cdr' | 'gold' | 'move' | 'ult' | 'mp' | 'exp';
+export type BonusKey = 'atk' | 'hp' | 'def' | 'crit' | 'speed' | 'cdr' | 'gold' | 'move' | 'ult' | 'mp' | 'exp' | 'mpRegen';
 export type Bonus = Partial<Record<BonusKey, number>>;
 
 export const BONUS_NAMES: Record<BonusKey, string> = {
@@ -21,13 +21,16 @@ export const BONUS_NAMES: Record<BonusKey, string> = {
   ult: '궁극기 위력',
   mp: '최대 MP',
   exp: '경험치',
+  mpRegen: 'MP 재생',
 };
 
 /** 보너스 한도 (각인·칭호·음식을 모두 더한 값) */
-export const BONUS_CAP: Bonus = { cdr: 0.4, move: 0.3, speed: 0.5 };
+export const BONUS_CAP: Bonus = { cdr: 0.4, move: 0.3, speed: 0.5, mpRegen: 0.05 };
 
 export function bonusText(k: BonusKey, v: number): string {
   if (k === 'crit') return `${BONUS_NAMES[k]} +${(Math.round(v * 10) / 10).toFixed(1)}%`;
+  // MP 재생: 초마다 최대 MP의 몇 % (전투 중에도)
+  if (k === 'mpRegen') return `${BONUS_NAMES[k]} 초당 ${(Math.round(v * 1000) / 10).toFixed(1)}%`;
   const pct = Math.round(v * 1000) / 10;
   return k === 'cdr' ? `${BONUS_NAMES[k]} -${pct}%` : `${BONUS_NAMES[k]} +${pct}%`;
 }

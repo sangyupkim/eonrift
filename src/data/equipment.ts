@@ -1,7 +1,7 @@
 import type { Rng } from '../core/rng';
 import { TIER_MANA_PLATE, TIER_PLATE } from './items';
-import { CLASSES, type ClassId } from './classes';
-import type { EngraveLine } from './bonus';
+import { CLASS_ORDER, CLASSES, type ClassId } from './classes';
+import type { BonusKey, EngraveLine } from './bonus';
 
 export type EquipSlot = 'weapon' | 'helmet' | 'armor' | 'pants' | 'boots' | 'ring' | 'necklace';
 
@@ -28,6 +28,34 @@ export interface Equip {
   dur?: number;
   /** 각인 (1단~5단, 차례로 새긴다) */
   eng?: EngraveLine[];
+  /** 방어구·장신구 계열 (수호·비전·사냥): 직업에 어울리는 추가 옵션. 어느 직업이나 낄 수 있다 */
+  series?: SeriesId;
+}
+
+export type SeriesId = 'guard' | 'arcane' | 'hunter';
+/**
+ * 방어구·장신구 계열. 한 부위마다 기본 옵션이 붙고 등급·강화·단계가 높을수록 커진다.
+ * 수호(검사에게 어울림): 방어·체력 · 비전(마법사): 재사용 감소·전투 중 MP 재생·MP · 사냥(궁수): 공격 속도·치명타·이동
+ */
+export const SERIES: Record<SeriesId, { name: string; prefix: string; fits: ClassId; color: number; bonus: Partial<Record<BonusKey, number>> }> = {
+  guard: { name: '수호', prefix: '수호자의', fits: 'sword', color: 0x6ab0ff, bonus: { def: 0.02, hp: 0.02 } },
+  arcane: { name: '비전', prefix: '현자의', fits: 'mage', color: 0xc08aff, bonus: { cdr: 0.008, mpRegen: 0.003, mp: 0.03 } },
+  hunter: { name: '사냥', prefix: '사냥꾼의', fits: 'archer', color: 0x7aff9a, bonus: { speed: 0.012, crit: 0.6, move: 0.006 } },
+};
+export const SERIES_IDS = Object.keys(SERIES) as SeriesId[];
+
+/** 장비 한 개의 계열 옵션 (망가지면 없음) */
+export function seriesBonus(e: Equip): Partial<Record<BonusKey, number>> {
+  if (!e.series || e.slot === 'weapon' || durability(e) <= 0) return {};
+  const k = GRADES[e.grade].mult * (1 + e.plus * 0.06) * (0.85 + e.tier * 0.05);
+  const out: Partial<Record<BonusKey, number>> = {};
+  for (const [key, v] of Object.entries(SERIES[e.series].bonus) as [BonusKey, number][]) out[key] = key === 'crit' ? Math.round(v * k * 10) / 10 : Math.round(v * k * 10000) / 10000;
+  return out;
+}
+
+/** 방어구·장신구에 계열을 붙인다 (무기는 없음) */
+export function rollSeries(slot: EquipSlot, r: number): SeriesId | undefined {
+  return slot === 'weapon' ? undefined : SERIES_IDS[Math.floor(r * SERIES_IDS.length) % SERIES_IDS.length];
 }
 
 export const GRADES = [
@@ -49,7 +77,7 @@ export function slotName(slot: EquipSlot, cls?: ClassId): string {
 }
 
 export function equipName(e: Equip): string {
-  return `${MATERIAL[e.tier - 1]} ${slotName(e.slot, e.cls)}${e.plus > 0 ? ` +${e.plus}` : ''}`;
+  return `${e.series ? `${SERIES[e.series].prefix} ` : ''}${MATERIAL[e.tier - 1]} ${slotName(e.slot, e.cls)}${e.plus > 0 ? ` +${e.plus}` : ''}`;
 }
 
 export interface EquipStats {
@@ -128,10 +156,12 @@ export function rollGrade(r: number, bonus: number, dimChance = 0): number {
   return GRADE.normal;
 }
 
-export function rollEquip(rng: Rng, tier: number, cls: ClassId, bonus: number, dimChance = 0): Equip {
+/** 드롭 장비: 무기는 모든 직업 것이 나오고, 방어구·장신구는 계열(수호·비전·사냥)이 붙는다 */
+export function rollEquip(rng: Rng, tier: number, _cls: ClassId, bonus: number, dimChance = 0): Equip {
   const grade = rollGrade(rng.next(), bonus, dimChance);
   const slot = rng.next() < 0.3 ? 'weapon' : rng.pick(EQUIP_SLOTS.slice(1));
-  return { uid: newUid(), slot, cls: slot === 'weapon' ? cls : undefined, tier, grade, plus: 0 };
+  const cls = slot === 'weapon' ? rng.pick(CLASS_ORDER) : undefined;
+  return { uid: newUid(), slot, cls, tier, grade, plus: 0, series: rollSeries(slot, rng.next()) };
 }
 
 export function equipValue(e: Equip): number {

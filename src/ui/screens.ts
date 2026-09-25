@@ -5,14 +5,14 @@ import { CLASSES, CLASS_ORDER, expToNext, MAX_LEVEL, MAX_SKILL_LEVEL, SKILL_LEAR
 import { ultUpgradeCost } from '../data/ultUpgrade';
 import { TOOL_KIND_NAMES, TOOL_TIER_NAMES, toolBonusChance, toolEnhanceCost, toolMaxDur, toolName, toolRepair, toolSpeed, type ToolKind, type ToolState } from '../data/tools';
 import { equipCraftCost, equipManaCraftCost, MANA_PLATE_OF, manaPlateCraftCost, plateCraftCost, toolCraftCost, workbenchUpgradeCost, type CraftCost } from '../data/crafting';
-import { durability, EQUIP_SLOTS, EQUIP_MAX_DUR, enhanceCost, repairCost, type EquipSlot, equipName, equipStats, equipValue, GRADES, slotName, type Equip } from '../data/equipment';
+import { durability, EQUIP_SLOTS, SERIES, seriesBonus, EQUIP_MAX_DUR, enhanceCost, repairCost, type EquipSlot, equipName, equipStats, equipValue, GRADES, slotName, type Equip } from '../data/equipment';
 import { BUILDINGS, BUILD_ORDER, buildingUpgradeCost, ESSENCE_BOOST, ESSENCE_BURN, FACTORY_SIZES, generatorPower, levelSpeed, MAX_BUILDING_LEVEL, RECIPES, UPGRADABLE, upgradeBlueprintCost, type BuildingType } from '../data/factory';
 import { ITEMS, ITEM_LIST, ORE_TIERS, TIER_PLATE, WOOD_TIERS } from '../data/items';
 import type { QuestDef } from '../data/quests';
 import { THEMES } from '../data/themes';
 import { canEnqueue, enqueueJob, WORKBENCH_OUT_MAX, WORKBENCH_QUEUE_MAX, BOX_CAPACITY, boxTotal, ESSENCES, MACHINE_TYPES, RECIPE_BY_ID, recipesFor, type BuildingState, type Factory, type WorkJob } from '../factory/sim';
 import type { Bag, Slot } from '../game/Bag';
-import { stageIndex, STORAGE_EXPAND_STEP, STORE_STACK, warehouseSlots, type Progress } from '../game/Progress';
+import { stageIndex, STORAGE_MAX_LEVEL, storageSlotsFor, STORE_STACK, warehouseSlots, type Progress } from '../game/Progress';
 import { objectiveNeed, objectiveProgress, objectiveText, todayKey, type Quests } from '../game/Quests';
 import { ICONS, mico, richText } from './icons';
 import { buildingThumb } from './thumbs';
@@ -127,6 +127,11 @@ export function equipLine(e: Equip): string {
   if (s.hp) parts.push(`HP ${s.hp}`);
   if (s.mp) parts.push(`MP ${s.mp}`);
   if (s.crit) parts.push(`치명 ${s.crit}%`);
+  // 계열 옵션 (수호·비전·사냥)
+  if (parts.length && e.series) {
+    const sb = seriesBonus(e);
+    parts.push(`<span class="ser" style="color:${hex(SERIES[e.series].color)}">${SERIES[e.series].name}(${CLASSES[SERIES[e.series].fits].name} 추천) ${(Object.entries(sb) as [BonusKey, number][]).map(([k, v]) => bonusText(k, v)).join(', ')}</span>`);
+  }
   // 각인 (망가진 장비는 빈 문자열 그대로 두어 '망가짐'으로 보이게)
   if (parts.length && e.eng?.length) parts.push(`<span class="eng">각인 ${e.eng.map((l) => bonusText(l.k, l.v)).join(', ')}</span>`);
   return parts.join(' · ');
@@ -1062,7 +1067,10 @@ export class Screens {
         .join('');
       const used = p.storageUsed;
       const cap = p.storageCapacity;
-      const cost = p.storageExpandCost;
+      const lv = p.data.storageLevel ?? 1;
+      const up = p.storageUpgrade;
+      const upOk = !!up && p.data.gold >= up.gold && p.hasAll(up.items);
+      const upTxt = up ? `${up.gold} G · ${Object.entries(up.items).map(([id, n]) => `<span class="${p.count(id) >= n ? '' : 'bad'}">${inlineGem(id)}${n}</span>`).join(' ')}` : '';
       const emptyCells = Array.from({ length: Math.max(0, Math.min(cap - used, 40)) }, () => '<div class="slot"></div>').join('');
       const storeEq = p.data.equips
         .map((e) => `<div class="slot filled ${sel?.from === 'storeEq' && sel.uid === e.uid ? 'sel' : ''}" data-storeeq="${e.uid}">${equipGem(e)}<span class="cnt">+${e.plus}</span></div>`)
@@ -1073,7 +1081,8 @@ export class Screens {
         'storage',
         `<div class="panel wide tall">
            <button class="close">${ICONS.close}</button>
-           <h2>공유 창고 <small class="${used > cap ? 'bad' : ''}">${used}/${cap}칸 · 한 칸 ${STORE_STACK}개</small> <button class="tool-sm" data-a="all">재료 모두 창고로</button> ${cost ? `<button class="tool-sm" data-a="expand" ${p.data.gold >= cost ? '' : 'disabled'}>+${STORAGE_EXPAND_STEP}칸 확장 (${cost} G)</button>` : '<small class="ok">최대 칸</small>'}</h2>
+           <h2>공유 창고 <small>Lv.${lv}/${STORAGE_MAX_LEVEL}</small> <small class="${used > cap ? 'bad' : ''}">${used}/${cap}칸 · 한 칸 ${STORE_STACK}개</small> <button class="tool-sm" data-a="all">재료 모두 창고로</button> ${up ? `<button class="tool-sm" data-a="expand" ${upOk ? '' : 'disabled'}>Lv.${lv + 1} 업그레이드 (${storageSlotsFor(lv + 1)}칸) · ${upTxt}</button>` : '<small class="ok">최대 레벨</small>'}</h2>
+           ${used > cap ? '<div class="notice warn-box">창고가 넘쳤습니다. 넘친 칸은 꺼내기만 할 수 있고, 새로 넣으려면 비우거나 업그레이드하세요.</div>' : ''}
            <div class="item-info">${info}</div>
            <div class="store-split scroll">
              <div>
@@ -1175,11 +1184,12 @@ export class Screens {
         render();
       });
       this.on(sc, '[data-a="expand"]', () => {
-        const c = p.storageExpandCost;
-        if (!c || p.data.gold < c) return;
-        p.data.gold -= c;
-        p.data.storageSlots = p.storageCapacity + STORAGE_EXPAND_STEP;
-        info = `<b class="ok">창고가 ${p.storageCapacity}칸으로 늘어났습니다</b>`;
+        const c = p.storageUpgrade;
+        if (!c || p.data.gold < c.gold || !p.hasAll(c.items)) return;
+        p.data.gold -= c.gold;
+        p.takeAll(c.items);
+        p.data.storageLevel = (p.data.storageLevel ?? 1) + 1;
+        info = `<b class="ok">공유 창고 Lv.${p.data.storageLevel}! ${p.storageCapacity}칸이 되었습니다</b>`;
         onChange?.();
         render();
       });

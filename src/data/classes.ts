@@ -113,7 +113,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
       { name: '얼음 장판', mp: 20, cooldown: 7, description: '적을 느리게 하고 계속 피해를 주는 얼음 장판을 깐다.' },
       { name: '번개 연쇄', mp: 24, cooldown: 6, description: '가까운 적들 사이로 번개가 튄다.' },
       { name: '마나 실드', mp: 15, cooldown: 20, description: '[방어] 15초 동안 받는 피해의 60%를 체력 대신 MP로 받는다.' },
-      { name: '점멸', mp: 12, cooldown: 7, description: '[방어] 바라보는 방향으로 순간이동한다. 이동 중 무적.' },
+      { name: '번개 폭풍', mp: 22, cooldown: 10, description: '2초 동안 주변 적들에게 번개를 여러 번 떨어뜨린다. 맞은 적은 잠깐 감전된다.' },
       { name: '마력 순환', mp: 0, cooldown: 30, description: '[보조] MP 40%와 HP 15%를 회복하고 10초 동안 공격력 +20%.' },
     ],
   },
