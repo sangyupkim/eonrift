@@ -2989,3 +2989,201 @@ h3.sub { margin: 10px 0 6px; font-size: 14px; display: flex; align-items: center
 .enc-table th { background: rgba(94, 224, 255, 0.1); white-space: nowrap; }
 .enc-grade { display: inline-flex; align-items: center; gap: 4px; color: var(--c); font-weight: 800; }
 .enc-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--c); margin-right: 5px; box-shadow: 0 0 6px var(--c); }
+
+/* ================= v7.9 UI 비주얼: 안쪽 상자·버튼·탭·칸 ================= */
+:root {
+  --gold-line: rgba(214, 176, 96, 0.45);
+  --gold-strong: #e2bf6e;
+  --card-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0) 45%), linear-gradient(180deg, #1f1d3e, #141229);
+  --card-bg-on: linear-gradient(180deg, rgba(143, 244, 255, 0.16), rgba(143, 244, 255, 0.02) 55%), linear-gradient(180deg, #1c3550, #13223a);
+  --corners: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cg transform='rotate%280 6 6%29'%3E%3Cpath d='M1.2 8.5 V1.2 H8.5' fill='none' stroke='%23e2bf6e' stroke-width='1.6' stroke-linecap='round'/%3E%3Ccircle cx='1.6' cy='1.6' r='1.3' fill='%238ff4ff'/%3E%3C/g%3E%3C/svg%3E") top 3px left 3px / 11px no-repeat, url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cg transform='rotate%2890 6 6%29'%3E%3Cpath d='M1.2 8.5 V1.2 H8.5' fill='none' stroke='%23e2bf6e' stroke-width='1.6' stroke-linecap='round'/%3E%3Ccircle cx='1.6' cy='1.6' r='1.3' fill='%238ff4ff'/%3E%3C/g%3E%3C/svg%3E") top 3px right 3px / 11px no-repeat, url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cg transform='rotate%28180 6 6%29'%3E%3Cpath d='M1.2 8.5 V1.2 H8.5' fill='none' stroke='%23e2bf6e' stroke-width='1.6' stroke-linecap='round'/%3E%3Ccircle cx='1.6' cy='1.6' r='1.3' fill='%238ff4ff'/%3E%3C/g%3E%3C/svg%3E") bottom 3px right 3px / 11px no-repeat, url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cg transform='rotate%28270 6 6%29'%3E%3Cpath d='M1.2 8.5 V1.2 H8.5' fill='none' stroke='%23e2bf6e' stroke-width='1.6' stroke-linecap='round'/%3E%3Ccircle cx='1.6' cy='1.6' r='1.3' fill='%238ff4ff'/%3E%3C/g%3E%3C/svg%3E") bottom 3px left 3px / 11px no-repeat;
+}
+
+/* 제목: 따뜻한 금빛 글씨 + 아래 장식선 */
+.panel > h2 {
+  color: #f6e7bd;
+  text-shadow: 0 1px 0 #000, 0 0 14px rgba(232, 200, 112, 0.25);
+  padding-bottom: 9px;
+  background: linear-gradient(90deg, transparent, rgba(214, 176, 96, 0.7) 18%, rgba(94, 224, 255, 0.55) 50%, rgba(214, 176, 96, 0.7) 82%, transparent) bottom / 100% 1px no-repeat;
+}
+.panel h3 {
+  color: #bfeeff;
+  padding-left: 15px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath d='M5 0.5 L9.5 5 L5 9.5 L0.5 5 Z' fill='%235ee0ff' stroke='%23e2bf6e' stroke-width='0.8'/%3E%3Cpath d='M5 0.5 L9.5 5 L5 5 Z' fill='%23fff' fill-opacity='.5'/%3E%3C/svg%3E") left center / 10px no-repeat;
+}
+.panel h3.ency-plain, .ency-body h3 { background-position: left 4px; }
+
+/* 안쪽 상자: 테두리 + 금빛 모서리 장식 + 위쪽 빛 */
+.panel .list li:not(.empty):not(.sub-head),
+.eq-slot,
+.stat-row,
+.enc-card,
+.stage-btn,
+.notice,
+.item-info:not(:empty) {
+  background: var(--corners), var(--card-bg);
+  border: 1px solid var(--gold-line);
+  box-shadow: inset 0 0 0 1px rgba(94, 224, 255, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+.item-info:not(:empty) { padding: 8px 12px; border-radius: 10px; }
+.notice { background: var(--corners), linear-gradient(180deg, rgba(255, 224, 122, 0.16), rgba(255, 224, 122, 0.05)), linear-gradient(180deg, #2a2438, #1a1628); border-color: rgba(255, 214, 120, 0.55); }
+.panel .list li.sel,
+.eq-slot.sel,
+.stage-btn.done.sel {
+  background: var(--corners), var(--card-bg-on);
+  border-color: rgba(143, 244, 255, 0.85);
+  outline: none;
+  box-shadow: inset 0 0 0 1px rgba(143, 244, 255, 0.25), 0 0 12px rgba(94, 224, 255, 0.35);
+}
+.panel .list.pick li:hover:not(.sel) { border-color: rgba(226, 191, 110, 0.8); }
+.panel .list li.quest.main { border-left: 3px solid #ffe07a; }
+.panel .list li.quest.daily { border-left: 3px solid #7affc0; }
+.stage-btn.done { background: var(--corners), linear-gradient(180deg, rgba(94, 224, 255, 0.14), rgba(94, 224, 255, 0.03)), linear-gradient(180deg, #1c2a44, #131d33); }
+.stage-btn.boss { border-color: rgba(255, 130, 100, 0.75); box-shadow: inset 0 0 12px rgba(255, 90, 60, 0.18), 0 2px 6px rgba(0, 0, 0, 0.35); }
+.tier-card { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 2px 6px rgba(0, 0, 0, 0.35); }
+
+/* 버튼: 금속판 느낌 (위 빛 · 아래 그림자 · 금빛 테두리) */
+.panel .menu button,
+.panel .tabs button,
+.panel .tool-sm,
+.panel .list li button,
+.panel .eq-slot button,
+.panel .stat-row button,
+.panel .qty-row button,
+.panel .food-row button,
+.panel .eng-line button,
+.panel .fb-foot button,
+.panel .drop-row button,
+.ency-tab,
+.dlg-choices button,
+.title-menu button {
+  background: linear-gradient(180deg, #37335f 0%, #24214a 55%, #1b1938 100%);
+  border: 1px solid var(--gold-line);
+  color: var(--ink);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), inset 0 -2px 0 rgba(0, 0, 0, 0.35), 0 2px 4px rgba(0, 0, 0, 0.35);
+  transition: filter 0.12s, transform 0.06s;
+}
+.panel .menu button:not(:disabled):hover,
+.panel .tabs button:not(:disabled):hover,
+.panel .tool-sm:not(:disabled):hover,
+.panel .list li button:not(:disabled):hover,
+.ency-tab:hover,
+.dlg-choices button:hover,
+.title-menu button:hover { filter: brightness(1.18); border-color: rgba(226, 191, 110, 0.85); }
+.panel .menu button:not(:disabled):active,
+.panel .tabs button:active,
+.panel .tool-sm:not(:disabled):active,
+.panel .list li button:not(:disabled):active,
+.ency-tab:active,
+.dlg-choices button:active,
+.title-menu button:active { transform: translateY(1px); box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.45); }
+/* 고른 탭·켜진 버튼: 청록 보석빛 */
+.panel .tabs button.on,
+.panel .tool-sm.on,
+.ency-tab.on,
+.panel .aim-row button.on {
+  background: linear-gradient(180deg, #5fd8f0 0%, #2a8fb8 55%, #1d6a8f 100%);
+  border-color: #bff6ff;
+  color: #06121e;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 0 12px rgba(94, 224, 255, 0.45);
+}
+/* 주요 버튼: 푸른 보석 + 금테 */
+.panel .menu button.primary,
+.panel .tool-sm.primary,
+.panel .list li button.primary,
+.panel .eng-line button.primary,
+.panel .fb-foot button.primary,
+.title-menu button.primary {
+  background: linear-gradient(180deg, #6fb8ff 0%, #3a86ea 45%, #2656b8 100%);
+  border-color: var(--gold-strong);
+  color: #fff;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.45);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), inset 0 -2px 0 rgba(0, 0, 0, 0.25), 0 0 10px rgba(80, 150, 255, 0.35), 0 2px 4px rgba(0, 0, 0, 0.4);
+}
+.panel .menu button.danger,
+.panel .tool-sm.danger,
+.panel .drop-row button.danger {
+  background: linear-gradient(180deg, #d0605a 0%, #9a3030 60%, #6a1e22 100%);
+  border-color: #ffb0a0;
+  color: #fff;
+}
+.panel button:disabled,
+.title-menu button:disabled,
+.dlg-choices button:disabled { filter: grayscale(0.7) brightness(0.8); opacity: 0.55; cursor: default; }
+
+/* 가방·창고 칸: 움푹 들어간 소켓, 아이템이 있으면 등급색으로 빛난다 */
+.slot {
+  background: radial-gradient(circle at 50% 38%, rgba(255, 255, 255, 0.07), rgba(0, 0, 0, 0.25) 75%), #121026;
+  border: 1px solid rgba(214, 176, 96, 0.3);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.65), inset 0 -1px 0 rgba(255, 255, 255, 0.05);
+}
+.slot.filled {
+  background: radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--c, #8a8aa0) 30%, transparent), rgba(0, 0, 0, 0.25) 78%), #15132b;
+  border-color: color-mix(in srgb, var(--c, #8a8aa0) 55%, rgba(214, 176, 96, 0.3));
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.55), inset 0 0 8px color-mix(in srgb, var(--c, #8a8aa0) 25%, transparent);
+}
+.slot.sel { border-color: #bff6ff; box-shadow: 0 0 10px rgba(94, 224, 255, 0.6), inset 0 0 10px rgba(94, 224, 255, 0.35); }
+.bag-grid.drop, .store-grid.drop, .inv-grid.drop { outline: 1px dashed rgba(143, 244, 255, 0.6); outline-offset: 3px; border-radius: 10px; }
+
+/* 작은 알약 버튼 (종류 고르기 등) */
+.chip { background: linear-gradient(180deg, #2c2950, #1c1a38); border-color: color-mix(in srgb, var(--c, #d6b060) 60%, transparent); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12); }
+
+/* 입력칸 */
+.panel input[type='text'], .panel input:not([type]), .panel textarea, .fb-name, .fb-text, .code-box, .qty-row input {
+  background: linear-gradient(180deg, #0c0b1a, #151331);
+  border: 1px solid var(--gold-line);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.6);
+  color: var(--ink);
+}
+
+/* 금액: 쉼표와 금빛 */
+.gold { color: #ffd86a; text-shadow: 0 0 8px rgba(255, 210, 80, 0.35); }
+
+/* HUD 목표 문구: 반투명 판 위에 */
+.objective:not(.hidden):not(:empty) {
+  background: linear-gradient(90deg, rgba(10, 9, 22, 0.72), rgba(10, 9, 22, 0.35) 80%, transparent);
+  border-left: 2px solid var(--gold-strong);
+  padding: 4px 10px 5px 8px;
+  border-radius: 0 8px 8px 0;
+}
+/* 장비 칸(인형 옆): 등급색 소켓 + 금빛 모서리 */
+.doll-slot {
+  background: var(--corners), var(--card-bg);
+  border: 1px solid var(--gold-line);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+.doll-slot:not(.filled) { border-style: dashed; opacity: 0.85; }
+.doll-slot.filled {
+  background: var(--corners), linear-gradient(90deg, color-mix(in srgb, var(--c) 22%, transparent), transparent 70%), var(--card-bg);
+  border-color: color-mix(in srgb, var(--c) 70%, var(--gold-line));
+}
+.doll-slot.sel { outline: none; border-color: #ffe07a; box-shadow: 0 0 12px rgba(255, 224, 122, 0.5), inset 0 0 0 1px rgba(255, 224, 122, 0.4); }
+.doll-slot:hover { filter: brightness(1.12); }
+/* NPC 대화: 말풍선과 선택지 */
+.talk-line { background: var(--corners), linear-gradient(180deg, rgba(94, 224, 255, 0.08), rgba(94, 224, 255, 0.02)), linear-gradient(180deg, #1f1d3e, #141229); border: 1px solid var(--gold-line); border-left: 3px solid var(--accent); padding: 9px 14px; }
+.talk-opt { background: linear-gradient(180deg, #312d58 0%, #221f46 60%, #1a1838 100%); border: 1px solid var(--gold-line); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 2px 4px rgba(0, 0, 0, 0.35); transition: filter 0.12s, transform 0.06s; }
+.talk-opt:hover { filter: brightness(1.18); border-color: rgba(226, 191, 110, 0.85); }
+.talk-opt:active { transform: translateY(1px); }
+.talk-opt.report { border-color: rgba(122, 255, 154, 0.7); box-shadow: inset 0 0 10px rgba(122, 255, 154, 0.15), 0 2px 4px rgba(0, 0, 0, 0.35); }
+.talk-opt.story { border-color: rgba(94, 224, 255, 0.75); box-shadow: inset 0 0 10px rgba(94, 224, 255, 0.15), 0 2px 4px rgba(0, 0, 0, 0.35); }
+/* 소제목의 다이아는 첫 줄에 맞춘다 (버튼이 붙어 두 줄이 돼도) */
+.panel h3 { background-position: left 0.4em; }
+/* 탑 층 목록 · 퀵슬롯 · 직업 카드 · 러시 버튼 · 도감 카드 */
+.floor, .quick-slot, .class-card, .rush-btn, .list.beasts li.beast {
+  background: var(--corners), var(--card-bg);
+  border: 1px solid var(--gold-line);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+.floor.done { background: var(--corners), linear-gradient(90deg, rgba(122, 255, 154, 0.1), transparent 60%), var(--card-bg); }
+.floor.next { background: var(--corners), linear-gradient(90deg, rgba(255, 210, 58, 0.2), rgba(255, 210, 58, 0.04)), var(--card-bg); border-color: #ffd23a; box-shadow: 0 0 12px rgba(255, 210, 58, 0.3), inset 0 0 0 1px rgba(255, 210, 58, 0.3); }
+.quick-slot.filled, .class-card.on { background: var(--corners), var(--card-bg-on); border-color: rgba(143, 244, 255, 0.75); }
+.quick-slot.drop { box-shadow: 0 0 12px rgba(255, 224, 122, 0.55); border-color: #ffe07a; }
+.rush-btn:not(.locked):hover, .class-card:not(.locked):hover, .quick-slot:hover { filter: brightness(1.15); }
+/* 알림: 금테 두른 어두운 두루마리 */
+.toast {
+  background: linear-gradient(180deg, rgba(34, 30, 64, 0.94), rgba(14, 12, 30, 0.94));
+  border: 1px solid rgba(214, 176, 96, 0.6);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.4), 0 6px 18px rgba(0, 0, 0, 0.45), 0 0 16px rgba(94, 224, 255, 0.12);
+  text-shadow: 0 1px 2px #000;
+}

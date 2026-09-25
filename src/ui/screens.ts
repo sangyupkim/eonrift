@@ -1734,7 +1734,7 @@ export class Screens {
       'shop',
       `<div class="panel wide tall">
          <button class="close">${ICONS.close}</button>
-         <h2>상인 무트의 가게 <small class="gold">${p.data.gold} G</small></h2>
+         <h2>상인 무트의 가게 <small class="gold">${p.data.gold.toLocaleString()} G</small></h2>
          <div class="tabs"><button data-tab="buy" class="${tab === 'buy' ? 'on' : ''}">사기</button><button data-tab="sell" class="${tab === 'sell' ? 'on' : ''}">팔기</button></div>
          ${toast ? `<div class="notice">${toast}</div>` : ''}
          ${body}
@@ -1819,7 +1819,7 @@ export class Screens {
       'blueprints',
       `<div class="panel wide tall">
          <button class="close">${ICONS.close}</button>
-         <h2>세라의 도면 <small class="gold">${p.data.gold} G</small></h2>
+         <h2>세라의 도면 <small class="gold">${p.data.gold.toLocaleString()} G</small></h2>
          ${message ? `<div class="notice">${message}</div>` : ''}
          <div class="scroll">
          <p class="notice">도면 없이 바로 지을 수 있는 기본 건물: 마력 발전기 · 마력선 · 레일 · 보관상자 · 제작대 · <b>마력 치유석(HP·MP 회복)</b> · 제련로 — 차원집의 망치 버튼(건설 모드)에서 고르세요.</p>
@@ -1902,7 +1902,7 @@ export class Screens {
       'forge',
       `<div class="panel wide tall">
          <button class="close">${ICONS.close}</button>
-         <h2>대장장이 고른의 대장간 <small class="gold">${p.data.gold} G</small></h2>
+         <h2>대장장이 고른의 대장간 <small class="gold">${p.data.gold.toLocaleString()} G</small></h2>
          ${message ? `<div class="notice">${message}</div>` : ''}
          <div class="split"><ul class="list pick scroll">${toolRows}${list || '<li class="empty">장비 없음</li>'}</ul><div class="detail">${detail}</div></div>
        </div>`,
@@ -2039,7 +2039,7 @@ export class Screens {
       'skills',
       `<div class="panel wide tall">
          <button class="close">${ICONS.close}</button>
-         <h2>교관 카엘의 훈련장 <small>${cls.name} · <span class="gold">${p.data.gold} G</span></small></h2>
+         <h2>교관 카엘의 훈련장 <small>${cls.name} · <span class="gold">${p.data.gold.toLocaleString()} G</span></small></h2>
          ${message ? `<div class="notice">${message}</div>` : ''}
          <p class="hint">스킬은 직업마다 따로 배웁니다. 강화할 때마다 공격 스킬은 위력 +15%, 방어·보조 스킬은 지속 시간이 늘고, 재사용 대기 -6% (최대 Lv.${MAX_SKILL_LEVEL}). 상위 스킬은 판·마력 금속이 필요합니다. 배운 스킬은 캐릭터 → 스킬에서 퀵슬롯에 놓으세요.</p>
          <ul class="list scroll">${rows}
@@ -2319,7 +2319,7 @@ export class Screens {
       'workbench',
       `<div class="panel wide tall">
          <button class="close">${ICONS.close}</button>
-         <h2>제작대 Lv.${lv} <small class="gold">${p.data.gold} G</small> <button class="tool-sm rot" data-rotate>↻ 방향 돌리기</button></h2>
+         <h2>제작대 Lv.${lv} <small class="gold">${p.data.gold.toLocaleString()} G</small> <button class="tool-sm rot" data-rotate>↻ 방향 돌리기</button></h2>
          ${jobHtml}${outHtml}
          ${message ? `<div class="notice">${message}</div>` : ''}
          <div class="tabs">
