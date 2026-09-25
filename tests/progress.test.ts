@@ -1,3 +1,4 @@
+import { MAIN_QUESTS } from '../src/data/quests';
 import { describe, expect, it } from 'vitest';
 import { expToNext, POINTS_PER_LEVEL } from '../src/data/classes';
 import { enhanceCost, equipStats } from '../src/data/equipment';
@@ -5,7 +6,8 @@ import { QUEST_BY_ID } from '../src/data/quests';
 import { Bag } from '../src/game/Bag';
 import { newSave, Progress, stageIndex, stageOf } from '../src/game/Progress';
 import { Quests } from '../src/game/Quests';
-import { objective, resetForNewCycle, scriptFor } from '../src/game/Story';
+import { objective, scriptFor } from '../src/game/Story';
+import { parseSave } from '../src/game/Progress';
 
 const questsOf = (p: Progress) =>
   new Quests(p.data.quests, {
@@ -118,7 +120,7 @@ describe('Story', () => {
     expect(scriptFor('chief', p)).toBe('ch2');
   });
 
-  it('차원석 7개와 공명 장치가 있으면 마지막 선택이 열리고, 회차를 넘기면 이야기 플래그가 초기화된다', () => {
+  it('차원석 7개와 공명 장치가 있으면 마지막 선택이 열리고, 엔딩 뒤에는 차원의 끝으로 안내한다', () => {
     const p = new Progress(newSave());
     for (const f of ['intro', 'home', 'smith3', 'resonatorHint', 'bp_crusher']) p.setFlag(f);
     p.data.dimStones = [1, 2, 3, 4, 5, 6, 7];
@@ -126,10 +128,21 @@ describe('Story', () => {
     p.unlockClass('archer');
     p.add('resonator', 1);
     expect(scriptFor('chief', p)).toBe('final');
-    resetForNewCycle(p);
-    expect(p.flag('smith3')).toBe(0);
-    expect(p.flag('home')).toBe(1);
-    expect(p.flag('bp_crusher')).toBe(1);
+    p.setFlag('endgame');
+    expect(scriptFor('chief', p)).not.toBe('final');
+    const q = questsOf(p);
+    for (const m of MAIN_QUESTS) q.finish(m);
+    expect(objective(p, q)).toContain('차원의 끝');
+  });
+
+  it('회차가 없어졌다: 2회차 저장은 모든 스테이지·차원석을 되찾고 차원의 끝이 열린다', () => {
+    const old = { ...newSave(), ngPlus: 1, cleared: 3, dimStones: [1] } as ReturnType<typeof newSave>;
+    const d = parseSave(JSON.stringify(old))!;
+    expect(d.ngPlus).toBeUndefined();
+    expect(d.flags.endgame).toBe(1);
+    expect(d.cleared).toBe(70);
+    expect(d.dimStones).toHaveLength(7);
+    expect(d.end?.towerBest).toBe(0);
   });
 });
 

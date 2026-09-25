@@ -23,6 +23,8 @@ import type { CircleObstacle } from '../../dungeon/collision';
 import type { DungeonData } from '../../dungeon/generator';
 import { buildDecorGeometry, buildNodeGeometry, buildPortalFrame } from '../../models/props';
 import { merge } from '../../models/util';
+import { AFFIXES, type AffixId } from '../../data/endgame';
+import type { MonsterMods } from '../../data/monsters';
 import { Monster, type MonsterWorld, type ProjectileSpec } from '../Monster';
 import { Projectiles, type Projectile, type ProjectileOptions } from '../Projectiles';
 import { Level } from './Level';
@@ -57,6 +59,11 @@ export interface Drop {
   count: number;
 }
 
+/** 던전 한 판의 조정: 몬스터 능력치 배율과 균열 변이 */
+export interface DungeonMods extends MonsterMods {
+  affixes?: AffixId[];
+}
+
 export interface DungeonHooks {
   player: () => { x: number; z: number };
   cameraQuat: () => Quaternion;
@@ -86,7 +93,7 @@ export class DungeonScene extends Level {
 
   constructor(
     readonly grid: DungeonData,
-    ngPlus: number,
+    mods: DungeonMods,
     private hooks: DungeonHooks,
   ) {
     super();
@@ -123,7 +130,7 @@ export class DungeonScene extends Level {
       killPlayer: () => hooks.killPlayer(),
     };
 
-    this.ngPlus = ngPlus;
+    this.mods = mods;
     // 몬스터 배치 (방마다 정해진 위치).
     // 방마다 절반쯤은 한 세력(언데드·오크·다크엘프…)이 차지하고, 떼로 다니는 종족은 무리로 나온다
     this.pool = stagePool(grid.tier, grid.stage, () => this.rng.next());
@@ -175,7 +182,10 @@ export class DungeonScene extends Level {
     }
   }
 
-  private ngPlus = 0;
+  /** 엔드 콘텐츠의 능력치 조정과 균열 변이 */
+  readonly mods: DungeonMods = {};
+  private exploded = new WeakSet<Monster>();
+  private frostT = 8;
   /** 이번 방에 나오는 종족 몇 가지 */
   private pool: [string, number][] = [];
 
@@ -201,7 +211,7 @@ export class DungeonScene extends Level {
   }
 
   spawnMonster(species: SpeciesDef, kind: Monster['kind'], x: number, z: number, room: number, aggro: boolean): Monster {
-    const m = new Monster(species, kind, this.grid.tier, this.grid.stage, this.ngPlus, x, z, room);
+    const m = new Monster(species, kind, this.grid.tier, this.grid.stage, this.mods, x, z, room);
     m.aggro = aggro;
     m.addTo(this.scene);
     this.monsters.push(m);
@@ -215,6 +225,29 @@ export class DungeonScene extends Level {
   private addHazard(x: number, z: number, r: number, duration: number, dps: number, color: number, debuff?: DebuffSpec): void {
     this.hazards.push({ x, z, r, left: duration, tick: 0.3, dps, debuff });
     this.effects.zone(x, z, r, color, duration);
+  }
+
+  /** 균열 변이: 불안정(쓰러진 자리 폭발), 서리 바닥(발밑에 둔화 서리) */
+  private updateAffixes(dt: number, focus: { x: number; z: number }): void {
+    const aff = this.mods.affixes;
+    if (!aff?.length) return;
+    if (aff.includes('volatile')) {
+      for (const m of this.monsters) {
+        if (m.alive || this.exploded.has(m)) continue;
+        this.exploded.add(m);
+        const r = m.kind === 'normal' ? 2 : 2.8;
+        // 잠깐 뒤에 터진다: 장판이 보이는 동안 벗어나면 된다
+        this.addHazard(m.x, m.z, r, 1.2, m.atk * 0.9, AFFIXES.volatile.color);
+      }
+    }
+    if (aff.includes('frost') && this.monsters.some((m) => m.alive && m.aggro)) {
+      this.frostT -= dt;
+      if (this.frostT <= 0) {
+        this.frostT = 8;
+        const atk = Math.max(1, ...this.monsters.filter((m) => m.alive).map((m) => m.atk));
+        this.addHazard(focus.x, focus.z, 2.4, 4, atk * 0.15, AFFIXES.frost.color, { id: 'slow', chance: 1, duration: 2 });
+      }
+    }
   }
 
   private updateHazards(dt: number): void {
@@ -369,6 +402,7 @@ export class DungeonScene extends Level {
       }
     }
 
+    this.updateAffixes(dt, focus);
     this.updateHazards(dt);
     this.projectiles.update(dt, {
       grid: this.grid,

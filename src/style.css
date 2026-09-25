@@ -2698,3 +2698,72 @@ img.mico-inline {
   margin-top: 6px;
   padding-top: 10px;
 }
+
+/* 차원의 끝 (엔드 콘텐츠) */
+.end-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin: 6px 0;
+  padding: 8px 12px;
+  border: 1px solid rgba(94, 240, 255, 0.55);
+  border-radius: 10px;
+  background: linear-gradient(90deg, rgba(94, 240, 255, 0.18), rgba(122, 108, 255, 0.18));
+  color: #dffcff;
+  font: inherit;
+  cursor: pointer;
+}
+.end-banner small { opacity: 0.75; }
+.panel .scroll { overflow-y: auto; max-height: calc(100% - 60px); }
+.end-card {
+  border: 1px solid var(--panel-line);
+  border-radius: 10px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.end-card h3 { margin: 0 0 4px; font-size: 1rem; }
+.end-card h3 small { font-weight: normal; opacity: 0.75; font-size: 0.8rem; margin-left: 6px; }
+.end-card .hint, .end-card .dim { margin: 2px 0 6px; font-size: 0.78rem; }
+.menu.row { display: flex; flex-wrap: wrap; flex-direction: row; gap: 6px; align-items: center; }
+.menu.row button { width: auto; flex: 0 0 auto; }
+.stepper b { min-width: 60px; text-align: center; }
+.rush-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.rush-btn {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--panel-line);
+  background: rgba(255, 255, 255, 0.05);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.rush-btn small { font-size: 0.72rem; }
+.rush-btn.locked { opacity: 0.45; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+.chip {
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--c, var(--panel-line));
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+.chip.on { background: var(--c, var(--accent)); color: #10101e; font-weight: bold; }
+.chip:disabled { opacity: 0.35; }
+.affix { font-weight: bold; }
+.eng-line { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; margin: 2px 0; }
+.eng-line .stage { min-width: 30px; opacity: 0.7; }
+.eng-line.empty { opacity: 0.5; }
+@media (max-width: 560px) {
+  .rush-row { grid-template-columns: 1fr; }
+}
+.eng { color: #7ff4ff; }
+.food-row { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; } .food-row button { flex: 1 1 45%; font-size: 0.8rem; }

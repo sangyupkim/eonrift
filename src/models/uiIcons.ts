@@ -25,7 +25,9 @@ export type UiIcon =
   | 'speaker'
   | 'disk'
   | 'shield'
-  | 'skull';
+  | 'skull'
+  | 'tower'
+  | 'anvil';
 
 const WOOD = 0x9a6a3c;
 const WOOD_D = 0x6a4424;
@@ -232,6 +234,24 @@ export function buildUiIcon(name: UiIcon): BufferGeometry {
         part(new SphereGeometry(0.09, 8, 6), 0x2a1a2a, { pos: [-0.14, 0.06, 0.3] }),
         part(new SphereGeometry(0.09, 8, 6), 0x2a1a2a, { pos: [0.14, 0.06, 0.3] }),
         part(new ConeGeometry(0.05, 0.1, 3), 0x2a1a2a, { pos: [0, -0.08, 0.33], rot: [0, 0, Math.PI] }),
+      ];
+      break;
+    case 'tower': // 무한의 탑
+      g = [
+        part(new CylinderGeometry(0.32, 0.4, 0.4, 8), 0x7a6cff, { pos: [0, -0.4, 0] }),
+        part(new CylinderGeometry(0.26, 0.32, 0.36, 8), 0x8a7cff, { pos: [0, -0.02, 0] }),
+        part(new CylinderGeometry(0.2, 0.26, 0.32, 8), 0x9a8cff, { pos: [0, 0.32, 0] }),
+        part(new ConeGeometry(0.26, 0.32, 8), 0x5ef0ff, { pos: [0, 0.64, 0] }),
+        part(new BoxGeometry(0.1, 0.14, 0.05), 0x2a1a4a, { pos: [0, -0.4, 0.38] }),
+      ];
+      break;
+    case 'anvil': // 모루 (각인)
+      g = [
+        part(new BoxGeometry(0.8, 0.2, 0.36), STEEL_D, { pos: [0, 0.1, 0] }),
+        part(new ConeGeometry(0.16, 0.34, 6), STEEL_D, { pos: [0.52, 0.1, 0], rot: [0, 0, -Math.PI / 2] }),
+        part(new BoxGeometry(0.3, 0.3, 0.26), STEEL_D, { pos: [0, -0.15, 0] }),
+        part(new BoxGeometry(0.56, 0.12, 0.4), WOOD_D, { pos: [0, -0.36, 0] }),
+        part(new OctahedronGeometry(0.1), 0x5ef0ff, { pos: [-0.1, 0.32, 0.05] }),
       ];
       break;
     case 'warning': // 경고 표지

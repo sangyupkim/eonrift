@@ -75,16 +75,27 @@ export const MIDBOSS_NAMES = [
   '틈새의 문지기',
 ];
 
-/** 단계·방·회차에 따른 몬스터 능력치 배율. 같은 단계 안에서도 방이 깊을수록 강해진다 */
-export function tierScale(tier: number, stage: number, ngPlus: number): { hp: number; atk: number; def: number } {
-  const ng = 1 + ngPlus * 0.6;
+/** 단계·방에 따른 몬스터 능력치 배율. 같은 단계 안에서도 방이 깊을수록 강해진다 */
+export function tierScale(tier: number, stage: number): { hp: number; atk: number; def: number } {
   // 방이 깊을수록 체력 18%·공격 10%씩, 단계가 오를 때마다 체력 ×2.1 · 공격 ×1.8 · 방어 ×1.3
   const deep = 1 + (stage - 1) * 0.18;
   return {
-    hp: Math.pow(2.1, tier - 1) * deep * ng,
-    atk: Math.pow(1.8, tier - 1) * (1 + (stage - 1) * 0.1) * ng,
+    hp: Math.pow(2.1, tier - 1) * deep,
+    atk: Math.pow(1.8, tier - 1) * (1 + (stage - 1) * 0.1),
     def: Math.pow(1.3, tier - 1) * (1 + (stage - 1) * 0.05),
   };
+}
+
+/**
+ * 엔드 콘텐츠(무한의 탑·보스 러시·심연 균열)용 몬스터 능력치 조정.
+ * statTier/statStage: 능력치를 이 단계·방 기준으로 (모습·패턴은 원래 단계 그대로), hp/atk/speed: 추가 배율
+ */
+export interface MonsterMods {
+  statTier?: number;
+  statStage?: number;
+  hp?: number;
+  atk?: number;
+  speed?: number;
 }
 
 /** 보스 제한 시간 (초) */

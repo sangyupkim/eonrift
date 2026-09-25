@@ -41,8 +41,15 @@ const defs: ItemDef[] = [
   { id: 'essence_high', name: '상급 마력 정수', color: 0xd76fff, kind: 'essence', value: 30, description: '6단계 몬스터에게서 나온다. 발전기에서 10분 동안 타고, 생산 속도 ×1.3.' },
   { id: 'essence_supreme', name: '최상급 마력 정수', color: 0xffc84a, kind: 'essence', value: 70, description: '7단계 몬스터에게서 나온다. 발전기에서 20분 동안 타고, 생산 속도 ×1.5.' },
   { id: 'essence_dim', name: '차원 마력 정수', color: 0x5ef0ff, kind: 'essence', value: 160, description: '파수꾼·수호자(5단계 이상)와 7단계 정예가 가끔 떨어뜨린다. 발전기에서 40분 동안 타고, 생산 속도 ×1.8.' },
-  // 궁극기 강화
-  { id: 'dim_shard', name: '차원 파편', color: 0x5ef0ff, kind: 'material', value: 500, description: '파수꾼·수호자가 떨어뜨리는 차원의 조각. 교관 카엘에게 가져가면 궁극기를 강화할 수 있다.' },
+  // 최상위 파밍 재료 (궁극기 강화 · 각인)
+  { id: 'dim_shard', name: '차원 파편', color: 0x5ef0ff, kind: 'material', value: 500, description: '파수꾼·수호자, 무한의 탑·보스 러시·심연 균열에서 얻는 최상위 재료. 궁극기 강화(교관 카엘)와 장비 각인(대장장이 고른)에 쓴다.' },
+  // 엔드 콘텐츠 입장 재료
+  { id: 'dim_alloy', name: '차원 합금', color: 0x9ab8ff, kind: 'processed', value: 400, description: '구리·철·황금·다이아판을 녹여 합친 합금. 심연 균열 입장(1개)과 보스 러시 추가 도전(2개)에 쓴다. 차원집 제작대에서 만든다.' },
+  // 음식 (연금 솥에서 판자로 만든다. 먹으면 30분 동안 효과)
+  { id: 'food_atk', name: '불꽃 꼬치', color: 0xff7a3a, kind: 'consumable', value: 120, description: '먹으면 30분 동안 공격력 +10%. 연금 솥: 불꽃나무 판자 2 + 적송 판자 2 + 중급 정수 1.' },
+  { id: 'food_guard', name: '서리 수프', color: 0x9fe3ff, kind: 'consumable', value: 60, description: '먹으면 30분 동안 방어력 +12%, 최대 체력 +8%. 연금 솥: 서리나무 판자 2 + 참나무 판자 3 + 하급 정수 2.' },
+  { id: 'food_luck', name: '수정 꿀차', color: 0xd0a8ff, kind: 'consumable', value: 80, description: '먹으면 30분 동안 골드 획득 +25%. 연금 솥: 수정나무 판자 2 + 참나무 판자 2 + 하급 정수 1.' },
+  { id: 'food_exp', name: '철목 스튜', color: 0xa0a0aa, kind: 'consumable', value: 100, description: '먹으면 30분 동안 경험치 +20%. 연금 솥: 철목 판자 2 + 적송 판자 2 + 중급 정수 1.' },
   // 가공품
   { id: 'copper_ingot', name: '구리 주괴', color: 0xe89a60, kind: 'processed', value: 8, description: '제작대에서 판자와 합성해 판을 만든다. 장비·도구 제작 재료.' },
   { id: 'iron_ingot', name: '철 주괴', color: 0xb5bcc8, kind: 'processed', value: 12, description: '제작대에서 판자와 합성해 판을 만든다. 장비·도구 제작 재료.' },

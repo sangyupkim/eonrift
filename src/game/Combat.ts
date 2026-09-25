@@ -1,3 +1,4 @@
+import type { BonusKey } from '../data/bonus';
 import { ultCooldown, ultPower, ULT_COOLDOWN, ULTIMATES, type ClassId } from '../data/classes';
 import type { Monster } from './Monster';
 import type { Player } from './Player';
@@ -18,6 +19,8 @@ export interface CombatHost {
   sfx: (name: string) => void;
   /** 스킬 레벨 (0 = 배우지 않음) */
   skillLevel: (index: number) => number;
+  /** 각인·칭호 등 보너스 (재사용 대기 감소, 궁극기 위력) */
+  bonus: (k: BonusKey) => number;
   /** true: 가까운 적에게 자동 조준 · false: 바라보는 방향으로 */
   autoAim: () => boolean;
 }
@@ -81,7 +84,7 @@ export class Combat {
     if (player.mp < ult.mp) return 'MP가 부족합니다';
     player.mp -= ult.mp;
     this.ultCooldownMax = this.ultCooldown = ultCooldown(level);
-    const pow = ultPower(level);
+    const pow = ultPower(level) * (1 + this.host.bonus('ult'));
     const p = player.position;
     const target = this.findTarget(14);
     const aim = this.angleTo(target) ?? player.facing;
@@ -365,7 +368,7 @@ export class Combat {
     if (!player.canAct && player.state !== 'dash') return null;
     if (player.mp < skill.mp) return 'MP가 부족합니다';
     player.mp -= skill.mp;
-    this.cooldowns[index] = skill.cooldown * (1 - (lv - 1) * 0.06);
+    this.cooldowns[index] = skill.cooldown * (1 - (lv - 1) * 0.06) * (1 - this.host.bonus('cdr'));
     const p = player.position;
     // 설정에서 '바라보는 방향'을 고르면 스킬은 자동 조준 없이 캐릭터가 보는 쪽으로 나간다
     const target = this.host.autoAim() ? this.findTarget(12) : null;

@@ -1,9 +1,11 @@
 import { CLASSES, CLASS_ORDER, ULTIMATES, expToNext, MAX_LEVEL, POINTS_PER_LEVEL, STAT_KEYS, type BaseStats, type ClassId, type StatKey } from '../data/classes';
-import { equipStats, type Equip, type EquipSlot } from '../data/equipment';
+import { durability, equipStats, type Equip, type EquipSlot } from '../data/equipment';
 import { newTool, type ToolKind, type ToolState } from '../data/tools';
 import { FACTORY_SIZES, RECIPES, RECIPE_RENAMES } from '../data/factory';
 import { ITEM_RENAMES } from '../data/items';
 import type { BuildingState, FactoryState } from '../factory/sim';
+import { newEndgame, type EndgameState } from '../data/endgame';
+import { addBonus, BONUS_CAP, FOODS, TITLES, TRANSCEND_STATS, transcendExp, type Bonus, type BonusKey } from '../data/bonus';
 import { BESTIARY, bestiaryId, COLLECTION_MILESTONES, killMilestones, RESEARCH_BONUS } from '../data/bestiary';
 import { Bag, type Slot } from './Bag';
 import { BAG_SLOTS } from '../config';
@@ -25,6 +27,10 @@ export interface ClassState {
   ult?: number;
   /** 궁극기 레벨 [0번, 1번] (없으면 1) */
   ultLv?: number[];
+  /** 초월 레벨 (99레벨 뒤), 모은 경험치, 찍은 초월 포인트 */
+  tlv?: number;
+  texp?: number;
+  tpts?: Partial<Record<BonusKey, number>>;
 }
 
 export interface RunCheckpoint {
@@ -61,7 +67,14 @@ export interface SaveData {
   cleared: number;
   quests: QuestState;
   flags: Record<string, number>;
-  ngPlus: number;
+  /** (없어진 회차 시스템. 예전 저장을 옮길 때만 읽는다) */
+  ngPlus?: number;
+  /** 엔딩 이후 콘텐츠 기록 */
+  end?: EndgameState;
+  /** 얻은 칭호 */
+  titles?: string[];
+  /** 먹은 음식과 효과가 끝나는 시각 */
+  food?: { id: string; until: number };
   factory: FactoryState;
   lastSaved: number;
   /** 지금 HP (마을·차원집에 가도 회복되지 않는다). 없으면 가득 */
@@ -107,7 +120,7 @@ export function newSave(): SaveData {
     cleared: 0,
     quests: newQuestState(),
     flags: {},
-    ngPlus: 0,
+    end: newEndgame(),
     factory: { sizeLevel: 0, buildings: [] },
     lastSaved: Date.now(),
     settings: { shadows: true, sound: true, music: 0.7, sfx: 0.8 },
@@ -147,9 +160,7 @@ export function loadSave(): SaveData | null {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;
-    const data = JSON.parse(raw) as SaveData & { maxTier?: number };
-    if (data.version !== 1) return null;
-    return migrate({ ...newSave(), ...data });
+    return parseSave(raw);
   } catch {
     return null;
   }
@@ -187,6 +198,15 @@ function migrate(d: SaveData & { maxTier?: number }): SaveData {
   if (d.cleared === undefined || d.cleared === null) d.cleared = Math.max(0, ((d.maxTier ?? 1) - 1) * 10);
   delete d.maxTier;
   d.quests ??= newQuestState();
+  // 회차 시스템이 없어졌다: 엔딩을 본 저장(2회차 이상 포함)은 모든 스테이지와 차원석을 되찾고 '차원의 끝'이 열린다
+  if ((d.ngPlus ?? 0) > 0 || d.flags.endingA || d.flags.endingB) {
+    d.flags.endgame = 1;
+    d.cleared = Math.max(d.cleared, 70);
+    d.dimStones = [1, 2, 3, 4, 5, 6, 7];
+    for (const f of ['smith3', 'resonatorHint', 'stoneTalk3', 'stoneTalk4', 'stoneTalk5', 'stoneTalk6', 'stoneTalk7']) d.flags[f] = 1;
+  }
+  delete d.ngPlus;
+  d.end = { ...newEndgame(), ...(d.end ?? {}) };
   // 중간보스 퀘스트가 생기기 전에 이미 전설 퀘스트를 받았거나 끝낸 저장은 건너뛴다
   if ((d.quests.done.includes('m5_legend') || d.quests.active.m5_legend) && !d.quests.done.includes('m5_mid')) d.quests.done.push('m5_mid');
   for (const q of d.quests.daily.list) q.accepted ??= q.progress > 0;
@@ -359,9 +379,38 @@ export class Progress {
     const rb = 1 + (this.data.research ?? 0) * RESEARCH_BONUS;
     s.atk *= rb;
     s.maxHp = Math.round(s.maxHp * rb);
+    // 각인 · 칭호 · 초월 · 음식
+    const bo = this.bonuses(clsId);
+    s.atk *= 1 + (bo.atk ?? 0);
+    s.maxHp = Math.round(s.maxHp * (1 + (bo.hp ?? 0)));
+    s.maxMp = Math.round(s.maxMp * (1 + (bo.mp ?? 0)));
+    s.def = Math.round(s.def * (1 + (bo.def ?? 0)));
+    s.crit += bo.crit ?? 0;
+    s.speed *= 1 + (bo.speed ?? 0);
     s.atk = Math.round(s.atk);
     s.crit = Math.round(s.crit * 10) / 10;
     return s;
+  }
+
+  /** 각인·칭호·초월·음식 보너스 합계 (한도 적용) */
+  bonuses(clsId: ClassId = this.data.currentClass): Bonus {
+    const c = this.data.classes[clsId];
+    const b: Bonus = {};
+    for (const e of Object.values(c.equipment)) if (e && durability(e) > 0) for (const l of e.eng ?? []) addBonus(b, { [l.k]: l.v });
+    for (const t of TITLES) if (this.data.titles?.includes(t.id)) addBonus(b, t.bonus);
+    for (const ts of TRANSCEND_STATS) addBonus(b, { [ts.key]: ts.per }, c.tpts?.[ts.key] ?? 0);
+    const food = this.data.food;
+    if (food && food.until > Date.now() && FOODS[food.id]) addBonus(b, FOODS[food.id]);
+    for (const [k, cap] of Object.entries(BONUS_CAP) as [BonusKey, number][]) if ((b[k] ?? 0) > cap) b[k] = cap;
+    return b;
+  }
+  bonus(k: BonusKey): number {
+    return this.bonuses()[k] ?? 0;
+  }
+  /** 남은 초월 포인트 */
+  transcendPoints(clsId: ClassId = this.data.currentClass): number {
+    const c = this.data.classes[clsId];
+    return (c.tlv ?? 0) - Object.values(c.tpts ?? {}).reduce((a, n) => a + (n ?? 0), 0);
   }
 
   /** 열린 궁극기 번호들 (수호자의 차원석으로 열린다) */
@@ -422,8 +471,24 @@ export class Progress {
   }
 
   /** 경험치를 더하고 오른 레벨 수를 돌려준다 */
+  /** 마지막 addExp로 오른 초월 레벨 수 */
+  transcendUps = 0;
+
   addExp(n: number): number {
     const c = this.cls;
+    n = Math.round(n * (1 + this.bonus('exp')));
+    this.transcendUps = 0;
+    // 99레벨 뒤: 경험치가 초월 레벨로 쌓인다 (레벨마다 초월 포인트 1)
+    if (c.level >= MAX_LEVEL) {
+      c.texp = (c.texp ?? 0) + n;
+      c.tlv ??= 0;
+      while (c.texp >= transcendExp(c.tlv)) {
+        c.texp -= transcendExp(c.tlv);
+        c.tlv++;
+        this.transcendUps++;
+      }
+      return 0;
+    }
     c.exp += n;
     let ups = 0;
     while (c.level < MAX_LEVEL && c.exp >= expToNext(c.level)) {

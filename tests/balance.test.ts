@@ -10,7 +10,7 @@ function bossTime(lv: number, wTier: number, plus: number, tier: number, stage =
   c.alloc.str = (lv - 1) * 3;
   c.equipment.weapon = { uid: 'w', slot: 'weapon', cls: 'sword', tier: wTier, grade: 0, plus };
   const atk = p.stats().atk;
-  const sc = tierScale(tier, stage, 0);
+  const sc = tierScale(tier, stage);
   const hp = 220 * sc.hp * (stage === 10 ? 39 : 21);
   const hit = atk * (40 / (40 + 6 * sc.def));
   // 콤보 0.36초, 회피 등으로 공격 가동률 55%, 치명·스킬 보정 1.25

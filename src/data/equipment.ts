@@ -1,6 +1,7 @@
 import type { Rng } from '../core/rng';
 import { TIER_MANA_PLATE, TIER_PLATE } from './items';
 import { CLASSES, type ClassId } from './classes';
+import type { EngraveLine } from './bonus';
 
 export type EquipSlot = 'weapon' | 'helmet' | 'armor' | 'pants' | 'boots' | 'ring' | 'necklace';
 
@@ -25,6 +26,8 @@ export interface Equip {
   plus: number;
   /** 내구도 (없으면 가득). 0이 되면 망가져서 능력치가 사라진다 */
   dur?: number;
+  /** 각인 (1단~5단, 차례로 새긴다) */
+  eng?: EngraveLine[];
 }
 
 export const GRADES = [

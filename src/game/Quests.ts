@@ -172,7 +172,7 @@ export class Quests {
   }
 
   /** 날짜가 바뀌면 촌장의 일일 퀘스트 3개를 새로 뽑는다 */
-  refreshDaily(maxTier: number, hasHome: boolean): boolean {
+  refreshDaily(maxTier: number, hasHome: boolean, endgame = false): boolean {
     const key = todayKey();
     if (this.state.daily.date === key) return false;
     const rng = new Rng(hashString(key) ^ 0x9e3779b9);
@@ -189,7 +189,16 @@ export class Quests {
     ];
     if (hasHome) pool.push(() => ({ id: 'craft', title: '공장 가동', objective: { type: 'craft', item: 'copper_ingot', count: 5 }, reward: { gold: 200 * t, exp: 100 * t * t, items: { essence_low: 5 } }, progress: 0, claimed: false }));
     rng.shuffle(pool);
-    this.state.daily = { date: key, list: pool.slice(0, 3).map((f, i) => ({ ...f(), id: `${key}-${i}` })) };
+    const list = pool.slice(0, 3).map((f) => f());
+    // 엔딩 뒤: 마을 납품 의뢰 2개가 더 붙는다 (구리~오리하르콘판 중 둘. 쌓인 하위 재료를 차원 파편으로)
+    if (endgame) {
+      const tiers = rng.shuffle([0, 1, 2, 3, 4, 5]).slice(0, 2);
+      for (const i of tiers) {
+        const count = 30 - i * 3;
+        list.push({ id: 'deliver', title: `${ITEMS[TIER_PLATE[i]].name} 납품`, objective: { type: 'deliver', item: TIER_PLATE[i], count }, reward: { gold: 1500 * (i + 1), items: { dim_shard: 1 + Math.floor(i / 3) } }, progress: 0, claimed: false });
+      }
+    }
+    this.state.daily = { date: key, list: list.map((d, i) => ({ ...d, id: `${key}-${i}` })) };
     return true;
   }
 }

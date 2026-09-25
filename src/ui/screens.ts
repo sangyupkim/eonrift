@@ -13,13 +13,16 @@ import { THEMES } from '../data/themes';
 import { canEnqueue, enqueueJob, WORKBENCH_OUT_MAX, WORKBENCH_QUEUE_MAX, BOX_CAPACITY, boxTotal, ESSENCES, MACHINE_TYPES, RECIPE_BY_ID, recipesFor, type BuildingState, type Factory, type WorkJob } from '../factory/sim';
 import type { Bag, Slot } from '../game/Bag';
 import { stageIndex, STORAGE_EXPAND_STEP, STORE_STACK, warehouseSlots, type Progress } from '../game/Progress';
-import { objectiveNeed, objectiveProgress, objectiveText, type Quests } from '../game/Quests';
+import { objectiveNeed, objectiveProgress, objectiveText, todayKey, type Quests } from '../game/Quests';
 import { ICONS, mico } from './icons';
 import { buildingThumb } from './thumbs';
 import { gearLook } from '../models/items';
 import { equipIconUrl, heroPortraitUrl, itemIconUrl, monsterIconUrl, skillIconUrl, toolIconUrl } from './itemIcons';
 import { BESTIARY, BESTIARY_BY_ID, COLLECTION_MILESTONES, killMilestones, milestoneReward, RESEARCH_BONUS, type BestiaryReward } from '../data/bestiary';
 import { DEBUFF_INFO, TRAIT_TEXT, type Faction } from '../data/species';
+import { AFFIXES, ALLOY, formatClock, riftAffixes, riftMult, riftReward, riftYield, RIFT_ALLOY, RIFT_TIME, rushReward, RUSH_DAILY, RUSH_DIFFS, RUSH_EXTRA_ALLOY, RUSH_ORDER, SHARD, towerBoss, towerDaily, towerFirstClear, towerMult, towerStartFloor, type RushDiff } from '../data/endgame';
+import { BONUS_NAMES, bonusText, TRANSCEND_STATS, transcendExp, engraveCost, engraveRange, ENGRAVE_STAGES, ENGRAVE_STAGE_NAMES, rollEngrave, TITLES, type BonusKey } from '../data/bonus';
+import { Rng } from '../core/rng';
 import type { Archetype } from '../data/monsters';
 
 const FACTION_NAME: Record<Faction, string> = { beast: '야수', undead: '언데드', orc: '오크족', elf: '다크엘프', construct: '구조물', elemental: '정령', void: '공허', demon: '악마' };
@@ -124,6 +127,8 @@ export function equipLine(e: Equip): string {
   if (s.hp) parts.push(`HP ${s.hp}`);
   if (s.mp) parts.push(`MP ${s.mp}`);
   if (s.crit) parts.push(`치명 ${s.crit}%`);
+  // 각인 (망가진 장비는 빈 문자열 그대로 두어 '망가짐'으로 보이게)
+  if (parts.length && e.eng?.length) parts.push(`<span class="eng">각인 ${e.eng.map((l) => bonusText(l.k, l.v)).join(', ')}</span>`);
   return parts.join(' · ');
 }
 
@@ -259,7 +264,7 @@ export class Screens {
   }
 
   // ---------------- 차원문 광장: 단계 → 방 선택 ----------------
-  stageSelect(p: Progress, tier: number, onPick: (tier: number, stage: number) => void, onClose: () => void, onFarm?: (tier: number, kind: 'wood' | 'ore') => void): void {
+  stageSelect(p: Progress, tier: number, onPick: (tier: number, stage: number) => void, onClose: () => void, onFarm?: (tier: number, kind: 'wood' | 'ore') => void, onEnd?: () => void): void {
     const maxTier = p.maxTier;
     const tiers = THEMES.map((t) => {
       const locked = t.tier > maxTier;
@@ -293,17 +298,104 @@ export class Screens {
       'select',
       `<div class="panel wide">
          <button class="close">${ICONS.close}</button>
-         <h2>차원문 광장 <small>${theme.name}${p.data.ngPlus ? ` · ${p.data.ngPlus + 1}회차` : ''}</small></h2>
-         <div class="tier-tabs">${tiers}</div>
+         <h2>차원문 광장 <small>${theme.name}</small></h2>
+         <div class="tier-tabs">${tiers}${onEnd && p.flag('endgame') ? `<button class="tier-tab end-tab" data-end="1" style="--c:#5ef0ff"><span class="gate"></span><b>∞</b></button>` : ''}</div>
+         ${onEnd && p.flag('endgame') ? `<button class="end-banner" data-end="1">${SPK('sparkle', '✦')} <b>차원의 끝</b> <small>무한의 탑 · 보스 러시 · 심연 균열</small></button>` : ''}
          <p class="hint">5번째 방 파수꾼(1시간마다 재등장) · 10번째 방 차원석 수호자(4시간마다). 대기 중엔 정예가 지킵니다.</p>
          <div class="stage-grid">${stages}</div>
          ${farmRow}
        </div>`,
       onClose,
     );
-    this.on(s, '.tier-tab:not(.locked)', (b) => this.stageSelect(p, Number(b.dataset.tier), onPick, onClose, onFarm));
+    this.on(s, '.tier-tab:not(.locked):not(.end-tab)', (b) => this.stageSelect(p, Number(b.dataset.tier), onPick, onClose, onFarm, onEnd));
+    this.on(s, '[data-end]', () => onEnd?.());
     this.on(s, '[data-stage]', (b) => onPick(tier, Number(b.dataset.stage)));
     this.on(s, '[data-farm]', (b) => onFarm?.(tier, b.dataset.farm as 'wood' | 'ore'));
+  }
+
+  // ---------------- 차원의 끝 (엔드 콘텐츠) ----------------
+  endgame(
+    p: Progress,
+    h: { tower: (floor: number) => void; towerDaily: () => void; rush: (diff: RushDiff) => void; rift: (tier: number, level: number) => void },
+    onClose: () => void,
+    message?: string,
+    sel?: { tier: number; level: number },
+  ): void {
+    const e = p.data.end!;
+    const today = todayKey();
+    const cur = { tier: sel?.tier ?? Math.min(7, p.maxTier), level: sel?.level ?? Math.max(1, e.riftBest + 1) };
+    const alloy = p.count(ALLOY);
+    const shardTxt = (n: number) => (n ? ` · ${inlineGem(SHARD)}차원 파편 ${n}` : '');
+    // 무한의 탑
+    const start = towerStartFloor(e.towerBest);
+    const next = e.towerBest + 1;
+    const daily = towerDaily(e.towerBest);
+    const dailyDone = e.towerDailyDate === today;
+    const tower = `<section class="end-card">
+        <h3>${SPK('tower', '▲')} 무한의 탑 <small>최고 ${e.towerBest}층</small></h3>
+        <p class="hint">층마다 방 몇 개를 정리하고 올라갑니다. 1~10층은 층마다 +5%, 11층부터는 10층마다 한 번에 +15% 벽이 생깁니다. 5층마다 파수꾼, 10층마다 수호자.</p>
+        <p class="dim">다음 도전 ${next}층: 몬스터 ×${towerMult(next).toFixed(2)}${towerBoss(next) ? ` · ${towerBoss(next)!.kind === 'boss' ? '수호자' : '파수꾼'}` : ''} · 첫 돌파 보상 ${towerFirstClear(next).gold} G${shardTxt(towerFirstClear(next).shards)}</p>
+        <div class="menu row">
+          <button class="primary" data-tower="${start}">${start}층부터 도전</button>
+          ${start > 1 ? `<button data-tower="1">1층부터</button>` : ''}
+          <button data-daily ${dailyDone || e.towerBest < 1 ? 'disabled' : ''}>${dailyDone ? '오늘 소탕 완료' : `소탕 보상 ${daily.gold} G${shardTxt(daily.shards)}`}</button>
+        </div>
+      </section>`;
+    // 보스 러시
+    const used = e.rushDate === today ? e.rushUsed : 0;
+    const rush = `<section class="end-card">
+        <h3>${SPK('skull', '☠')} 보스 러시 <small>오늘 무료 ${Math.max(0, RUSH_DAILY - used)}/${RUSH_DAILY}${used >= RUSH_DAILY ? ` · 추가 도전 ${inlineGem(ALLOY)}차원 합금 ${RUSH_EXTRA_ALLOY} (보유 ${alloy})` : ''}</small></h3>
+        <p class="hint">1단계 파수꾼부터 7단계 수호자까지 ${RUSH_ORDER.length}번 연속. 보스 사이에 체력 25%만 회복. 10분 안 S · 15분 A · 20분 B. 보상은 완주했을 때 한꺼번에.</p>
+        <div class="rush-row">${RUSH_DIFFS.map((d, i) => {
+          const locked = i > 0 && !e.rushGradeBest[i - 1];
+          const best = e.rushBest[i] ? `최고 ${formatClock(e.rushBest[i])} · ${e.rushGradeBest[i]}등급` : '기록 없음';
+          const r = rushReward(i as RushDiff, 'S');
+          return `<button class="rush-btn ${locked ? 'locked' : ''}" data-rush="${i}" ${locked ? 'disabled' : ''}><b>${d.name}</b><small>${locked ? `${RUSH_DIFFS[i - 1].name} 완주 후 열림` : d.desc}</small><small class="dim">${best} · S ${r.gold} G${shardTxt(r.shards)}</small></button>`;
+        }).join('')}</div>
+      </section>`;
+    // 심연 균열
+    const affixes = riftAffixes(cur.level, today);
+    const rr = riftReward(cur.level, true);
+    const maxLevel = e.riftBest + 1;
+    const tiers = THEMES.map((t) => `<button class="chip ${t.tier === cur.tier ? 'on' : ''}" data-rtier="${t.tier}" ${t.tier > p.maxTier ? 'disabled' : ''} style="--c:${hex(t.portalColor)}">${t.tier} ${t.name}</button>`).join('');
+    const rift = `<section class="end-card">
+        <h3>${SPK('portal', '◎')} 심연 균열 <small>최고 ${e.riftBest}단계</small></h3>
+        <p class="hint">원하는 맵(1~7단계)을 7단계보다 강한 난이도로 엽니다. 맵의 광맥·나무가 단계만큼 더 많이 나오고(+10%/단계), 좋은 장비 확률도 오릅니다. ${Math.floor(RIFT_TIME / 60)}분 안에 모두 쓰러뜨리면 다음 단계가 열립니다. 입장: ${inlineGem(ALLOY)}차원 합금 ${RIFT_ALLOY} (보유 ${alloy})</p>
+        <div class="chips">${tiers}</div>
+        <div class="menu row stepper">
+          <button data-rlv="-1" ${cur.level <= 1 ? 'disabled' : ''}>−</button>
+          <b>${cur.level}단계</b>
+          <button data-rlv="1" ${cur.level >= maxLevel ? 'disabled' : ''}>+</button>
+          <span class="dim">몬스터 ×${riftMult(cur.level).toFixed(2)} · 채집 ×${riftYield(cur.level).toFixed(1)} · 보상 ${rr.gold} G${shardTxt(rr.shards)}</span>
+        </div>
+        <p class="dim">오늘의 변이: ${affixes.length ? affixes.map((a) => `<span class="affix" style="color:${hex(AFFIXES[a].color)}">${AFFIXES[a].name}</span> (${AFFIXES[a].text})`).join(' · ') : '없음'}</p>
+        <div class="menu row"><button class="primary" data-rift ${alloy < RIFT_ALLOY ? 'disabled' : ''}>${cur.tier}단계 맵 · 균열 ${cur.level}단계 입장</button></div>
+      </section>`;
+    // 칭호
+    const titles = TITLES.map((t) => {
+      const got = p.data.titles?.includes(t.id);
+      return `<li class="${got ? '' : 'locked'}"><div><b>${got ? `「${t.name}」` : '???'}</b><small>${t.cond} · ${Object.entries(t.bonus).map(([k, v]) => bonusText(k as BonusKey, v!)).join(', ')}</small></div>${got ? '<span class="ok">획득</span>' : ''}</li>`;
+    }).join('');
+    const s = this.open(
+      'endgame',
+      `<div class="panel wide tall">
+         <button class="close">${ICONS.close}</button>
+         <h2>차원의 끝 <small>${inlineGem(SHARD)}차원 파편 ${p.count(SHARD)} · ${inlineGem(ALLOY)}차원 합금 ${alloy}</small></h2>
+         ${message ? `<div class="notice">${message}</div>` : ''}
+         <div class="scroll">
+           ${tower}${rush}${rift}
+           <section class="end-card"><h3>${SPK('sparkle', '✦')} 칭호 <small>${p.data.titles?.length ?? 0}/${TITLES.length} · 얻은 칭호의 보너스는 모두 적용</small></h3><ul class="list">${titles}</ul></section>
+         </div>
+       </div>`,
+      onClose,
+    );
+    const again = (m?: string, ns = cur) => this.endgame(p, h, onClose, m, ns);
+    this.on(s, '[data-tower]', (b) => h.tower(Number(b.dataset.tower)));
+    this.on(s, '[data-daily]', () => h.towerDaily());
+    this.on(s, '[data-rush]', (b) => h.rush(Number(b.dataset.rush) as RushDiff));
+    this.on(s, '[data-rtier]', (b) => again(message, { ...cur, tier: Number(b.dataset.rtier) }));
+    this.on(s, '[data-rlv]', (b) => again(message, { ...cur, level: Math.max(1, Math.min(maxLevel, cur.level + Number(b.dataset.rlv))) }));
+    this.on(s, '[data-rift]', () => h.rift(cur.tier, cur.level));
   }
 
   /** 워프 게이트: 다음 방으로 갈지, 마을로 갈지 */
@@ -345,6 +437,10 @@ export class Screens {
     onTitle: () => void;
     onSaveCode: () => void;
     onBestiary?: () => void;
+    /** 가진 음식 (먹으면 30분 버프) */
+    foods?: { id: string; count: number }[];
+    foodLeft?: string;
+    onEat?: (id: string) => void;
     onClose: () => void;
   }): void {
     const s = this.open(
@@ -363,6 +459,7 @@ export class Screens {
            <label class="toggle"><input type="checkbox" data-t="sound" ${opts.sound ? 'checked' : ''}/> 소리 켜기</label>
            <label class="volume">${SPK('music', '🎵')} 배경음 <input type="range" min="0" max="100" step="5" value="${Math.round(opts.music * 100)}" data-v="music"/><b data-vl="music">${Math.round(opts.music * 100)}</b></label>
            <label class="volume">${SPK('speaker', '🔊')} 효과음 <input type="range" min="0" max="100" step="5" value="${Math.round(opts.sfx * 100)}" data-v="sfx"/><b data-vl="sfx">${Math.round(opts.sfx * 100)}</b></label>
+           ${opts.foods?.length ? `<div class="food-row">${opts.foodLeft ? `<small class="dim">먹은 음식: ${opts.foodLeft}</small>` : ''}${opts.foods.map((f) => `<button data-eat="${f.id}">${inlineGem(f.id)}${ITEMS[f.id].name} 먹기 (${f.count})</button>`).join('')}</div>` : ''}
            ${opts.onBestiary ? `<button data-a="bestiary">${SPK('book', '📖')} 몬스터 도감</button>` : ''}
            <button data-a="savecode">${SPK('disk', '💾')} 저장 코드 만들기</button>
            <button data-a="title">타이틀로 (자동 저장)</button>
@@ -376,6 +473,7 @@ export class Screens {
     this.on(s, '[data-a="resume"]', () => this.close());
     this.on(s, '[data-a="bestiary"]', () => opts.onBestiary?.());
     this.on(s, '[data-a="stone"]', opts.onReturnStone);
+    this.on(s, '[data-eat]', (b) => opts.onEat?.(b.dataset.eat!));
     this.on(s, '[data-a="giveup"]', () => {
       if (confirm('포기하면 일반 가방의 아이템을 모두 잃습니다. 계속할까요?')) opts.onGiveUp();
     });
@@ -492,7 +590,8 @@ export class Screens {
         ['essence_high', '6챕터 몬스터'],
         ['essence_supreme', '7챕터 몬스터'],
         ['essence_dim', '5챕터 이상 파수꾼·수호자, 7챕터 정예 (드묾)'],
-        ['dim_shard', '모든 파수꾼(1개)·수호자(2~3개) 확정 → 교관 카엘에게서 궁극기 강화'],
+        ['dim_shard', '파수꾼(1개)·수호자(2~3개) 확정, 무한의 탑 첫 돌파·소탕, 보스 러시 완주, 심연 균열, 촌장 납품 의뢰 → 궁극기 강화 · 각인'],
+        ['dim_alloy', '차원집 제작대 (구리·철·황금·다이아판 + 상급 정수) → 심연 균열 입장, 보스 러시 추가 도전'],
         ['gear_part', '5챕터 톱니 잔해'],
         ['magi_alloy', '5챕터 합금 잔해'],
         ['potion', '상인 무트 (기본 물약만 판매)'],
@@ -718,6 +817,7 @@ export class Screens {
         </div>
         <h3>스탯 <small>남은 포인트 <b class="${c.points ? 'ok' : ''}">${c.points}</b> · 레벨업마다 5포인트</small></h3>
         <div class="stat-rows">${statRows}</div>
+        ${this.transcendBlock(p)}
         <h3>스킬 <small>교관 카엘에게서 배우고 강화합니다</small></h3><ul class="list">${cls.skills.map((sk, i) => `<li><span class="key">${i + 1}</span><div><b>${sk.name} ${c.skills[i] ? `Lv.${c.skills[i]}` : '<span class="dim">(미습득)</span>'}</b><small>${sk.description} · MP ${sk.mp} · ${sk.cooldown}초</small></div></li>`).join('')}</ul>
       </div>`;
     } else {
@@ -822,6 +922,31 @@ export class Screens {
       onChange();
       again();
     });
+    this.on(s, '[data-tp]', (b) => {
+      const k = b.dataset.tp as BonusKey;
+      const n = Math.min(Number(b.dataset.n ?? 1), p.transcendPoints());
+      if (n <= 0) return;
+      const t = (p.cls.tpts ??= {});
+      t[k] = (t[k] ?? 0) + n;
+      onChange();
+      again();
+    });
+  }
+
+  /** 능력치 탭: 초월(99레벨 뒤)과 각인·칭호·음식 보너스 합계 */
+  private transcendBlock(p: Progress): string {
+    const c = p.cls;
+    const bo = p.bonuses();
+    const sum = (Object.entries(bo) as [BonusKey, number][]).filter(([, v]) => v).map(([k, v]) => bonusText(k, v)).join(' · ');
+    const food = p.data.food && p.data.food.until > Date.now() ? `${ITEMS[p.data.food.id]?.name ?? ''} ${Math.ceil((p.data.food.until - Date.now()) / 60000)}분 남음` : '없음';
+    let html = `<h3>추가 보너스 <small>각인 · 칭호 · 초월 · 음식</small></h3><p class="hint">${sum || '아직 없습니다 (엔딩 뒤 각인·칭호·초월이 열립니다)'}<br>음식: ${food}</p>`;
+    if (c.level < MAX_LEVEL) return html;
+    const pts = p.transcendPoints();
+    const need = transcendExp(c.tlv ?? 0);
+    html += `<h3>초월 Lv.${c.tlv ?? 0} <small>경험치 ${c.texp ?? 0} / ${need} · 남은 초월 포인트 <b class="${pts ? 'ok' : ''}">${pts}</b></small></h3>
+      <div class="stat-rows">${TRANSCEND_STATS.map((t) => `<div class="stat-row"><b>${BONUS_NAMES[t.key]}</b><span class="num">${c.tpts?.[t.key] ?? 0}</span><small>1포인트당 ${bonusText(t.key, t.per)}</small>
+        <button data-tp="${t.key}" data-n="1" ${pts > 0 ? '' : 'disabled'}>+1</button><button data-tp="${t.key}" data-n="5" ${pts >= 5 ? '' : 'disabled'}>+5</button></div>`).join('')}</div>`;
+    return html;
   }
 
   // ---------------- 공유 창고: 가방 ⇄ 창고 ----------------
@@ -1491,6 +1616,7 @@ export class Screens {
           <p class="hint">실패해도 단계가 내려가지 않지만 재료는 사라집니다.</p>
           <div class="menu"><button class="primary" data-enh ${ok ? '' : 'disabled'}>강화하기</button></div>`;
       }
+      detail += this.engraveBlock(p, sel);
     }
     const s = this.open(
       'forge',
@@ -1537,6 +1663,21 @@ export class Screens {
       onChange();
       again(sel.uid, '<b class="ok">수리 완료!</b>');
     });
+    this.on(s, '[data-eng]', (b) => {
+      if (!sel) return;
+      const stage = Number(b.dataset.eng);
+      const lines = (sel.eng ??= []);
+      if (stage > lines.length + 1 || stage > ENGRAVE_STAGES) return;
+      const cost = engraveCost(stage);
+      if (p.data.gold < cost.gold || !p.hasAll(cost.items)) return;
+      p.data.gold -= cost.gold;
+      p.takeAll(cost.items);
+      const line = rollEngrave(stage, new Rng((Math.random() * 2 ** 32) >>> 0));
+      const old = lines[stage - 1];
+      lines[stage - 1] = line;
+      onChange();
+      again(sel.uid, `<b class="ok">${ENGRAVE_STAGE_NAMES[stage - 1]} 각인: ${bonusText(line.k, line.v)}</b>${old ? ` <span class="dim">(이전: ${bonusText(old.k, old.v)})</span>` : ''}`);
+    });
     this.on(s, '[data-enh]', () => {
       if (!sel) return;
       const cost = enhanceCost(sel)!;
@@ -1548,6 +1689,34 @@ export class Screens {
       onChange();
       again(sel.uid, success ? `<b class="ok">강화 성공! +${sel.plus}</b>` : '<b class="bad">강화 실패…</b>');
     });
+  }
+
+  /** 대장간: 각인 (엔딩 뒤). 1단부터 차례로 새기고, 새긴 줄은 같은 비용으로 몇 번이든 다시 굴릴 수 있다 */
+  private engraveBlock(p: Progress, e: Equip): string {
+    if (!p.flag('endgame')) return '';
+    const lines = e.eng ?? [];
+    const costTxt = (stage: number) => {
+      const c = engraveCost(stage);
+      const items = Object.entries(c.items).map(([id, n]) => `<span class="${p.count(id) >= n ? '' : 'bad'}">${inlineGem(id)}${ITEMS[id].name} ${p.count(id)}/${n}</span>`).join(' · ');
+      return `<span class="${p.data.gold >= c.gold ? '' : 'bad'}">${c.gold} G</span> · ${items}`;
+    };
+    const can = (stage: number) => {
+      const c = engraveCost(stage);
+      return p.data.gold >= c.gold && p.hasAll(c.items);
+    };
+    let rows = '';
+    for (let i = 1; i <= ENGRAVE_STAGES; i++) {
+      const l = lines[i - 1];
+      if (l) {
+        const [lo, hi] = engraveRange(l.k, i);
+        const pct = hi > lo ? Math.round(((l.v - lo) / (hi - lo)) * 100) : 100;
+        rows += `<div class="eng-line"><span class="stage">${ENGRAVE_STAGE_NAMES[i - 1]}</span><b>${bonusText(l.k, l.v)}</b><small class="dim">(범위 안 ${pct}%)</small><button data-eng="${i}" ${can(i) ? '' : 'disabled'}>다시 굴리기</button></div><div class="eng-line"><small class="dim">${costTxt(i)}</small></div>`;
+      } else if (i === lines.length + 1) {
+        rows += `<div class="eng-line"><span class="stage">${ENGRAVE_STAGE_NAMES[i - 1]}</span><button class="primary" data-eng="${i}" ${can(i) ? '' : 'disabled'}>${ENGRAVE_STAGE_NAMES[i - 1]} 각인 새기기</button></div><div class="eng-line"><small class="dim">${costTxt(i)}</small></div>`;
+      } else rows += `<div class="eng-line empty"><span class="stage">${ENGRAVE_STAGE_NAMES[i - 1]}</span><small>앞 단계를 먼저 새기세요</small></div>`;
+    }
+    return `<h3>${SPK('anvil', '⚒')} 각인 <small>새길 때마다 옵션이 무작위 (공격력·체력·방어·치명타·공속·재사용·골드·이동·궁극기·MP·경험치)</small></h3>
+      <p class="hint">단계가 높을수록 값이 크고(1단 ×1 → 5단 ×4) 윗 단계 판이 필요합니다. 원하는 옵션이 나올 때까지 다시 굴릴 수 있습니다.</p>${rows}`;
   }
 
   // ---------------- 교관: 스킬 배우기·강화 ----------------
@@ -1594,7 +1763,7 @@ export class Screens {
          ${message ? `<div class="notice">${message}</div>` : ''}
          <p class="hint">스킬은 직업마다 따로 배웁니다. 강화할 때마다 공격 스킬은 위력 +15%, 방어·보조 스킬은 지속 시간이 늘고, 재사용 대기 -6% (최대 Lv.${MAX_SKILL_LEVEL}). 상위 스킬은 판·마력 금속이 필요합니다. 배운 스킬은 캐릭터 → 스킬에서 퀵슬롯에 놓으세요.</p>
          <ul class="list scroll">${rows}
-           <li class="sub-head"><div><b>궁극기 강화</b><small class="dim">${inlineGem('dim_shard')}차원 파편은 파수꾼(중간보스)과 수호자(최종보스)가 떨어뜨립니다. 레벨마다 위력 +25%, 재사용 대기 -5초 (최대 Lv.${MAX_ULT_LEVEL}).</small></div></li>
+           <li class="sub-head"><div><b>궁극기 강화</b><small class="dim">${inlineGem('dim_shard')}차원 파편은 파수꾼·수호자와 차원의 끝(무한의 탑·보스 러시·심연 균열)에서 얻습니다. 레벨마다 위력 +25%, 재사용 대기 -5초 (최대 Lv.${MAX_ULT_LEVEL}).</small></div></li>
            ${ultRows}</ul>
        </div>`,
       onClose,

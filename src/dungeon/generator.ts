@@ -84,6 +84,12 @@ const roomCenter = (r: Room) => ({ x: Math.floor(r.x + r.w / 2), y: Math.floor(r
 export interface GenOptions {
   boss?: 'present' | 'guard' | 'none';
   farm?: FarmKind;
+  /** 방 수 [최소, 최대] (기본 8~10, 최소 7). 탑은 작게, 보스 러시는 [2, 2] (시작 방 + 보스 방) */
+  rooms?: [number, number];
+  /** 몬스터 수 배율 (균열 '대군') */
+  monsterMult?: number;
+  /** 일반 몬스터가 정예로 나올 확률 (균열 '정예 군단') */
+  eliteChance?: number;
 }
 export type FarmKind = 'wood' | 'ore';
 
@@ -114,7 +120,8 @@ function tryGenerate(rng: Rng, seed: number, tier: number, stage: number, opts: 
     const h = stage === 10 ? 14 : 12;
     rooms.push({ id: 0, x: rng.int(1, width - w - 1), y: rng.int(1, height - h - 1), w, h, type: 'combat' });
   }
-  const targetRooms = rng.int(8, 10);
+  const [minRooms, maxRooms] = opts.rooms ?? [8, 10];
+  const targetRooms = rng.int(minRooms, maxRooms);
   for (let i = 0; i < 600 && rooms.length < targetRooms; i++) {
     const w = rng.int(6, 10);
     const h = rng.int(6, 9);
@@ -125,7 +132,7 @@ function tryGenerate(rng: Rng, seed: number, tier: number, stage: number, opts: 
     );
     if (!overlaps) rooms.push({ id: rooms.length, x, y, w, h, type: 'combat' });
   }
-  if (rooms.length < 7) return null;
+  if (rooms.length < Math.min(7, minRooms)) return null;
 
   const roomIndex = new Int16Array(width * height).fill(-1);
   for (const r of rooms) {
@@ -319,9 +326,10 @@ function tryGenerate(rng: Rng, seed: number, tier: number, stage: number, opts: 
         if (roll < 0.2) count = Math.round(count * 1.6);
         else if (roll < 0.35) count = Math.round(count * 0.55);
       }
+      count = Math.round(count * (opts.monsterMult ?? 1));
       for (let i = 0; i < count; i++) {
         const cell = pickInteriorCell(r, 0);
-        if (cell) monsters.push({ ...cell, kind: 'normal' });
+        if (cell) monsters.push({ ...cell, kind: opts.eliteChance && rng.chance(opts.eliteChance) ? 'elite' : 'normal' });
       }
     } else if (r.type === 'elite') {
       const cell = pickInteriorCell(r, 0);

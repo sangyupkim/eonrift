@@ -70,6 +70,8 @@ export class Player {
   invuln = 0;
   private hurtFlash = 0;
   private speed = 0;
+  /** 이동 속도 보너스 (각인·칭호) */
+  moveBonus = 0;
   private walkPhase = 0;
   private time = 0;
   private action: (ActionSpec & { t: number; done: boolean }) | null = null;
@@ -273,7 +275,7 @@ export class Player {
         this.state = 'idle';
       }
     } else {
-      const targetSpeed = mag > 0.12 ? PLAYER.walkSpeed * mag * (this.buff('windwalk') ? 1.4 : 1) * (this.buff('slow') ? 0.6 : 1) : 0;
+      const targetSpeed = mag > 0.12 ? PLAYER.walkSpeed * (1 + this.moveBonus) * mag * (this.buff('windwalk') ? 1.4 : 1) * (this.buff('slow') ? 0.6 : 1) : 0;
       this.speed += (targetSpeed - this.speed) * Math.min(1, dt * 14);
       if (mag > 0.12) {
         this.facing = lerpAngle(this.facing, Math.atan2(d.x, d.z), Math.min(1, dt * 16));

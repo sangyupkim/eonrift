@@ -10,7 +10,7 @@ import {
   Quaternion,
   Scene,
 } from 'three';
-import { ARCHETYPES, tierScale, type Archetype, type ArchetypeDef } from '../data/monsters';
+import { ARCHETYPES, tierScale, type Archetype, type ArchetypeDef, type MonsterMods } from '../data/monsters';
 import { BOSS_SPECIES, MIDBOSS_SPECIES, type DebuffSpec, type SpeciesDef } from '../data/species';
 import { moveWithCollision, type CircleObstacle } from '../dungeon/collision';
 import { TILE } from '../config';
@@ -150,7 +150,7 @@ export class Monster {
     readonly kind: MonsterKind,
     readonly tier: number,
     stage: number,
-    ngPlus: number,
+    mods: MonsterMods,
     x: number,
     z: number,
     readonly homeRoom: number,
@@ -160,22 +160,22 @@ export class Monster {
     const archetype = this.species.arch;
     this.arch = archetype;
     this.def = ARCHETYPES[archetype];
-    const scale = tierScale(tier, stage, ngPlus);
+    const scale = tierScale(mods.statTier ?? tier, mods.statStage ?? stage);
     // 보스 체력은 모양(원형)과 관계없이 같은 기준(220)에서 계산한다.
     // 기준: 구리 무기 +5로 X-10 수호자를 5분 안에 잡을 수 있을 정도
     const mult = kind === 'boss' ? { hp: 39, atk: 1.6, size: 2.1 } : kind === 'midboss' ? { hp: 21, atk: 1.4, size: 1.65 } : kind === 'elite' ? { hp: 3, atk: 1.4, size: 1.35 } : { hp: 1, atk: 1, size: 1 };
-    this.maxHp = this.hp = Math.round((boss ? 220 : this.def.hp) * scale.hp * mult.hp);
+    this.maxHp = this.hp = Math.round((boss ? 220 : this.def.hp) * scale.hp * mult.hp * (mods.hp ?? 1));
     // 중간보스 5줄 (3줄을 깎으면 보호막), 수호자 7줄 (3줄·5줄에서 보호막)
     this.bars = kind === 'boss' ? 7 : kind === 'midboss' ? 5 : 1;
     this.gimmickAt = kind === 'boss' ? [4, 2] : kind === 'midboss' ? [2] : [];
-    this.atk = this.def.atk * scale.atk * mult.atk;
+    this.atk = this.def.atk * scale.atk * mult.atk * (mods.atk ?? 1);
     this.defense = (boss ? 6 : this.def.def) * scale.def;
-    this.speed = this.def.speed * (boss ? 0.95 : 1);
+    this.speed = this.def.speed * (boss ? 0.95 : 1) * (mods.speed ?? 1);
     this.radius = this.def.radius * mult.size;
     this.x = x;
     this.z = z;
     this.name = (kind === 'elite' ? '정예 ' : '') + this.species.name;
-    this.exp = Math.round(this.def.exp * Math.pow(tier, 1.6) * (1 + (stage - 1) * 0.15) * (kind === 'boss' ? 30 : kind === 'midboss' ? 15 : kind === 'elite' ? 3 : 0.3));
+    this.exp = Math.round(this.def.exp * Math.pow(mods.statTier ?? tier, 1.6) * (1 + ((mods.statStage ?? stage) - 1) * 0.15) * Math.sqrt(mods.hp ?? 1) * (kind === 'boss' ? 30 : kind === 'midboss' ? 15 : kind === 'elite' ? 3 : 0.3));
 
     this.material = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
     const colors = this.species.colors ?? MONSTER_COLORS[tier - 1];

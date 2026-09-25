@@ -64,7 +64,7 @@ describe('몬스터 특성', () => {
       fireEnemyProjectile: () => {},
       summon: (what, x, z) => {
         summoned.push(what);
-        const m = new Monster(SPECIES[what], 'normal', 1, 1, 0, x, z, -1);
+        const m = new Monster(SPECIES[what], 'normal', 1, 1, {}, x, z, -1);
         monsters.push(m);
         return m;
       },
@@ -78,7 +78,7 @@ describe('몬스터 특성', () => {
 
   it('해골은 한 번 무너졌다가 절반 체력으로 다시 일어난다', () => {
     const { tick, px, pz } = setup();
-    const m = new Monster(SPECIES.skel_warrior, 'normal', 1, 1, 0, px + 20, pz, 0);
+    const m = new Monster(SPECIES.skel_warrior, 'normal', 1, 1, {}, px + 20, pz, 0);
     expect(m.damage(m.maxHp * 2, px, pz, 0)).toBe(false);
     expect(m.isDown).toBe(true);
     expect(m.damage(9999, px, pz, 0)).toBe(false);
@@ -90,7 +90,7 @@ describe('몬스터 특성', () => {
 
   it('슬라임은 쓰러지면 둘로 나뉜다', () => {
     const { tick, summoned, px, pz } = setup();
-    const m = new Monster(SPECIES.slime, 'normal', 1, 1, 0, px + 20, pz, 0);
+    const m = new Monster(SPECIES.slime, 'normal', 1, 1, {}, px + 20, pz, 0);
     expect(m.damage(m.maxHp * 2, px, pz, 0)).toBe(true);
     tick(m, 0.2);
     expect(summoned).toEqual(['slime_small', 'slime_small']);
@@ -98,7 +98,7 @@ describe('몬스터 특성', () => {
 
   it('트롤은 맞지 않으면 체력이 찬다', () => {
     const { tick, px, pz } = setup();
-    const m = new Monster(SPECIES.troll, 'normal', 1, 1, 0, px + 30, pz, 0);
+    const m = new Monster(SPECIES.troll, 'normal', 1, 1, {}, px + 30, pz, 0);
     m.damage(m.maxHp * 0.5, px + 60, pz, 0);
     const hp = m.hp;
     tick(m, 5);

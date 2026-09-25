@@ -146,6 +146,17 @@ function coins(): BufferGeometry[] {
   return g;
 }
 
+/** 음식: 그릇에 담긴 요리 */
+function bowl(color: number): BufferGeometry[] {
+  return [
+    part(new CylinderGeometry(0.45, 0.3, 0.28, 12), 0x8a5a34, { pos: [0, -0.15, 0] }),
+    part(new CylinderGeometry(0.4, 0.4, 0.06, 12), shade(color, 0.85), { pos: [0, 0.0, 0] }),
+    part(new SphereGeometry(0.14, 8, 6), color, { pos: [0.1, 0.08, 0.05] }),
+    part(new SphereGeometry(0.11, 8, 6), shade(color, 1.2), { pos: [-0.12, 0.07, -0.05] }),
+    part(new BoxGeometry(0.04, 0.5, 0.04), 0xe8d8b0, { pos: [0.2, 0.2, -0.1], rot: [0.3, 0, -0.5] }),
+  ];
+}
+
 /** 차원 파편: 뾰족한 조각 여러 개 */
 function shards(color: number): BufferGeometry[] {
   const g: BufferGeometry[] = [];
@@ -185,6 +196,8 @@ export function buildItemGeometry(id: string): BufferGeometry {
   else if (id === 'bag_kit') g = bag(c);
   else if (id === 'resonator') g = resonator(c);
   else if (id === 'dim_shard') g = shards(c);
+  else if (id === 'dim_alloy') g = [...ingot(c, 0x5ef0ff), part(new OctahedronGeometry(0.1, 0), 0x5ef0ff, { pos: [0.15, 0.25, 0] })];
+  else if (id.startsWith('food_')) g = bowl(c);
   else if (id === 'gear_part') g = gear(c);
   else if (id === 'gold') g = coins();
   else if (id === 'magi_alloy') g = ingot(c, 0x5ac8ff);

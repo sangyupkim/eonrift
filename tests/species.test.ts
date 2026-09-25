@@ -47,7 +47,7 @@ describe('몬스터 종족', () => {
       hurtPlayer: () => hurt++,
       fireEnemyProjectile: () => {},
       summon: (what, x, z) => {
-        const m = new Monster(resolveSpecies(3, what, Math.random), 'normal', 3, 3, 0, x, z, -1);
+        const m = new Monster(resolveSpecies(3, what, Math.random), 'normal', 3, 3, {}, x, z, -1);
         monsters.push(m);
         return m;
       },
@@ -59,7 +59,7 @@ describe('몬스터 종족', () => {
     };
     const all = [...Object.values(SPECIES)];
     for (const sp of all) {
-      const m = new Monster(sp, 'normal', 3, 3, 0, start.x + 3, start.z, 0);
+      const m = new Monster(sp, 'normal', 3, 3, {}, start.x + 3, start.z, 0);
       m.addTo(scene);
       monsters.push(m);
       m.aggro = true;

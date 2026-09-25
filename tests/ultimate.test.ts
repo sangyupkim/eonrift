@@ -34,7 +34,7 @@ describe('궁극기', () => {
     const px = (grid.start.x + 0.5) * 2;
     const pz = (grid.start.y + 0.5) * 2;
     const world = { grid, obstacles: [], scene, effects: new Effects(scene), player: { x: px, z: pz }, monsters: [], hurtPlayer: () => (hurt++, 1), fireEnemyProjectile: () => {}, summon: () => null as never, hazard: () => {}, announce: () => {}, killPlayer: () => {}, burst: () => {}, shake: () => {} } as MonsterWorld;
-    const m = new Monster(SPECIES.t1_melee, 'normal', 1, 1, 0, px + 1, pz, 0);
+    const m = new Monster(SPECIES.t1_melee, 'normal', 1, 1, {}, px + 1, pz, 0);
     m.aggro = true;
     m.stun = 3;
     for (let t = 0; t < 2.5; t += 0.05) m.update(0.05, world, new Quaternion());

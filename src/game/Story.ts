@@ -22,6 +22,7 @@ export function objective(p: Progress, quests: Quests): string {
   if (stones >= 3 && !f('smith3')) return '대장장이 고른과 이야기하자';
   if (stones >= 4 && !p.data.unlockedClasses.includes('archer')) return '마을 남서쪽의 수상한 인물을 찾아가자';
   if (stones < 7) return `${stones + 1}-10의 수호자를 쓰러뜨리자 (차원석 ${stones}/7)`;
+  if (f('endgame')) return '차원문 광장의 "차원의 끝"에서 무한의 탑 · 보스 러시 · 심연 균열에 도전하자';
   if (!f('resonatorHint')) return '마공학자 세라와 이야기하자';
   if (p.count('resonator') === 0) return '차원집 제작대(조립 탭)에서 차원석 공명 장치를 만들자';
   return '촌장 에단에게 공명 장치를 가져가자';
@@ -34,7 +35,7 @@ export function scriptFor(npc: NpcId, p: Progress): string {
   switch (npc) {
     case 'chief':
       if (stones >= 2 && !p.data.unlockedClasses.includes('mage')) return 'ch2';
-      if (stones >= 7 && p.count('resonator') > 0) return 'final';
+      if (stones >= 7 && p.count('resonator') > 0 && !f('endgame')) return 'final';
       if (stones >= 3 && !f(`stoneTalk${stones}`)) return 'stone_n';
       return 'chief_idle';
     case 'engineer':
@@ -61,14 +62,6 @@ export function scriptFor(npc: NpcId, p: Progress): string {
 export function hasStory(npc: NpcId, p: Progress): boolean {
   const s = scriptFor(npc, p);
   return !s.endsWith('_idle') && s !== 'guide_after_stone' && s !== 'stone_n';
-}
-
-/** 회차를 넘길 때 초기화할 이야기 플래그 */
-export function resetForNewCycle(p: Progress): void {
-  const keep = new Set(['intro', 'returned', 'legend', 'home', 'factoryBuilt', 'endingA', 'endingB', 'tool_pickaxe', 'tool_axe', 'stone1Talk']);
-  for (const k of Object.keys(p.data.flags)) if (!keep.has(k) && !k.startsWith('bp_')) delete p.data.flags[k];
-  // 새 회차에서는 보스가 모두 다시 나타난다
-  delete p.data.bossReadyAt;
 }
 
 /** 던전 HUD용: 진행 중인 퀘스트의 남은 목표 (최대 3줄) */

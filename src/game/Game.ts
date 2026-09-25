@@ -18,7 +18,7 @@ import { essenceForTier, ITEMS, TIER_PLATE, ORE_TIERS, TIER_MANA_PLATE } from '.
 import { QUEST_BY_ID, type NpcRef, type QuestDef } from '../data/quests';
 import type { Step } from '../data/story';
 import { moveWithCollision } from '../dungeon/collision';
-import { generateDungeon, isFloor, type FarmKind } from '../dungeon/generator';
+import { generateDungeon, type GenOptions, isFloor, type FarmKind } from '../dungeon/generator';
 import { Factory, MACHINE_TYPES, RECIPE_BY_ID, type BuildingState, type Dir } from '../factory/sim';
 import { BuildBar } from '../ui/buildbar';
 import { Dialogue } from '../ui/dialogue';
@@ -31,8 +31,11 @@ import type { Monster } from './Monster';
 import { Player } from './Player';
 import { DIM_BAG_MAX, deleteSave, hasSave, loadSave, newSave, Progress, stageIndex, stageOf, type SaveData, type Stats, type RunCheckpoint } from './Progress';
 import { objectiveNeed, objectiveProgress, Quests } from './Quests';
-import { hasStory, objective, questLines, resetForNewCycle, scriptFor } from './Story';
-import { DungeonScene, type NodeInstance } from './scenes/DungeonScene';
+import { bonusText, FOOD_MINUTES, FOODS, TITLES, type BonusKey } from '../data/bonus';
+import { hasStory, objective, questLines, scriptFor } from './Story';
+import { todayKey } from './Quests';
+import { ALLOY, AFFIXES, riftAffixes, riftLuck, riftMult, riftReward, riftYield, RIFT_ALLOY, RIFT_TIME, rushGrade, rushReward, RUSH_DAILY, RUSH_DIFFS, RUSH_EXTRA_ALLOY, RUSH_ORDER, SHARD, formatClock, towerBoss, towerDaily, towerFirstClear, towerMult, towerTheme, type EndRun } from '../data/endgame';
+import { DungeonScene, type DungeonMods, type NodeInstance } from './scenes/DungeonScene';
 import { HomeScene } from './scenes/HomeScene';
 import type { Interactable, Level } from './scenes/Level';
 import { NPCS, VillageScene, type NpcId, type VillageSpot } from './scenes/VillageScene';
@@ -59,6 +62,10 @@ interface Run {
   farm?: FarmKind;
   /** 이번 방의 보스를 쓰러뜨렸는지 (꺼졌다 켜도 다시 나오지 않게) */
   bossKilled?: boolean;
+  /** 엔드 콘텐츠(무한의 탑·보스 러시·심연 균열) 한 판 */
+  end?: EndRun;
+  /** 균열: 시간 초과를 알렸는지 */
+  riftLate?: boolean;
 }
 
 const ESSENCE = essenceForTier;
@@ -113,7 +120,7 @@ export class Game {
   /** 공격 버튼을 연타해도 입력이 사라지지 않게 잠시 기억한다 */
   private attackBuffer = 0;
   private gathering: NodeInstance | null = null;
-  private pendingNgPlus = false;
+  private pendingEndgame = false;
   private afterMenu: (() => void) | null = null;
   private raycaster = new Raycaster();
   private ground = new Plane(new Vector3(0, 1, 0), 0);
@@ -309,7 +316,7 @@ export class Game {
     // 던전 안이면 체크포인트를 함께 저장한다 (꺼졌다 켜면 이 방으로 돌아온다)
     const r = this.run;
     this.progress.data.run =
-      r && this.mode !== 'dead'
+      r && this.mode !== 'dead' && !r.end
         ? {
             tier: r.tier,
             stage: r.stage,
@@ -403,6 +410,7 @@ export class Game {
       hitStop: (t) => (this.hitStopT = Math.max(this.hitStopT, t)),
       sfx: (n) => this.audio.play(n),
       skillLevel: (i) => this.progress.cls.skills[i] ?? 0,
+      bonus: (k) => this.progress.bonus(k),
       autoAim: () => this.progress.data.settings.autoAim !== false,
     });
     this.hud.setClass(cls.short, hex(cls.look.tunic), cls.skills.map((s) => s.name), this.progress.data.currentClass);
@@ -419,7 +427,7 @@ export class Game {
     );
     this.loadLevel(village, false);
     this.run = null;
-    this.hud.setLocation(p.data.ngPlus ? `차원마을 · ${p.data.ngPlus + 1}회차` : '차원마을', 0xffd88a);
+    this.hud.setLocation('차원마을', 0xffd88a);
     this.audio.playMusic('village');
     let grown = 0;
     while (p.count('bag_kit') > 0 && p.data.dimBag.length < DIM_BAG_MAX) {
@@ -428,22 +436,30 @@ export class Game {
       grown++;
     }
     if (grown) this.hud.toast(`차원가방이 ${p.data.dimBag.length}칸으로 늘어났습니다`, 3000);
-    if (this.quests.refreshDaily(p.maxTier, p.flag('home') > 0) && this.dailyUnlocked()) this.hud.toast('촌장 에단의 일일 의뢰가 새로 올라왔습니다', 3000);
+    if (this.quests.refreshDaily(p.maxTier, p.flag('home') > 0, p.flag('endgame') > 0) && this.dailyUnlocked()) this.hud.toast('촌장 에단의 일일 의뢰가 새로 올라왔습니다', 3000);
     if (this.mode !== 'dialogue') this.mode = 'play';
     this.hud.setVisible(this.mode === 'play');
     this.refreshHud();
   }
 
   /** 던전 입장. run이 있으면 가방을 들고 다음 방으로 이어 간다 */
-  private enterDungeon(tier: number, stage: number, background = false, farm?: FarmKind): void {
+  private enterDungeon(tier: number, stage: number, background = false, farm?: FarmKind, end?: EndRun): void {
     const resuming = this.resumeFrom;
-    const wait = this.progress.bossWait(tier, stage);
+    const wait = end ? 0 : this.progress.bossWait(tier, stage);
     // 이어 하기인데 이 방의 보스를 이미 쓰러뜨렸다면 보스도, 대신 지키는 정예도 없이
     const boss = resuming?.bossKilled ? 'none' : wait > 0 ? 'guard' : 'present';
-    const data = generateDungeon(randomSeed(), tier, stage, farm ? { farm } : { boss });
+    let data;
+    let mods: DungeonMods = {};
+    if (end) {
+      const e = this.endLayout(end);
+      tier = e.tier;
+      stage = e.stage;
+      data = generateDungeon(randomSeed(), tier, stage, e.gen);
+      mods = e.mods;
+    } else data = generateDungeon(randomSeed(), tier, stage, farm ? { farm } : { boss });
     // 채집 특화 맵은 들어갈 때 30분 대기가 시작된다 (이어 하기는 제외)
     if (farm && !resuming && !background) this.progress.farmEntered(farm, FARM_COOLDOWN_MS);
-    const dungeon = new DungeonScene(data, this.progress.data.ngPlus, {
+    const dungeon = new DungeonScene(data, mods, {
       player: () => this.player.position,
       cameraQuat: () => this.camera.quaternion,
       hurtPlayer: (d, x, z, debuff, dot) => this.hurtPlayer(d, x, z, debuff, dot),
@@ -484,13 +500,14 @@ export class Game {
       this.run!.roomCleared = false;
       this.run!.bossKilled = false;
       this.run!.farm = farm;
+      this.run!.end = end;
     } else {
       const dim = new Bag(this.progress.data.dimBag.length, this.progress.data.dimBag);
       const bag = this.progress.invBag;
       const start = new Map<string, number>();
       for (const b of [bag, dim]) for (const [id, n] of b.totals()) start.set(id, (start.get(id) ?? 0) + n);
       const startEquips = new Set([...bag.equips(), ...dim.equips()].map((e) => e.uid));
-      this.run = { tier, stage, bag, dimBag: dim, gold: 0, exp: 0, time: 0, stagesCleared: 0, roomCleared: false, start, startEquips, pouch: [], farm };
+      this.run = { tier, stage, bag, dimBag: dim, gold: 0, exp: 0, time: 0, stagesCleared: 0, roomCleared: false, start, startEquips, pouch: [], farm, end };
       // 저장된 체크포인트에서 이어 하기
       const cp = this.resumeFrom;
       if (cp) {
@@ -508,6 +525,17 @@ export class Game {
       }
     }
     this.fillPouch();
+    if (end) {
+      this.hud.setLocation(this.endLabel(end, dungeon.theme.name), dungeon.theme.portalColor);
+      this.audio.playMusic('dungeon');
+      this.audio.play('portal');
+      this.mode = 'play';
+      this.hud.setVisible(true);
+      this.hud.toast(this.endIntro(end), 4000);
+      this.refreshHud();
+      this.saveNow();
+      return;
+    }
     this.hud.setLocation(farm ? `${tier}단계 ${FARM_NAMES[farm]} · ${dungeon.theme.name}` : `${tier}-${stage} · ${dungeon.theme.name}`, dungeon.theme.portalColor);
     this.audio.playMusic('dungeon');
     this.audio.play('portal');
@@ -588,6 +616,17 @@ export class Game {
         },
         onGiveUp: () => this.fall(),
         onBestiary: this.quests.isDone('m_research') ? () => this.openBestiary(false) : undefined,
+        foods: Object.keys(FOODS).map((id) => ({ id, count: this.progress.count(id) })).filter((f) => f.count > 0),
+        foodLeft: d.food && d.food.until > Date.now() ? `${ITEMS[d.food.id].name} (${Math.ceil((d.food.until - Date.now()) / 60000)}분)` : undefined,
+        onEat: (id) => {
+          if (!this.progress.take(id, 1)) return;
+          d.food = { id, until: Date.now() + FOOD_MINUTES * 60000 };
+          this.audio.play('pickup');
+          this.applyStats();
+          this.saveNow();
+          this.hud.toast(`${ITEMS[id].name}을(를) 먹었다! ${FOOD_MINUTES}분 동안 ${Object.entries(FOODS[id]).map(([k, v]) => bonusText(k as BonusKey, v!)).join(', ')}`, 3500);
+          this.openPause();
+        },
         autoAim: d.settings.autoAim !== false,
         onToggleAim: (on) => {
           d.settings.autoAim = on;
@@ -694,6 +733,7 @@ export class Game {
     this.player.maxMp = st.maxMp;
     this.player.hp = Math.max(1, Math.round(st.maxHp * hpRatio));
     this.player.mp = Math.min(this.player.mp, st.maxMp);
+    this.player.moveBonus = this.progress.bonus('move');
     this.refreshGear();
   }
 
@@ -772,7 +812,7 @@ export class Game {
         }
         break;
       case 'forge':
-        this.openMenu(() => this.screens.forge(p, () => this.applyStats(), () => this.resume()));
+        this.openMenu(() => this.screens.forge(p, () => this.checkTitles(), () => this.resume()));
         break;
       case 'shop':
         this.openMenu(() => this.screens.shop(p, () => this.audio.play('coin'), () => this.resume()));
@@ -812,6 +852,7 @@ export class Game {
           this.afterMenu = () => this.enterDungeon(t, 1, false, kind);
           this.screens.close();
         },
+        () => this.openEndgameMenu(),
       ),
     );
   }
@@ -973,7 +1014,7 @@ export class Game {
   }
 
   private openDaily(): void {
-    this.quests.refreshDaily(this.progress.maxTier, this.progress.flag('home') > 0);
+    this.quests.refreshDaily(this.progress.maxTier, this.progress.flag('home') > 0, this.progress.flag('endgame') > 0);
     this.openMenu(() =>
       this.screens.dailyBoard(
         this.progress,
@@ -981,8 +1022,10 @@ export class Game {
         (i) => {
           const d = this.quests.state.daily.list[i];
           if (!d || d.claimed) return;
-          d.claimed = true;
           const p = this.progress;
+          // 납품 의뢰는 물건을 건넨다
+          if (d.objective.type === 'deliver' && !p.take(d.objective.item, d.objective.count)) return;
+          d.claimed = true;
           if (d.reward.gold) p.data.gold += d.reward.gold;
           for (const [id, n] of Object.entries(d.reward.items ?? {})) p.add(id, n);
           if (d.reward.exp) this.gainExp(d.reward.exp);
@@ -1053,9 +1096,9 @@ export class Game {
     this.hud.setVisible(false);
     this.setBigMap(false);
     const done = () => {
-      if (this.pendingNgPlus) {
-        this.pendingNgPlus = false;
-        this.startNewCycle();
+      if (this.pendingEndgame) {
+        this.pendingEndgame = false;
+        this.openEndgame();
         return;
       }
       this.mode = 'play';
@@ -1084,24 +1127,196 @@ export class Game {
         p.unlockClass('archer');
         this.audio.play('level');
         break;
-      case 'ngplus':
-        this.pendingNgPlus = true;
+      case 'endgame':
+        this.pendingEndgame = true;
         break;
     }
   }
 
-  /** 엔딩 후 회차 넘기기: 장비, 레벨, 차원집은 남고 차원석과 스테이지는 다시 */
-  private startNewCycle(): void {
+  // =============== 차원의 끝 (엔드 콘텐츠) ===============
+  /** 엔드 콘텐츠 한 판의 맵과 몬스터 배율 */
+  private endLayout(end: EndRun): { tier: number; stage: number; gen: GenOptions; mods: DungeonMods } {
+    switch (end.kind) {
+      case 'tower': {
+        const b = towerBoss(end.floor);
+        const m = towerMult(end.floor);
+        return {
+          tier: b ? b.tier : towerTheme(end.floor),
+          stage: b ? (b.kind === 'boss' ? 10 : 5) : 3,
+          gen: { boss: 'present', rooms: b ? [3, 4] : [4, 5] },
+          mods: { statTier: 7, statStage: 1, hp: m, atk: m },
+        };
+      }
+      case 'rush': {
+        const r = RUSH_ORDER[end.index];
+        const d = RUSH_DIFFS[end.diff];
+        return {
+          tier: r.tier,
+          stage: r.kind === 'boss' ? 10 : 5,
+          gen: { boss: 'present', rooms: [2, 2] },
+          mods: { ...(d.statTier ? { statTier: 7 } : {}), hp: d.hp, atk: d.atk },
+        };
+      }
+      case 'rift': {
+        const a = end.affixes;
+        const m = riftMult(end.level);
+        return {
+          tier: end.tier,
+          stage: 4,
+          gen: { boss: 'present', rooms: [5, 6], monsterMult: a.includes('swarm') ? 1.4 : 1, eliteChance: a.includes('elite') ? 0.15 : 0 },
+          mods: { statTier: 7, statStage: 1, hp: m * (a.includes('fortified') ? 1.3 : 1), atk: m * (a.includes('enraged') ? 1.25 : 1), speed: a.includes('haste') ? 1.2 : 1, affixes: a },
+        };
+      }
+    }
+  }
+
+  private endLabel(end: EndRun, theme: string): string {
+    if (end.kind === 'tower') return `무한의 탑 ${end.floor}층 · ${theme}`;
+    if (end.kind === 'rush') return `보스 러시 ${RUSH_DIFFS[end.diff].name} ${end.index + 1}/${RUSH_ORDER.length}`;
+    const t = Math.max(0, Math.ceil(end.timeLeft));
+    return `심연 균열 ${end.level}단계 · ${theme} · :hourglass: ${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
+  }
+
+  private endIntro(end: EndRun): string {
+    if (end.kind === 'tower') {
+      const b = towerBoss(end.floor);
+      return `무한의 탑 ${end.floor}층 — 몬스터 ×${towerMult(end.floor).toFixed(2)}${b ? ` · ${b.kind === 'boss' ? '수호자' : '파수꾼'}가 기다립니다` : ''}${end.floor > 10 && end.floor % 10 === 1 ? ' · :warning: 새 구간: 몬스터가 한꺼번에 강해졌다' : ''}`;
+    }
+    if (end.kind === 'rush') {
+      const r = RUSH_ORDER[end.index];
+      return `보스 러시 ${end.index + 1}/${RUSH_ORDER.length} — ${r.tier}단계 ${r.kind === 'boss' ? '수호자' : '파수꾼'}`;
+    }
+    const aff = end.affixes.map((a) => AFFIXES[a].name).join(' · ');
+    return `심연 균열 ${end.level}단계 — ${Math.floor(RIFT_TIME / 60)}분 안에 모두 쓰러뜨리자${aff ? ` · 변이: ${aff}` : ''}`;
+  }
+
+  /** 보스 러시 오늘 쓴 횟수 (날짜가 바뀌면 0) */
+  private rushUsedToday(): number {
+    const e = this.progress.data.end!;
+    if (e.rushDate !== todayKey()) {
+      e.rushDate = todayKey();
+      e.rushUsed = 0;
+    }
+    return e.rushUsed;
+  }
+
+  /** 차원의 끝: 콘텐츠 고르기 */
+  private openEndgameMenu(message?: string): void {
+    const p = this.progress;
+    const e = p.data.end!;
+    this.rushUsedToday();
+    this.openMenu(() =>
+      this.screens.endgame(
+        p,
+        {
+          tower: (floor) => {
+            this.afterMenu = () => this.enterDungeon(1, 1, false, undefined, { kind: 'tower', floor });
+            this.screens.close();
+          },
+          towerDaily: () => {
+            if (e.towerDailyDate === todayKey() || e.towerBest < 1) return;
+            const r = towerDaily(e.towerBest);
+            e.towerDailyDate = todayKey();
+            p.data.gold += r.gold;
+            if (r.shards) p.add(SHARD, r.shards);
+            this.audio.play('coin');
+            this.saveNow();
+            this.openEndgameMenu(`탑 소탕 보상: +${r.gold} G${r.shards ? ` · 차원 파편 ${r.shards}개` : ''}`);
+          },
+          rush: (diff) => {
+            if (diff > 0 && !e.rushGradeBest[diff - 1]) return;
+            const used = this.rushUsedToday();
+            if (used >= RUSH_DAILY) {
+              if (p.count(ALLOY) < RUSH_EXTRA_ALLOY) return this.openEndgameMenu(`오늘 무료 도전 ${RUSH_DAILY}번을 다 썼습니다. 차원 합금 ${RUSH_EXTRA_ALLOY}개가 필요합니다`);
+              p.take(ALLOY, RUSH_EXTRA_ALLOY);
+            }
+            e.rushUsed = used + 1;
+            this.saveNow();
+            this.afterMenu = () => this.enterDungeon(1, 1, false, undefined, { kind: 'rush', diff, index: 0 });
+            this.screens.close();
+          },
+          rift: (tier, level) => {
+            if (level > e.riftBest + 1 || tier > p.maxTier) return;
+            if (p.count(ALLOY) < RIFT_ALLOY) return this.openEndgameMenu(`심연 균열에 들어가려면 차원 합금 ${RIFT_ALLOY}개가 필요합니다 (차원집 제작대에서 여러 단계의 판으로 제작)`);
+            p.take(ALLOY, RIFT_ALLOY);
+            this.saveNow();
+            this.afterMenu = () => this.enterDungeon(tier, 1, false, undefined, { kind: 'rift', tier, level, affixes: riftAffixes(level, todayKey()), timeLeft: RIFT_TIME });
+            this.screens.close();
+          },
+        },
+        () => this.resume(),
+        message,
+      ),
+    );
+  }
+
+  /** 새로 얻은 칭호가 있으면 알린다 (칭호 보너스는 바로 능력치에 반영) */
+  private checkTitles(): void {
+    const p = this.progress;
+    const ctx = {
+      end: p.data.end!,
+      transcend: Math.max(...CLASS_ORDER.map((c) => p.data.classes[c].tlv ?? 0)),
+      engrave5: CLASS_ORDER.reduce((a, c) => a + Object.values(p.data.classes[c].equipment).filter((e) => (e?.eng?.length ?? 0) >= 5).length, 0) + p.data.equips.filter((e) => (e.eng?.length ?? 0) >= 5).length,
+    };
+    const got = (p.data.titles ??= []);
+    for (const t of TITLES) {
+      if (got.includes(t.id) || !t.check(ctx)) continue;
+      got.push(t.id);
+      this.audio.play('stone');
+      this.hud.toast(`:sparkle: 칭호 획득: 「${t.name}」 — ${Object.entries(t.bonus).map(([k, v]) => bonusText(k as BonusKey, v!)).join(', ')}`, 4500);
+    }
+    this.applyStats();
+  }
+
+  /** 엔드 콘텐츠의 방을 다 정리했을 때: 기록과 보상 */
+  private endRoomClear(end: EndRun): string {
+    const p = this.progress;
+    const e = p.data.end!;
+    const give = (gold: number, shards: number) => {
+      p.data.gold += gold;
+      this.run!.gold += gold;
+      if (shards) {
+        const added = this.run!.bag.add(SHARD, shards);
+        if (added < shards) p.depositItem(SHARD, shards - added);
+      }
+      return `+${gold} G${shards ? ` · 차원 파편 ${shards}개` : ''}`;
+    };
+    if (end.kind === 'tower') {
+      if (end.floor > e.towerBest) {
+        e.towerBest = end.floor;
+        const r = towerFirstClear(end.floor);
+        this.checkTitles();
+        return `${end.floor}층 첫 돌파! ${give(r.gold, r.shards)}`;
+      }
+      return `${end.floor}층 돌파`;
+    }
+    if (end.kind === 'rush') {
+      if (end.index < RUSH_ORDER.length - 1) return `${end.index + 1}/${RUSH_ORDER.length} 격파 (경과 ${formatClock(this.run!.time)})`;
+      const secs = this.run!.time;
+      const grade = rushGrade(secs);
+      const r = rushReward(end.diff, grade);
+      const order = 'SABC';
+      if (!e.rushBest[end.diff] || secs < e.rushBest[end.diff]) e.rushBest[end.diff] = Math.round(secs);
+      if (!e.rushGradeBest[end.diff] || order.indexOf(grade) < order.indexOf(e.rushGradeBest[end.diff])) e.rushGradeBest[end.diff] = grade;
+      this.checkTitles();
+      return `보스 러시 ${RUSH_DIFFS[end.diff].name} 완주! ${formatClock(secs)} · ${grade}등급 ${give(r.gold, r.shards)}`;
+    }
+    const inTime = end.timeLeft > 0;
+    const r = riftReward(end.level, inTime);
+    if (inTime && end.level > e.riftBest) e.riftBest = end.level;
+    this.checkTitles();
+    return `심연 균열 ${end.level}단계 ${inTime ? '돌파' : '정리 (시간 초과: 보상 절반)'} ${give(r.gold, r.shards)}${inTime && end.level === e.riftBest ? ` · ${end.level + 1}단계 열림` : ''}`;
+  }
+
+  /** 엔딩 후: 회차 대신 '차원의 끝'이 열린다. 레벨·장비·차원석·스테이지는 모두 그대로 */
+  private openEndgame(): void {
     const p = this.progress;
     p.take('resonator', 1);
-    p.data.ngPlus++;
-    p.data.dimStones = [];
-    p.data.cleared = 0;
-    resetForNewCycle(p);
+    p.setFlag('endgame');
     this.saveNow();
     this.mode = 'dialogue';
     this.enterVillage('start');
-    this.playScript('ngplus');
+    this.playScript('endgame');
   }
 
   // =============== 전투 ===============
@@ -1256,6 +1471,12 @@ export class Game {
 
   private gainExp(n: number): void {
     const ups = this.progress.addExp(n);
+    if (this.progress.transcendUps > 0) {
+      this.level.effects.pillar(this.player.position.x, this.player.position.z, 0x5ef0ff);
+      this.audio.play('level');
+      this.hud.toast(`:sparkle: 초월 Lv.${this.progress.cls.tlv}! 초월 포인트 +${this.progress.transcendUps} (캐릭터 → 능력치)`, 3000);
+      this.checkTitles();
+    }
     if (ups > 0) {
       this.applyStats();
       this.player.hp = this.player.maxHp;
@@ -1269,7 +1490,8 @@ export class Game {
   private monsterKilled(m: Monster): void {
     const run = this.run;
     if (!run || !(this.level instanceof DungeonScene)) return;
-    const tier = run.tier;
+    // 엔드 콘텐츠는 7단계 전리품 (균열은 맵의 자원만 그 단계)
+    const tier = run.end ? 7 : run.tier;
     const rng = new Rng(randomSeed());
     this.audio.play('kill');
     this.level.particles.burst(m.x, 0.7, m.z, 0xffffff, 12, 1.2);
@@ -1283,12 +1505,12 @@ export class Game {
     const weapon = this.progress.cls.equipment.weapon;
     if (weapon && durability(weapon) > 0 && Math.random() < 0.12) this.wearEquip(weapon);
 
-    const exp = Math.round(m.exp * (1 + this.progress.data.ngPlus * 0.5));
+    const exp = Math.round(m.exp);
     run.exp += exp;
     this.gainExp(exp);
 
     const bossMult = m.kind === 'boss' ? 25 : m.kind === 'midboss' ? 10 : m.kind === 'elite' ? 4 : 1;
-    const gold = Math.max(1, Math.round((m.kind === 'normal' ? rng.range(0.6, 1.6) : rng.int(2, 5)) * tier * (1 + (run.stage - 1) * 0.15) * bossMult));
+    const gold = Math.max(1, Math.round((m.kind === 'normal' ? rng.range(0.6, 1.6) : rng.int(2, 5)) * tier * (1 + (run.stage - 1) * 0.15) * bossMult * (1 + this.progress.bonus('gold'))));
     run.gold += gold;
     this.progress.data.gold += gold;
 
@@ -1296,6 +1518,15 @@ export class Game {
     let line = 0;
     const loot = (text: string, color: string) => this.hud.floatText(s.x, s.y - 22 * line++, text, color, 'small');
     loot(`+${gold} G`, '#ffd23a');
+    // 보스 러시: 보상은 완주했을 때 한꺼번에 (보스 전리품 없음)
+    if (run.end?.kind === 'rush') {
+      if (m.isBoss) {
+        this.hud.setBoss(null);
+        this.audio.playMusic('dungeon');
+      }
+      this.refreshHud();
+      return;
+    }
 
     if (rng.chance(m.kind === 'normal' ? 0.18 + run.stage * 0.01 : 1)) {
       const n = m.kind === 'boss' ? 8 + Math.floor(run.stage / 5) : m.kind === 'midboss' ? 5 : m.kind === 'elite' ? 3 + Math.floor(run.stage / 4) : 1;
@@ -1311,7 +1542,7 @@ export class Game {
       if (added) loot(`+${added} ${ITEMS.essence_dim.name}`, hex(ITEMS.essence_dim.color));
     }
     // 차원 파편 (궁극기 강화): 파수꾼 1개, 수호자 2~3개. 높은 단계일수록 하나 더 나올 수 있다
-    if (m.kind === 'boss' || m.kind === 'midboss') {
+    if ((m.kind === 'boss' || m.kind === 'midboss') && !run.end) {
       const shardN = (m.kind === 'boss' ? 2 + (rng.chance(0.5) ? 1 : 0) : 1) + (rng.chance(tier * 0.05) ? 1 : 0);
       const added = run.bag.add('dim_shard', shardN);
       // 가방이 가득 차면 창고로 바로 보낸다 (귀한 재료라 잃지 않게)
@@ -1321,7 +1552,7 @@ export class Game {
     }
     // 장비: 중간보스는 좋은 장비를 넉넉히
     const eqCount = m.kind === 'boss' ? 2 : m.kind === 'midboss' ? 2 : rng.chance(m.kind === 'elite' ? 0.4 + run.stage * 0.02 : 0.008 + run.stage * 0.0008) ? 1 : 0;
-    const bonus = (m.kind === 'midboss' ? 0.35 : m.kind === 'boss' ? 0.3 : m.kind === 'elite' ? 0.12 : 0) + run.stage * 0.01;
+    const bonus = (m.kind === 'midboss' ? 0.35 : m.kind === 'boss' ? 0.3 : m.kind === 'elite' ? 0.12 : 0) + run.stage * 0.01 + (run.end?.kind === 'rift' ? riftLuck(run.end.level) : 0);
     for (let i = 0; i < eqCount; i++) {
       // 차원 등급: 보스만, 아주 낮은 확률 (수호자 1%, 파수꾼 0.3%)
       const dim = m.kind === 'boss' ? 0.01 : m.kind === 'midboss' ? 0.003 : 0;
@@ -1334,7 +1565,7 @@ export class Game {
       else this.hud.toast('가방이 가득 차서 장비를 줍지 못했습니다');
     }
     // 보스는 쓰러뜨리면 한동안 다시 나오지 않는다 (파수꾼 1시간, 수호자 4시간)
-    if (m.kind === 'midboss' || m.kind === 'boss') {
+    if ((m.kind === 'midboss' || m.kind === 'boss') && !run.end) {
       this.progress.bossDefeated(tier, run.stage, BOSS_RESPAWN_MS[m.kind]);
       run.bossKilled = true;
       this.saveNow();
@@ -1350,7 +1581,7 @@ export class Game {
       this.hud.setBoss(null);
       this.audio.playMusic('dungeon');
     }
-    if (m.isFinal) {
+    if (m.isFinal && !run.end) {
       const p = this.progress;
       if (!p.data.dimStones.includes(tier)) {
         p.data.dimStones.push(tier);
@@ -1374,6 +1605,24 @@ export class Game {
     const run = this.run!;
     run.roomCleared = true;
     run.stagesCleared++;
+    if (run.end) {
+      const msg = this.endRoomClear(run.end);
+      this.audio.play('portal');
+      this.saveNow();
+      this.refreshHud();
+      this.openMenu(() =>
+        this.screens.ask(
+          msg,
+          '워프 게이트가 열렸습니다. 워프 게이트로 이동하시겠습니까?',
+          () => {
+            this.afterMenu = () => this.moveToWarp();
+            this.screens.close();
+          },
+          () => this.resume(),
+        ),
+      );
+      return;
+    }
     const g = stageIndex(run.tier, run.stage);
     const p = this.progress;
     // 채집 특화 맵은 스테이지 진행으로 치지 않는다
@@ -1423,6 +1672,35 @@ export class Game {
   private openWarp(): void {
     const run = this.run;
     if (!run) return;
+    const end = run.end;
+    if (end) {
+      let next: EndRun | null = null;
+      let nextLabel: string | null = null;
+      if (end.kind === 'tower') {
+        next = { kind: 'tower', floor: end.floor + 1 };
+        nextLabel = `${end.floor + 1}층`;
+      } else if (end.kind === 'rush' && end.index < RUSH_ORDER.length - 1) {
+        next = { ...end, index: end.index + 1 };
+        const r = RUSH_ORDER[end.index + 1];
+        nextLabel = `${r.tier}단계 ${r.kind === 'boss' ? '수호자' : '파수꾼'}`;
+      }
+      this.openMenu(() =>
+        this.screens.warp(
+          this.endLabel(end, (this.level as DungeonScene).theme.name),
+          nextLabel,
+          () => {
+            this.afterMenu = () => this.enterDungeon(1, 1, false, undefined, next!);
+            this.screens.close();
+          },
+          () => {
+            this.afterMenu = () => this.finishRun(end.kind === 'rush' && end.index < RUSH_ORDER.length - 1 ? '보스 러시 포기' : '귀환 성공');
+            this.screens.close();
+          },
+          () => this.resume(),
+        ),
+      );
+      return;
+    }
     const g = stageIndex(run.tier, run.stage);
     // 채집 특화 맵에서는 마을로만 돌아간다
     const next = !run.farm && g < MAX_STAGE ? stageOf(g + 1) : null;
@@ -1513,6 +1791,13 @@ export class Game {
     const drops = this.level.hitNode(n);
     // 강화한 도구는 확률적으로 하나 더 캔다
     if (n.def.style !== 'chest' && drops.length && Math.random() < toolBonusChance(this.progress.data.tools[n.def.style === 'tree' ? 'axe' : 'pickaxe'])) drops.push({ itemId: drops[0].itemId, count: 1 });
+    // 심연 균열: 단계가 높을수록 자원이 더 많이 나온다
+    const endRun = this.run.end;
+    if (endRun?.kind === 'rift' && n.def.style !== 'chest')
+      for (const d of drops) {
+        const f = d.count * (riftYield(endRun.level) - 1);
+        d.count += Math.floor(f) + (Math.random() < f % 1 ? 1 : 0);
+      }
     for (const drop of drops) {
       const added = this.run.bag.add(drop.itemId, drop.count);
       const item = ITEMS[drop.itemId];
@@ -2104,6 +2389,16 @@ export class Game {
         const tag = boss.dooming ? ' · :skull: 틈새 붕괴' : boss.shielded ? ` · 보호막 (수호병 ${boss.guardsLeft})` : boss.phase2 ? ' · 격노' : '';
         this.hud.setBoss(`${boss.name}${tag}  ${clock}`, boss.hp / boss.maxHp, boss.bars, boss.shielded, left < 60);
         this.audio.playMusic('boss');
+      }
+      const end = this.run.end;
+      if (end?.kind === 'rift' && !this.run.roomCleared) {
+        const before = Math.ceil(end.timeLeft);
+        end.timeLeft -= dt;
+        if (Math.ceil(end.timeLeft) !== before && end.timeLeft > -1) this.hud.setLocation(this.endLabel(end, level.theme.name), level.theme.portalColor);
+        if (end.timeLeft <= 0 && !this.run.riftLate) {
+          this.run.riftLate = true;
+          this.hud.toast(':hourglass: 시간 초과! 끝까지 정리하면 보상은 절반, 다음 단계는 열리지 않습니다', 4000);
+        }
       }
       if (!this.run.roomCleared && level.exitOpen) this.roomClear();
     }
