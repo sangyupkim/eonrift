@@ -475,7 +475,7 @@ export class DungeonScene extends Level {
   /** 플레이어와 부딪히는 장애물 (채집물, 차원문, 살아 있는 몬스터) */
   playerObstacles(): CircleObstacle[] {
     const list = [...this.obstacles];
-    for (const m of this.monsters) if (m.alive) list.push({ x: m.x, z: m.z, radius: m.radius * 0.8 });
+    for (const m of this.monsters) if (m.targetable) list.push({ x: m.x, z: m.z, radius: m.radius * 0.8 });
     return list;
   }
 

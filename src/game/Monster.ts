@@ -1,7 +1,10 @@
 import {
   AdditiveBlending,
   BoxGeometry,
+  CylinderGeometry,
+  IcosahedronGeometry,
   SphereGeometry,
+  TorusGeometry,
   Color,
   DoubleSide,
   Group,
@@ -17,6 +20,7 @@ import { ARCHETYPES, monsterAtkMult, tierScale, type Archetype, type ArchetypeDe
 import { BOSS_SPECIES, MIDBOSS_SPECIES, type DebuffSpec, type SpeciesDef } from '../data/species';
 import { moveWithCollision, type CircleObstacle } from '../dungeon/collision';
 import { TILE } from '../config';
+import { merge, part } from '../models/util';
 import { isFloor, type DungeonData } from '../dungeon/generator';
 import { buildMonster, MONSTER_COLORS, type MonsterRig } from '../models/monsters';
 import { Telegraph, type Effects, type TelegraphShape } from './Effects';
@@ -315,6 +319,7 @@ export class Monster {
 
   removeFrom(scene: Scene): void {
     scene.remove(this.rig.root, this.hpBar);
+    this.showBonePile(scene, false);
     this.clearTelegraph(scene);
   }
 
@@ -398,6 +403,49 @@ export class Monster {
   /** 무너져 있는지 (공격이 통하지 않는다) */
   get isDown(): boolean {
     return this.state === 'down';
+  }
+
+  /** 조준·공격 대상이 될 수 있는지 (살아 있고, 뼈 무더기로 무너져 있지 않음) */
+  get targetable(): boolean {
+    return this.state !== 'dead' && this.state !== 'down';
+  }
+
+  /** 무너진 해골: 바닥에 흩어진 뼈와 해골 (되살아나면 치운다) */
+  private bonePile: Mesh | null = null;
+  private showBonePile(scene: Scene, on: boolean): void {
+    if (on && !this.bonePile) {
+      const bone = (this.species.model as { skin?: number }).skin ?? 0xe8dcc4;
+      const dark = new Color(bone).multiplyScalar(0.75).getHex();
+      const size = this.rig.root.scale.x;
+      const parts = [];
+      // 뼈 여러 개가 아무렇게나 흩어져 있다
+      for (let i = 0; i < 7; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const d = Math.random() * 0.45;
+        const len = 0.28 + Math.random() * 0.25;
+        parts.push(part(new CylinderGeometry(0.035, 0.035, len, 5), i % 2 ? bone : dark, { pos: [Math.cos(a) * d, 0.04 + i * 0.012, Math.sin(a) * d], rot: [Math.PI / 2, Math.random() * Math.PI, 0] }));
+        parts.push(part(new IcosahedronGeometry(0.045, 0), bone, { pos: [Math.cos(a) * d + Math.cos(a) * len * 0.5, 0.05, Math.sin(a) * d] }));
+      }
+      // 갈비뼈 조각
+      for (let i = 0; i < 3; i++) parts.push(part(new TorusGeometry(0.13, 0.025, 3, 8, Math.PI), dark, { pos: [0.1 - i * 0.08, 0.05, -0.15 + i * 0.07], rot: [-Math.PI / 2, 0, 0.4 * i] }));
+      // 굴러떨어진 해골 (눈구멍)
+      parts.push(part(new BoxGeometry(0.26, 0.22, 0.24), bone, { pos: [0.28, 0.11, 0.12], rot: [0.2, 0.7, 0.3] }));
+      parts.push(part(new BoxGeometry(0.06, 0.06, 0.03), 0x1a1a1a, { pos: [0.33, 0.13, 0.25], rot: [0.2, 0.7, 0.3] }));
+      parts.push(part(new BoxGeometry(0.06, 0.06, 0.03), 0x1a1a1a, { pos: [0.4, 0.13, 0.18], rot: [0.2, 0.7, 0.3] }));
+      const pile = new Mesh(merge(parts), this.material);
+      pile.position.set(this.x, 0, this.z);
+      pile.scale.setScalar(size * 1.4);
+      pile.rotation.y = this.facing;
+      pile.castShadow = true;
+      scene.add(pile);
+      this.bonePile = pile;
+      this.rig.root.visible = false;
+    } else if (!on && this.bonePile) {
+      scene.remove(this.bonePile);
+      this.bonePile.geometry.dispose();
+      this.bonePile = null;
+      this.rig.root.visible = true;
+    }
   }
   private clearTelegraphLater = false;
 
@@ -665,11 +713,17 @@ export class Monster {
       world.effects.sparks(this.x, 0.4, this.z, this.species.colors?.main ?? 0x6ad86a, 14, { speed: 4 });
     }
     if (this.state === 'down') {
-      // 뼈 무더기: 2.5초 뒤 다시 일어난다 (체력 절반)
-      const k = Math.min(1, this.t / 0.3);
-      this.rig.body.rotation.z = k * 1.5;
-      this.rig.body.position.y = -0.3 * k;
-      if (this.t > 2.2) this.rig.body.rotation.z = 1.5 * (1 - (this.t - 2.2) / 0.3);
+      // 뼈 무더기: 바닥에 흩어져 있다가 2.5초 뒤 다시 일어난다 (체력 절반). 무너져 있는 동안은 조준·공격 대상이 아니다
+      if (this.t < 2.2) {
+        this.showBonePile(world.scene, true);
+        if (this.bonePile && Math.random() < dt * 2) world.effects.sparks(this.x, 0.2, this.z, this.species.glow ?? 0x6affd0, 1, { up: true, spread: 0.4 });
+      } else {
+        // 다시 맞춰지며 일어난다
+        this.showBonePile(world.scene, false);
+        const k = (this.t - 2.2) / 0.3;
+        this.rig.body.rotation.z = 1.5 * (1 - k);
+        this.rig.body.position.y = -0.3 * (1 - k);
+      }
       if (this.t >= 2.5) {
         this.hp = this.maxHp * 0.5;
         this.hpFill.scale.x = 0.5;
@@ -877,7 +931,7 @@ export class Monster {
 
     // 몬스터끼리 겹치지 않게 살짝 밀어낸다
     for (const o of world.monsters) {
-      if (o === this || !o.alive) continue;
+      if (o === this || !o.targetable) continue;
       const ox = this.x - o.x;
       const oz = this.z - o.z;
       const d = Math.hypot(ox, oz);

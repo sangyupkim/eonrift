@@ -108,7 +108,7 @@ export class Projectiles {
         host.burst(p.x - p.vx * 0.02, p.y, p.z - p.vz * 0.02, p.color, 4, 0.5);
       } else if (p.fromPlayer) {
         for (const m of host.monsters) {
-          if (!m.alive || p.hit.has(m)) continue;
+          if (!m.targetable || p.hit.has(m)) continue;
           if (Math.hypot(m.x - p.x, m.z - p.z) < m.radius + p.radius) {
             p.hit.add(m);
             host.monsterHit(m, p);

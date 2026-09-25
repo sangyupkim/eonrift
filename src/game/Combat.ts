@@ -93,17 +93,17 @@ export class Combat {
     const crowd = (range: number, r: number) => {
       let best = { x: p.x + Math.sin(aim) * 5, z: p.z + Math.cos(aim) * 5, n: 0 };
       for (const m of d.monsters) {
-        if (!m.alive || Math.hypot(m.x - p.x, m.z - p.z) > range) continue;
-        const n = d.monsters.filter((o) => o.alive && Math.hypot(o.x - m.x, o.z - m.z) < r).length;
+        if (!m.targetable || Math.hypot(m.x - p.x, m.z - p.z) > range) continue;
+        const n = d.monsters.filter((o) => o.targetable && Math.hypot(o.x - m.x, o.z - m.z) < r).length;
         if (n > best.n) best = { x: m.x, z: m.z, n };
       }
       return best;
     };
     const hitAround = (x: number, z: number, r: number, mult: number, knock: number, stun = 0, frozen = false) => {
       for (const m of d.monsters) {
-        if (!m.alive || Math.hypot(m.x - x, m.z - z) > r + m.radius) continue;
+        if (!m.targetable || Math.hypot(m.x - x, m.z - z) > r + m.radius) continue;
         this.host.damageMonster(m, mult * pow, knock, x, z);
-        if (stun && m.alive) {
+        if (stun && m.targetable) {
           m.stun = Math.max(m.stun, stun);
           m.frozen = frozen;
         }
@@ -262,7 +262,7 @@ export class Combat {
         d.particles.burst(tx, 0.4, tz, 0x6a4a2a, 12, 1.3);
         this.host.sfx('boom');
         this.host.shake(0.2);
-        for (const m of d.monsters) if (m.alive && Math.hypot(m.x - tx, m.z - tz) < 3 + m.radius) this.host.damageMonster(m, 1.8, 1.5, tx, tz);
+        for (const m of d.monsters) if (m.targetable && Math.hypot(m.x - tx, m.z - tz) < 3 + m.radius) this.host.damageMonster(m, 1.8, 1.5, tx, tz);
       });
     }
     return true;
@@ -276,7 +276,7 @@ export class Combat {
     let best: Target | null = null;
     let bestD = range;
     for (const m of d.monsters) {
-      if (!m.alive) continue;
+      if (!m.targetable) continue;
       const dist = Math.hypot(m.x - p.x, m.z - p.z) - m.radius;
       if (dist < bestD) {
         bestD = dist;
@@ -310,7 +310,7 @@ export class Combat {
       return (dx * fx + dz * fz) / dist >= Math.cos(angle / 2);
     };
     for (const m of d.monsters) {
-      if (m.alive && inArc(m.x, m.z, m.radius)) {
+      if (m.targetable && inArc(m.x, m.z, m.radius)) {
         this.host.damageMonster(m, mult, knock, p.x, p.z);
         hits++;
       }
@@ -432,7 +432,7 @@ export class Combat {
           invuln: true,
           onStep: () => {
             for (const m of d.monsters) {
-              if (m.alive && !hit.has(m) && Math.hypot(m.x - p.x, m.z - p.z) < m.radius + 1.3) {
+              if (m.targetable && !hit.has(m) && Math.hypot(m.x - p.x, m.z - p.z) < m.radius + 1.3) {
                 hit.add(m);
                 dmg(m, 2.2, 1.2, p.x, p.z);
                 d.effects.slash(m.x, m.z, player.facing + Math.PI / 2, 1.6, color, 1.6);
@@ -513,7 +513,7 @@ export class Combat {
                   d.particles.burst(x, 0.6, z, 0x5a3a2a, 10, 1.3);
                   this.host.sfx('boom');
                   this.host.shake(0.2);
-                  for (const m of d.monsters) if (m.alive && Math.hypot(m.x - x, m.z - z) < 2.8 + m.radius) dmg(m, 2.4, 1.3, x, z);
+                  for (const m of d.monsters) if (m.targetable && Math.hypot(m.x - x, m.z - z) < 2.8 + m.radius) dmg(m, 2.4, 1.3, x, z);
                 },
               });
             },
@@ -540,7 +540,7 @@ export class Combat {
               const tick = () => {
                 if (ticks++ >= 8 || this.host.dungeon() !== d) return;
                 for (const m of d.monsters) {
-                  if (m.alive && Math.hypot(m.x - tx, m.z - tz) < 3 + m.radius) {
+                  if (m.targetable && Math.hypot(m.x - tx, m.z - tz) < 3 + m.radius) {
                     m.slow = 0.8;
                     dmg(m, 0.55, 0, tx, tz);
                   }
@@ -570,7 +570,7 @@ export class Combat {
                 let best: Monster | null = null;
                 let bestD = i === 0 ? 10 : 6;
                 for (const m of d.monsters) {
-                  if (!m.alive || hit.has(m)) continue;
+                  if (!m.targetable || hit.has(m)) continue;
                   const dist = Math.hypot(m.x - fromX, m.z - fromZ);
                   if (dist < bestD) {
                     bestD = dist;
@@ -650,7 +650,7 @@ export class Combat {
                   d.particles.burst(x, 0.6, z, 0x5a3a2a, 12, 1.4);
                   this.host.sfx('boom');
                   this.host.shake(0.25);
-                  for (const m of d.monsters) if (m.alive && Math.hypot(m.x - x, m.z - z) < 3 + m.radius) dmg(m, 2.8, 1.4, x, z);
+                  for (const m of d.monsters) if (m.targetable && Math.hypot(m.x - x, m.z - z) < 3 + m.radius) dmg(m, 2.8, 1.4, x, z);
                 },
               });
               d.effects.streak(p.x + fx() * 0.8, p.z + fz() * 0.8, p.x + fx() * 10, p.z + fz() * 10, 0xff8a3a, 0.3);
@@ -695,14 +695,14 @@ export class Combat {
         this.host.sfx('magic');
         const strikes = 8 + lv;
         this.repeat(d, 0.25, 0.22, strikes, () => {
-          const near = d.monsters.filter((m) => m.alive && Math.hypot(m.x - p.x, m.z - p.z) < 9 + m.radius);
+          const near = d.monsters.filter((m) => m.targetable && Math.hypot(m.x - p.x, m.z - p.z) < 9 + m.radius);
           if (!near.length) return;
           const m = near[Math.floor(Math.random() * near.length)];
           d.effects.bolt(m.x, m.z - 0.01, m.x, m.z, 0xbfe8ff);
           d.effects.pillar(m.x, m.z, 0x9fe8ff, 3);
           d.effects.sparks(m.x, 0.5, m.z, 0xdff4ff, 8, { speed: 5 });
           dmg(m, 1.5, 0.3, m.x, m.z);
-          if (m.alive) m.stun = Math.max(m.stun, m.isBoss ? 0.1 : 0.35);
+          if (m.targetable) m.stun = Math.max(m.stun, m.isBoss ? 0.1 : 0.35);
           this.host.sfx('hit');
         });
         break;
@@ -724,7 +724,7 @@ export class Combat {
         player.addBuff('smoke', '연막', 6 + lv * 0.5);
         d.effects.zone(p.x, p.z, 4, 0x8a8a9a, 6 + lv * 0.5);
         d.particles.burst(p.x, 0.6, p.z, 0xb0b0c0, 20, 1.5);
-        for (const m of d.monsters) if (m.alive && Math.hypot(m.x - p.x, m.z - p.z) < 6) m.slow = Math.max(m.slow, 4);
+        for (const m of d.monsters) if (m.targetable && Math.hypot(m.x - p.x, m.z - p.z) < 6) m.slow = Math.max(m.slow, 4);
         this.host.sfx('boom');
         break;
       case 'archer:5':
