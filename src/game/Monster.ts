@@ -30,7 +30,9 @@ type State = 'idle' | 'chase' | 'windup' | 'dash' | 'recover' | 'down' | 'dead';
 type BossPattern =
   | 'slam' | 'cone' | 'volley' | 'charge' | 'summon' | 'rain' | 'cross' | 'nova' | 'barrage' | 'doom' | 'spin' | 'bolt' | 'aoe' | 'thrust'
   // 보스 전용 추가 패턴
-  | 'crossX' | 'sweep' | 'spiral' | 'leap' | 'farblast' | 'chase' | 'frostring' | 'miasma' | 'hex';
+  | 'crossX' | 'sweep' | 'spiral' | 'leap' | 'farblast' | 'chase' | 'frostring' | 'miasma' | 'hex'
+  // 보스마다의 고유 패턴
+  | 'rush' | 'whirlwind' | 'warcry' | 'roots' | 'quake' | 'icicles' | 'blink' | 'prism' | 'missiles' | 'overheat' | 'eruption' | 'flameCharge' | 'lunge' | 'voidZones';
 
 export interface ProjectileSpec {
   x: number;
@@ -81,6 +83,53 @@ const BOSS_PATTERNS: BossPattern[][] = [
   ['cone', 'miasma', 'leap', 'sweep', 'rain', 'nova', 'charge', 'crossX', 'frostring'],
   ['crossX', 'sweep', 'spiral', 'leap', 'hex', 'frostring', 'chase', 'volley', 'miasma', 'barrage', 'summon', 'nova'],
 ];
+
+/**
+ * 보스마다의 성격과 패턴 (같은 이름이 두 번 있으면 그만큼 자주 쓴다). 수호자·파수꾼 모두 자기 목록을 쓴다.
+ * - 고대 숲의 수호수: 느린 거목. 뿌리 가시가 줄지어 솟고(둔화), 땅울림이 물결처럼 퍼진다
+ * - 협곡의 폭군: 도끼를 휘두르며 연속 돌진, 도끼 회오리로 쫓아오고, 전투 함성으로 격노
+ * - 빙결 여제: 순간이동하며 고드름 비(틈을 찾아 피하기)와 절대 냉기
+ * - 수정 심장: 수정 기둥을 세워 십자 광선을 쏘고, 침묵 저주
+ * - 폭주한 마공 거신: 유도 미사일 연사, 과열 대폭발(멀리 도망), 레이저
+ * - 용암 군주: 용암이 물결처럼 분출하고, 불길을 남기며 돌진
+ * - 틈새의 파수꾼: 순간이동, 바둑판 차원 붕괴, 십자·대각 베기
+ * 파수꾼: 이끼 파수꾼(멧돼지 연속 돌진) · 고블린 족장(부하·폭탄·함성) · 서리 트롤(내려찍기·고드름) ·
+ * 다크엘프 근위대장(창 연속 찌르기·순간이동) · 경비 거신(미사일·레이저) · 용암 파수꾼(불꽃 돌진) · 틈새의 문지기(찌르기·차원 붕괴)
+ */
+const SIGNATURE: Record<string, BossPattern[]> = {
+  b1: ['roots', 'quake', 'slam', 'miasma', 'roots', 'leap', 'summon', 'quake', 'nova'],
+  b2: ['rush', 'whirlwind', 'warcry', 'rush', 'cone', 'leap', 'whirlwind', 'slam', 'crossX'],
+  b3: ['icicles', 'blink', 'frostring', 'spiral', 'icicles', 'volley', 'blink', 'sweep', 'rain'],
+  b4: ['prism', 'spiral', 'hex', 'prism', 'barrage', 'slam', 'nova', 'sweep'],
+  b5: ['missiles', 'overheat', 'sweep', 'charge', 'missiles', 'summon', 'barrage', 'slam'],
+  b6: ['eruption', 'flameCharge', 'leap', 'barrage', 'eruption', 'cone', 'flameCharge', 'sweep', 'rain'],
+  b7: ['voidZones', 'blink', 'crossX', 'spiral', 'hex', 'voidZones', 'sweep', 'chase', 'blink', 'frostring', 'summon'],
+  m1: ['rush', 'slam', 'rush', 'cone', 'miasma'],
+  m2: ['summon', 'barrage', 'warcry', 'cone', 'charge'],
+  m3: ['slam', 'icicles', 'leap', 'frostring', 'cone'],
+  m4: ['lunge', 'charge', 'hex', 'blink', 'lunge'],
+  m5: ['missiles', 'sweep', 'slam', 'charge', 'missiles'],
+  m6: ['flameCharge', 'rush', 'eruption', 'leap', 'cone'],
+  m7: ['lunge', 'crossX', 'voidZones', 'charge', 'sweep'],
+};
+
+/** 고유 패턴을 쓸 때 머리 위로 외치는 이름 */
+const SIGNATURE_NAME: Partial<Record<BossPattern, string>> = {
+  rush: '연속 돌진',
+  whirlwind: '도끼 회오리',
+  warcry: '전투 함성 — 격노!',
+  roots: '뿌리 가시',
+  quake: '대지 울림',
+  icicles: '고드름 비 — 틈을 찾아라',
+  blink: '순간이동',
+  prism: '수정 기둥',
+  missiles: '유도 미사일',
+  overheat: '과열! 멀리 떨어져라',
+  eruption: '용암 분출',
+  flameCharge: '화염 돌진',
+  lunge: '연속 찌르기',
+  voidZones: '차원 붕괴 — 바둑판',
+};
 
 /** 멀리서 싸우는 플레이어에게 쓰는 넓은 공격: 단계(보스)마다 속성과 남는 장판이 다르다 */
 const FAR_BLAST: { name: string; color: number; debuff: DebuffSpec }[] = [
@@ -148,9 +197,18 @@ export class Monster {
   private spiral: { left: number; tick: number; angle: number; arms: number } | null = null;
   private leapTo: { x: number; z: number; tel: Telegraph } | null = null;
   private later: { at: number; fn: () => void }[] = [];
+  /** 연속 돌진: 남은 돌진 수, 돌진 중 도끼 휘두르기, 지나간 자리에 불길 */
+  private rushLeft = 0;
+  private dashSpin = false;
+  private dashTrail = 0;
+  private dashHitCd = 0;
+  /** 도끼 회오리: 휘두르며 쫓아오는 남은 시간 */
+  private whirl: { left: number; hitCd: number } | null = null;
+  /** 전투 함성 격노 남은 시간 */
+  private rageT = 0;
   /** 여러 단계 패턴이 아직 진행 중인지 (끝날 때까지 다음 패턴을 쓰지 않는다) */
   private get busy(): boolean {
-    return this.timed.length > 0 || !!this.sweep || !!this.spiral || !!this.leapTo || this.later.length > 0;
+    return this.timed.length > 0 || !!this.sweep || !!this.spiral || !!this.leapTo || this.later.length > 0 || !!this.whirl;
   }
   private hpBar: Group;
   private hpFill: Mesh;
@@ -382,6 +440,8 @@ export class Monster {
     }
     this.spiral = null;
     this.later = [];
+    this.whirl = null;
+    this.rushLeft = 0;
   }
 
   /** 회전 광선: 빛나는 기둥 (예고 바닥판 대신 실제 광선처럼) */
@@ -493,6 +553,28 @@ export class Monster {
           world.fireEnemyProjectile({ x: this.x, z: this.z, angle: sp.angle + (a / sp.arms) * Math.PI * 2, speed: 6.5, damage: this.atk * 0.45, color: MONSTER_COLORS[this.tier - 1].accent, radius: 0.3 });
       }
       if (sp.left <= 0) this.spiral = null;
+    }
+    const wh = this.whirl;
+    if (wh) {
+      // 도끼 회오리: 빙글빙글 돌며 플레이어 쪽으로 밀고 온다
+      wh.left -= dt;
+      wh.hitCd -= dt;
+      this.facing += dt * 14;
+      const a = Math.atan2(p.x - this.x, p.z - this.z);
+      const sp = this.speed * 1.15 * dt;
+      moveWithCollision(world.grid, this, Math.sin(a) * sp, Math.cos(a) * sp, this.radius, world.obstacles);
+      this.obstacle.x = this.x;
+      this.obstacle.z = this.z;
+      this.rig.root.position.set(this.x, 0, this.z);
+      this.rig.root.rotation.y = this.facing;
+      const reach = this.radius + 1.8;
+      if (wh.hitCd <= 0) {
+        wh.hitCd = 0.35;
+        world.effects.slash(this.x, this.z, this.facing, reach, 0xff8a4a, Math.PI * 2, 0.8);
+        world.burst(this.x, 0.2, this.z, 0xb08a5a, 4);
+        if (Math.hypot(p.x - this.x, p.z - this.z) < reach + 0.3) this.hitPlayer(world, this.atk * 0.55, this.x, this.z);
+      }
+      if (wh.left <= 0) this.whirl = null;
     }
     const lp = this.leapTo;
     if (lp) {
@@ -650,6 +732,15 @@ export class Monster {
 
     this.skillT += dt;
     this.sinceHit += dt;
+    if (this.rageT > 0) {
+      this.rageT -= dt;
+      if (Math.random() < dt * 8) world.effects.sparks(this.x, this.rig.height * this.rig.root.scale.y * 0.8, this.z, 0xff3a1a, 1, { up: true, spread: 0.6 });
+      if (this.rageT <= 0) {
+        this.atk /= 1.3;
+        this.speed /= 1.3;
+        this.material.emissive.setHex(0x000000);
+      }
+    }
     // 트롤: 3초 동안 맞지 않으면 체력이 빠르게 찬다
     if (this.species.trait === 'regen' && this.sinceHit > 3 && this.hp < this.maxHp) {
       this.hp = Math.min(this.maxHp, this.hp + this.maxHp * 0.06 * dt);
@@ -738,15 +829,41 @@ export class Monster {
         move(Math.sin(this.facing) * sp, Math.cos(this.facing) * sp);
         const moved = Math.hypot(this.x - bx, this.z - bz);
         this.dashLeft -= sp;
-        if (!this.dashHit && Math.hypot(p.x - this.x, p.z - this.z) < this.radius + 0.6) {
+        this.dashHitCd -= dt;
+        if (this.dashSpin) {
+          // 도끼를 휘두르며 달린다: 옆에 있어도 베인다 (0.3초마다)
+          const reach = this.radius + 1.5;
+          if (this.dashHitCd <= 0) {
+            this.dashHitCd = 0.3;
+            world.effects.slash(this.x, this.z, this.facing + this.t * 20, reach, 0xff6a3a, Math.PI * 1.4, 0.9);
+            if (Math.hypot(p.x - this.x, p.z - this.z) < reach + 0.3) this.hitPlayer(world, this.atk * 0.9, this.x, this.z);
+          }
+        } else if (!this.dashHit && Math.hypot(p.x - this.x, p.z - this.z) < this.radius + 0.6) {
           this.dashHit = true;
           this.hitPlayer(world, this.atk * 1.2, this.x, this.z);
+        }
+        if (this.dashTrail > 0) {
+          this.dashTrail -= moved;
+          if (this.dashTrail <= 0) {
+            this.dashTrail = 1.3;
+            world.hazard(this.x, this.z, 1.1, 4, this.atk * 0.25, 0xff5a1a, { id: 'burn', chance: 1, duration: 3 });
+          }
         }
         if (this.dashLeft <= 0 || moved < sp * 0.3) {
           if (moved < sp * 0.3) {
             world.shake(0.2);
             world.burst(this.x, 0.5, this.z, 0xcfc0a0, 10);
           }
+          // 연속 돌진: 다시 겨누고 짧게 예고한 뒤 또 달린다
+          if (this.isBoss && this.rushLeft > 0) {
+            this.rushLeft--;
+            this.facing = Math.atan2(p.x - this.x, p.z - this.z);
+            this.startTelegraph(world, { kind: 'line', length: 11, width: 2.6 }, this.x, this.z, this.facing, this.phase2 ? 0.4 : 0.5);
+            this.setState('windup');
+            break;
+          }
+          this.dashSpin = false;
+          this.dashTrail = 0;
           this.setState('recover');
         }
         break;
@@ -902,19 +1019,219 @@ export class Monster {
     return false;
   }
 
+  /** 보스 고유 패턴. 처리했으면 true */
+  private signature(world: MonsterWorld, pattern: BossPattern, toPlayer: number, speed: number): boolean {
+    const p = world.player;
+    const floorAt = (x: number, z: number) => isFloor(world.grid, Math.floor(x / TILE), Math.floor(z / TILE));
+    switch (pattern) {
+      case 'rush':
+      case 'flameCharge': {
+        // 돌진 예고 → release에서 달린다. 폭군·멧돼지는 2~3번 연달아
+        this.rushLeft = pattern === 'rush' ? (this.phase2 ? 2 : 1) + (this.species.id === 'b2' ? 1 : 0) : 0;
+        this.startTelegraph(world, { kind: 'line', length: pattern === 'rush' ? 11 : 13, width: 2.6 }, this.x, this.z, toPlayer, 0.8 * speed);
+        this.setState('windup');
+        return true;
+      }
+      case 'whirlwind':
+        // 도끼 회오리: 잠깐 도끼를 치켜든 뒤 3초 동안 돌면서 쫓아온다
+        this.clearTelegraph(world.scene);
+        this.addTimed(world, { kind: 'circle', r: this.radius + 1.8 }, this.x, this.z, 0, 0.6, 0.6, 0xff8a4a, 'ring');
+        this.later.push({ at: 0.6, fn: () => (this.whirl = { left: this.phase2 ? 3.6 : 2.8, hitCd: 0 }) });
+        this.setState('recover');
+        return true;
+      case 'warcry':
+        // 전투 함성: 가까이 있으면 밀려나며 다치고, 6초 동안 빨라지고 세진다
+        this.clearTelegraph(world.scene);
+        this.addTimed(world, { kind: 'circle', r: 4 }, this.x, this.z, 0, 0.7, 0.8, 0xff3a1a, 'ring');
+        this.later.push({
+          at: 0.7,
+          fn: () => {
+            this.rageT = 6;
+            this.atk *= 1.3;
+            this.speed *= 1.3;
+            this.material.emissive.setHex(0x5a1000);
+            world.effects.ring(this.x, this.z, 6, 0xff5a2a, 0.6);
+            world.shake(0.5);
+          },
+        });
+        this.setState('recover');
+        return true;
+      case 'roots': {
+        // 뿌리 가시: 보스에서 플레이어 쪽으로 줄지어 솟는다 (격노 시 세 갈래). 맞으면 둔화
+        this.clearTelegraph(world.scene);
+        const fans = this.phase2 ? [-0.4, 0, 0.4] : [0];
+        for (const f of fans)
+          for (let i = 0; i < 8; i++) {
+            const d = 1.8 + i * 1.7;
+            const x = this.x + Math.sin(toPlayer + f) * d;
+            const z = this.z + Math.cos(toPlayer + f) * d;
+            this.addTimed(world, { kind: 'circle', r: 1.3 }, x, z, 0, 0.8 * speed + i * 0.11, 1.0, 0x7aff5a, 'blast', { id: 'slow', chance: 1, duration: 2.5 });
+          }
+        this.setState('recover');
+        return true;
+      }
+      case 'quake':
+        // 대지 울림: 고리 세 개가 차례로 퍼진다. 고리 사이 틈에 서 있어야 한다
+        this.clearTelegraph(world.scene);
+        [3.2, 6.2, 9.2].forEach((r, i) => this.addTimed(world, { kind: 'ring', r, inner: r - 2 }, this.x, this.z, 0, 0.9 * speed + i * 0.55, 1.1, 0xc8a060, 'ring'));
+        this.setState('recover');
+        return true;
+      case 'icicles': {
+        // 고드름 비: 보스에서 플레이어 쪽으로 네 줄이 차례로 떨어진다. 줄마다 한 칸씩 빈틈
+        this.clearTelegraph(world.scene);
+        const sx = Math.sin(toPlayer);
+        const sz = Math.cos(toPlayer);
+        for (let w = 0; w < 4; w++) {
+          const gap = Math.floor(Math.random() * 7);
+          for (let k = 0; k < 7; k++) {
+            if (k === gap) continue;
+            const off = (k - 3) * 2.4;
+            const d = 3 + w * 2.8;
+            this.addTimed(world, { kind: 'circle', r: 1.25 }, this.x + sx * d + sz * off, this.z + sz * d - sx * off, 0, 0.9 * speed + w * 0.4, 1.0, 0x9fe3ff, 'blast', { id: 'slow', chance: 1, duration: 3 });
+          }
+        }
+        this.setState('recover');
+        return true;
+      }
+      case 'blink': {
+        // 순간이동: 원래 자리에 냉기·공허 폭발을 남기고, 플레이어 옆으로 나타나 파편을 흩뿌린다
+        this.clearTelegraph(world.scene);
+        const color = this.species.glow ?? MONSTER_COLORS[this.tier - 1].accent;
+        this.addTimed(world, { kind: 'circle', r: 3 }, this.x, this.z, 0, 0.8, 0.9, color, 'blast');
+        let tx = this.x;
+        let tz = this.z;
+        for (let i = 0; i < 12; i++) {
+          const a = Math.random() * Math.PI * 2;
+          const d = 5 + Math.random() * 2.5;
+          const x = p.x + Math.cos(a) * d;
+          const z = p.z + Math.sin(a) * d;
+          if (floorAt(x, z)) {
+            tx = x;
+            tz = z;
+            break;
+          }
+        }
+        world.effects.sparks(this.x, 1, this.z, color, 16, { up: true, spread: 0.6 });
+        this.x = tx;
+        this.z = tz;
+        this.obstacle.x = tx;
+        this.obstacle.z = tz;
+        world.effects.ring(tx, tz, 2, color, 0.4);
+        this.later.push({
+          at: 0.45,
+          fn: () => {
+            const a = Math.atan2(world.player.x - this.x, world.player.z - this.z);
+            const n = this.phase2 ? 7 : 5;
+            for (let i = 0; i < n; i++)
+              world.fireEnemyProjectile({ x: this.x, z: this.z, angle: a + (i - (n - 1) / 2) * 0.22, speed: 9, damage: this.atk * 0.6, color, radius: 0.3, kind: 'shard' });
+          },
+        });
+        this.setState('recover');
+        return true;
+      }
+      case 'prism': {
+        // 수정 기둥: 주변에 기둥을 세우고, 기둥마다 십자 광선이 뻗는다
+        this.clearTelegraph(world.scene);
+        const n = this.phase2 ? 4 : 3;
+        for (let i = 0; i < n; i++) {
+          const a = Math.random() * Math.PI * 2;
+          const d = 3 + Math.random() * 4;
+          const x = p.x + Math.cos(a) * d;
+          const z = p.z + Math.sin(a) * d;
+          const base = Math.random() < 0.5 ? 0 : Math.PI / 4;
+          this.addTimed(world, { kind: 'circle', r: 1 }, x, z, 0, 0.8, 0.6, 0xd08aff, 'ring');
+          for (let k = 0; k < 4; k++) this.addTimed(world, { kind: 'line', length: 11, width: 1.4 }, x, z, base + (k * Math.PI) / 2, 1.7 * speed + i * 0.15, 1.0, 0xd08aff, 'slash');
+        }
+        this.setState('recover');
+        return true;
+      }
+      case 'missiles': {
+        // 유도 미사일: 0.28초마다 플레이어 발밑에 떨어진다
+        this.clearTelegraph(world.scene);
+        const n = this.phase2 ? 11 : 8;
+        for (let i = 0; i < n; i++)
+          this.later.push({ at: i * 0.28, fn: () => this.addTimed(world, { kind: 'circle', r: 1.8 }, world.player.x, world.player.z, 0, 0.75, 0.8, 0xffa04a, 'blast') });
+        this.setState('recover');
+        return true;
+      }
+      case 'overheat':
+        // 과열 대폭발: 보스 둘레 넓게, 오래 예고. 불길이 남는다
+        this.clearTelegraph(world.scene);
+        this.addTimed(world, { kind: 'circle', r: 8.5 }, this.x, this.z, 0, 2.2 * speed, 1.8, 0xff6a2a, 'blast', { id: 'burn', chance: 1, duration: 4 }, { r: 3, t: 4, dps: this.atk * 0.25 });
+        this.setState('recover');
+        return true;
+      case 'eruption':
+        // 용암 분출: 보스에서 바깥으로 세 겹 물결. 터진 자리에 용암이 남는다
+        this.clearTelegraph(world.scene);
+        (
+          [
+            [3, 6],
+            [6, 10],
+            [9, 14],
+          ] as const
+        ).forEach(([r, count], w) => {
+          const off = Math.random() * Math.PI;
+          for (let i = 0; i < count; i++) {
+            const a = off + (i / count) * Math.PI * 2;
+            this.addTimed(world, { kind: 'circle', r: 1.5 }, this.x + Math.cos(a) * r, this.z + Math.sin(a) * r, 0, 1.0 * speed + w * 0.45, 1.0, 0xff5a1a, 'blast', { id: 'burn', chance: 1, duration: 4 }, { r: 1.2, t: 3, dps: this.atk * 0.2 });
+          }
+        });
+        this.setState('recover');
+        return true;
+      case 'lunge': {
+        // 연속 찌르기: 창·검을 세 번 빠르게 찔러 온다 (찌를 때마다 다시 겨눈다)
+        this.clearTelegraph(world.scene);
+        const n = this.phase2 ? 4 : 3;
+        for (let i = 0; i < n; i++)
+          this.later.push({
+            at: i * 0.5,
+            fn: () => {
+              const a = Math.atan2(world.player.x - this.x, world.player.z - this.z);
+              this.facing = a;
+              this.addTimed(world, { kind: 'line', length: 9, width: 1.7 }, this.x, this.z, a, 0.5, 1.1, this.species.glow ?? 0xff4ad8, 'slash');
+            },
+          });
+        this.setState('recover');
+        return true;
+      }
+      case 'voidZones': {
+        // 차원 붕괴: 플레이어 주변 바둑판. 한쪽 칸이 먼저, 다른 쪽 칸이 뒤에 터진다
+        this.clearTelegraph(world.scene);
+        const step = 2.6;
+        for (let gx = -3; gx <= 3; gx++)
+          for (let gz = -3; gz <= 3; gz++) {
+            const x = p.x + gx * step;
+            const z = p.z + gz * step;
+            if (!floorAt(x, z)) continue;
+            const first = (gx + gz + 100) % 2 === 0;
+            this.addTimed(world, { kind: 'circle', r: 1.35 }, x, z, 0, first ? 1.1 * speed : 2.0 * speed, 1.0, 0xb67cff, 'blast', first ? undefined : { id: 'curse', chance: 1, duration: 4 });
+          }
+        this.setState('recover');
+        return true;
+      }
+    }
+    return false;
+  }
+
   private beginBossPattern(world: MonsterWorld, dist: number, toPlayer: number): void {
     if (this.bossQueue.length === 0) {
-      const pats = BOSS_PATTERNS[this.tier - 1];
-      this.bossQueue = [...(this.isFinal ? pats : pats.slice(0, 5))].sort(() => Math.random() - 0.5);
+      const own = SIGNATURE[this.species.id];
+      const pats = own ?? BOSS_PATTERNS[this.tier - 1];
+      this.bossQueue = [...(this.isFinal || own ? pats : pats.slice(0, 5))].sort(() => Math.random() - 0.5);
     }
     let pattern: BossPattern;
     // 멀리서 싸우면: 넓은 원거리 공격이나 도약으로 따라온다 (큐는 그대로 둔다)
     if (dist > 9 && Math.random() < 0.65) pattern = Math.random() < 0.6 ? 'farblast' : 'leap';
     else pattern = this.bossQueue.shift()!;
     if (pattern === 'charge' && dist < 3) pattern = 'slam';
+    // 격노 중에는 함성을 또 지르지 않는다
+    if (pattern === 'warcry' && this.rageT > 0) pattern = 'cone';
     this.pattern = pattern;
     this.facing = toPlayer;
     const speed = this.phase2 ? 0.75 : 1;
+    const sig = SIGNATURE_NAME[pattern];
+    if (sig) world.announce(`${this.name}: ${sig}`);
+    if (this.signature(world, pattern, toPlayer, speed)) return;
     switch (pattern) {
       case 'slam':
         this.startTelegraph(world, { kind: 'circle', r: 5 }, this.x, this.z, 0, 1.1 * speed);
@@ -1095,9 +1412,15 @@ export class Monster {
           world.shake(0.25);
           break;
         case 'charge':
+        case 'rush':
+        case 'flameCharge':
           this.clearTelegraph(world.scene);
-          this.dashLeft = 13;
+          this.dashLeft = this.pattern === 'rush' ? 11 : 13;
           this.dashHit = false;
+          this.dashHitCd = 0;
+          this.dashSpin = this.pattern === 'rush' && this.species.id === 'b2';
+          this.dashTrail = this.pattern === 'flameCharge' ? 0.5 : 0;
+          if (this.dashSpin) world.shake(0.2);
           this.setState('dash');
           return;
         case 'volley': {
