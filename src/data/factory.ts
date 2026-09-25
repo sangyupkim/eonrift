@@ -1,3 +1,4 @@
+import { essenceForTier } from './items';
 /** 차원집 공장의 건물과 레시피 */
 export type BuildingType = 'generator' | 'wire' | 'belt' | 'splitter' | 'box' | 'smelter' | 'crusher' | 'infuser' | 'alchemy' | 'workbench' | 'healer' | 'warehouse';
 
@@ -48,7 +49,7 @@ const PLANKS = ['plank', 'redpine_plank', 'frost_plank', 'crystal_plank', 'ironw
 const INGOTS = ['copper_ingot', 'iron_ingot', 'gold_ingot', 'diamond', 'titanium_ingot', 'orichalcum_ingot', 'dim_ingot'];
 const MANA_METALS = ['mana_copper', 'mana_iron', 'mana_gold', 'mana_diamond', 'mana_titanium', 'mana_orichalcum', 'mana_dim'];
 /** 단계에 맞는 마력 정수 */
-export const TIER_ESSENCE = (t: number) => (t <= 3 ? 'essence_low' : t <= 5 ? 'essence_mid' : 'essence_high');
+export const TIER_ESSENCE = essenceForTier;
 
 export const RECIPES: Recipe[] = [
   // 벌목소: 나무 단계 → 같은 단계 판자 2개
@@ -74,7 +75,10 @@ export const RECIPES: Recipe[] = [
 export const RECIPE_RENAMES: Record<string, string> = { plank_redpine: 'plank_2', plank_frost: 'plank_3', plank_crystal: 'plank_4', plank_iron: 'plank_5', plank_flame: 'plank_6', plank_dim: 'plank_7', silver_ingot: 'gold_ingot', mithril_ingot: 'titanium_ingot', obsidian_plate: 'orichalcum_ingot', dim_dust_void: 'dim_dust', mana_silver: 'mana_gold', mana_mithril: 'mana_titanium' };
 
 /** 마력 정수 하나가 발전기에서 타는 시간(초) */
-export const ESSENCE_BURN: Record<string, number> = { essence_low: 120, essence_mid: 300, essence_high: 600 };
+/** 마력 정수 한 개가 타는 시간(초, 전력을 가득 쓸 때) */
+export const ESSENCE_BURN: Record<string, number> = { essence_low: 120, essence_mid: 300, essence_high: 600, essence_supreme: 1200, essence_dim: 2400 };
+/** 그 정수가 타는 동안 같은 전력망 기계의 생산 속도 배율 */
+export const ESSENCE_BOOST: Record<string, number> = { essence_low: 1, essence_mid: 1.15, essence_high: 1.3, essence_supreme: 1.5, essence_dim: 1.8 };
 
 /** 공장 크기 단계와 확장 비용 */
 export const FACTORY_SIZES = [

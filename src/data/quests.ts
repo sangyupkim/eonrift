@@ -1,5 +1,5 @@
 import { SCRIPTS, type Step } from './story';
-import { ITEMS, ORE_TIERS, TIER_MANA_METAL, TIER_PLANK, TIER_PLATE, WOOD_TIERS } from './items';
+import { essenceForTier, ITEMS, ORE_TIERS, TIER_MANA_METAL, TIER_PLANK, TIER_PLATE, WOOD_TIERS } from './items';
 import { TIER_INGOT } from './tools';
 
 export type NpcRef = 'chief' | 'guide' | 'smith' | 'engineer' | 'merchant' | 'stranger' | 'trainer' | 'researcher';
@@ -251,7 +251,7 @@ export const SUB_QUESTS: QuestDef[] = [
  */
 const PLACE = ['이끼 낀 숲 유적', '붉은 협곡', '얼어붙은 동굴', '수정 광맥', '마공학 공장 폐허', '용암 심연', '부서진 차원'];
 const ITEM_NAME = (id: string) => ITEMS[id]?.name ?? id;
-const ESS = (t: number) => (t <= 3 ? 'essence_low' : t <= 5 ? 'essence_mid' : 'essence_high');
+const ESS = essenceForTier;
 const ESS_NAME = (t: number) => (t <= 3 ? '하급' : t <= 5 ? '중급' : '상급');
 
 interface SubTemplate {

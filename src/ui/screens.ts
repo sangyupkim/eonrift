@@ -5,7 +5,7 @@ import { CLASSES, CLASS_ORDER, expToNext, MAX_LEVEL, MAX_SKILL_LEVEL, SKILL_LEAR
 import { TOOL_KIND_NAMES, TOOL_TIER_NAMES, toolBonusChance, toolEnhanceCost, toolMaxDur, toolName, toolRepair, toolSpeed, type ToolKind, type ToolState } from '../data/tools';
 import { equipCraftCost, equipManaCraftCost, MANA_PLATE_OF, manaPlateCraftCost, plateCraftCost, toolCraftCost, workbenchUpgradeCost, type CraftCost } from '../data/crafting';
 import { durability, EQUIP_SLOTS, EQUIP_MAX_DUR, enhanceCost, repairCost, type EquipSlot, equipName, equipStats, equipValue, GRADES, slotName, type Equip } from '../data/equipment';
-import { BUILDINGS, BUILD_ORDER, buildingUpgradeCost, FACTORY_SIZES, generatorPower, levelSpeed, MAX_BUILDING_LEVEL, RECIPES, UPGRADABLE, upgradeBlueprintCost, type BuildingType } from '../data/factory';
+import { BUILDINGS, BUILD_ORDER, buildingUpgradeCost, ESSENCE_BOOST, ESSENCE_BURN, FACTORY_SIZES, generatorPower, levelSpeed, MAX_BUILDING_LEVEL, RECIPES, UPGRADABLE, upgradeBlueprintCost, type BuildingType } from '../data/factory';
 import { ITEMS, ITEM_LIST, ORE_TIERS, TIER_PLATE, WOOD_TIERS } from '../data/items';
 import type { QuestDef } from '../data/quests';
 import { THEMES } from '../data/themes';
@@ -488,7 +488,9 @@ export class Screens {
         ['wood', '1~2챕터 던전 나무 (도끼) · 이후 단계 나무도 같은 방식'],
         ['essence_low', '1~3챕터 몬스터 (일반 약 20%, 정예·보스 확정) · 퀘스트 보상'],
         ['essence_mid', '4~5챕터 몬스터'],
-        ['essence_high', '6~7챕터 몬스터'],
+        ['essence_high', '6챕터 몬스터'],
+        ['essence_supreme', '7챕터 몬스터'],
+        ['essence_dim', '5챕터 이상 파수꾼·수호자, 7챕터 정예 (드묾)'],
         ['gear_part', '5챕터 톱니 잔해'],
         ['magi_alloy', '5챕터 합금 잔해'],
         ['potion', '상인 무트 (기본 물약만 판매)'],
@@ -1648,7 +1650,7 @@ export class Screens {
     const rows = ESSENCES.map((id) => {
       const inside = b.buffer?.[id] ?? 0;
       const have = p.count(id);
-      return `<li>${itemGem(id)}<div><b>${ITEMS[id].name}</b><small>발전기 안 ${inside}개 · 창고 ${have}개</small></div>
+      return `<li>${itemGem(id)}<div><b>${ITEMS[id].name}</b><small>${Math.round(ESSENCE_BURN[id] / 60)}분 · 생산 속도 ×${ESSENCE_BOOST[id].toFixed(2)}</small><small>발전기 안 ${inside}개 · 창고 ${have}개</small></div>
         <button data-put="${id}" data-n="1" ${have ? '' : 'disabled'}>+1</button><button data-put="${id}" data-n="10" ${have ? '' : 'disabled'}>+10</button><button data-put="${id}" data-n="all" ${have ? '' : 'disabled'}>전부</button>
         <button data-take="${id}" ${inside ? '' : 'disabled'}>빼기</button></li>`;
     }).join('');
@@ -1658,8 +1660,10 @@ export class Screens {
          <button class="close">${ICONS.close}</button>
          <h2>마력 발전기 <button class="tool-sm rot" data-rotate>↻ 방향 돌리기</button></h2>
          ${this.levelBlock(b, p)}
-         <p class="hint">여기에 넣은 마력 정수만 탑니다 (하급 2분 · 중급 5분 · 상급 10분). 전력을 쓰는 기계가 있을 때만 연료가 줄어듭니다.</p>
-         <p>지금 타는 연료: <b>${Math.ceil(b.fuel ?? 0)}초</b> · 전력망 공급 ${net?.supply ?? 0} / 수요 ${net?.demand ?? 0}</p>
+         <p class="hint">넣어 둔 정수 중 <b>좋은 것부터</b> 탑니다. 좋은 정수일수록 오래 타고, 타는 동안 이 발전기에 이어진 기계가 더 빨리 만듭니다.<br>
+           연료는 <b>돌아가는 기계가 쓰는 전력만큼</b> 줄어듭니다 (기계가 많이 돌수록 빨리 닳고, 쉬는 기계는 전력을 쓰지 않음). 수요가 공급보다 크면 기계들이 그만큼 느려집니다. 발전기 레벨을 올리면 공급 전력이 +15씩 늘어납니다.</p>
+         <p>지금 타는 연료: <b>${b.fuel && b.fuel > 0 ? `${ITEMS[b.fuelId ?? 'essence_low'].name} ${Math.ceil(b.fuel)}초 분량` : '없음'}</b> · 생산 속도 <b>×${(net?.boost ?? 1).toFixed(2)}</b><br>
+           전력망 공급 ${net?.supply ?? 0} / 수요 ${net?.demand ?? 0} · 연료 소모 ${net && net.supply > 0 ? `<b>${Math.round(Math.min(1, net.demand / net.supply) * 100)}%</b> 속도` : '멈춤'}</p>
          <ul class="list scroll">${rows}</ul>
        </div>`,
       onClose,
@@ -1986,7 +1990,7 @@ export class Screens {
     }
     const net = f.networkInfo(b);
     const statusText = { working: '가동 중', 'no-power': '전력 부족 (발전기 연료 확인)', idle: '재료 대기', blocked: '출구 막힘', 'no-recipe': '설계 선택 필요' }[f.status(b)];
-    body += `<p class="hint">${f.connected(b) ? `전력망: 공급 ${net?.supply ?? 0} / 수요 ${net?.demand ?? 0}` : '<span class="bad">마력선에 연결되어 있지 않습니다</span>'} · 상태: <b>${statusText}</b></p>`;
+    body += `<p class="hint">${f.connected(b) ? `전력망: 공급 ${net?.supply ?? 0} / 수요 ${net?.demand ?? 0}${net && net.boost > 1 ? ` · 연료 효과 생산 속도 ×${net.boost.toFixed(2)}` : ""}` : '<span class="bad">마력선에 연결되어 있지 않습니다</span>'} · 상태: <b>${statusText}</b></p>`;
     const buf = Object.entries(b.buffer ?? {}).filter(([, n]) => n > 0);
     if (buf.length) body += `<p class="hint">대기 중인 재료: ${buf.map(([id, n]) => `${ITEMS[id].name} ${n}`).join(', ')}</p>`;
     const miss = f.missingInputs(b);

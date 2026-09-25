@@ -1,4 +1,4 @@
-import { BUILDINGS, ESSENCE_BURN, generatorPower, levelSpeed, RECIPES, type BuildingType, type Recipe } from '../data/factory';
+import { BUILDINGS, ESSENCE_BOOST, ESSENCE_BURN, generatorPower, levelSpeed, RECIPES, type BuildingType, type Recipe } from '../data/factory';
 
 /** 0: +x(동), 1: +z(남), 2: -x(서), 3: -z(북) */
 export type Dir = 0 | 1 | 2 | 3;
@@ -30,6 +30,8 @@ export interface BuildingState {
   mode?: 'in' | 'out';
   /** 발전기: 지금 타고 있는 연료의 남은 시간(초) */
   fuel?: number;
+  /** 발전기: 지금 타고 있는 정수 */
+  fuelId?: string;
   rr?: number;
   /** 마력 치유석: 누군가 회복 중이면 true (그때만 전력을 쓴다) */
   active?: boolean;
@@ -109,7 +111,8 @@ export type MachineStatus = 'working' | 'no-power' | 'idle' | 'blocked' | 'no-re
 const BELT_SPEED = 1;
 export const BOX_CAPACITY = 999;
 export const MACHINE_TYPES = new Set<BuildingType>(['smelter', 'crusher', 'infuser', 'alchemy']);
-export const ESSENCES = ['essence_low', 'essence_mid', 'essence_high'];
+/** 발전기 연료 (낮은 것부터) */
+export const ESSENCES = ['essence_low', 'essence_mid', 'essence_high', 'essence_supreme', 'essence_dim'];
 
 export function recipesFor(machine: BuildingType): Recipe[] {
   return RECIPES.filter((r) => r.machine === machine);
@@ -133,6 +136,8 @@ export class Factory {
   private netRatio: number[] = [];
   private netSupply: number[] = [];
   private netDemand: number[] = [];
+  /** 전력망마다 지금 타는 가장 좋은 정수의 생산 속도 배율 */
+  private netBoost: number[] = [];
   private dirty = true;
   /** 일반 창고로 들어온 아이템을 차원집 보관함에 넣는다. 자리가 없으면 false */
   onStore: ((item: string) => boolean) | null = null;
@@ -267,6 +272,7 @@ export class Factory {
     this.netRatio = new Array(id).fill(0);
     this.netSupply = new Array(id).fill(0);
     this.netDemand = new Array(id).fill(0);
+    this.netBoost = new Array(id).fill(1);
     this.dirty = false;
   }
 
@@ -282,10 +288,17 @@ export class Factory {
     return this.netOf.has(b);
   }
 
-  networkInfo(b: BuildingState): { supply: number; demand: number } | null {
+  networkInfo(b: BuildingState): { supply: number; demand: number; boost: number } | null {
     if (this.dirty) this.buildNetworks();
     const n = this.netOf.get(b);
-    return n === undefined ? null : { supply: this.netSupply[n], demand: this.netDemand[n] };
+    return n === undefined ? null : { supply: this.netSupply[n], demand: this.netDemand[n], boost: this.netBoost[n] };
+  }
+
+  /** 건물이 받는 생산 속도 배율 (연료 등급) */
+  boostOf(b: BuildingState): number {
+    if (this.dirty) this.buildNetworks();
+    const n = this.netOf.get(b);
+    return n === undefined ? 1 : this.netBoost[n];
   }
 
   status(b: BuildingState): MachineStatus {
@@ -307,6 +320,7 @@ export class Factory {
     // 1. 발전기: 안에 넣어 둔 정수를 태운다
     this.netSupply.fill(0);
     this.netDemand.fill(0);
+    this.netBoost.fill(1);
     for (const b of buildings) {
       if (MACHINE_TYPES.has(b.type) && b.crafting && this.netOf.has(b)) this.netDemand[this.netOf.get(b)!] += BUILDINGS[b.type].power;
       // 제작대는 만드는 동안에만 전력을 쓴다
@@ -316,17 +330,23 @@ export class Factory {
     for (const b of buildings) {
       if (b.type !== 'generator') continue;
       const net = this.netOf.get(b)!;
-      // 전력을 쓰는 기계가 있을 때만 새 연료를 꺼낸다
+      // 전력을 쓰는 기계가 있을 때만 새 연료를 꺼낸다 (좋은 정수부터)
       if ((b.fuel ?? 0) <= 0 && this.netDemand[net] > 0) {
-        for (const id of ESSENCES) {
+        b.fuelId = undefined;
+        for (let i = ESSENCES.length - 1; i >= 0; i--) {
+          const id = ESSENCES[i];
           if ((b.buffer![id] ?? 0) > 0) {
             b.buffer![id]--;
             b.fuel = ESSENCE_BURN[id];
+            b.fuelId = id;
             break;
           }
         }
       }
-      if ((b.fuel ?? 0) > 0) this.netSupply[net] += generatorPower(b.level ?? 1);
+      if ((b.fuel ?? 0) > 0) {
+        this.netSupply[net] += generatorPower(b.level ?? 1);
+        this.netBoost[net] = Math.max(this.netBoost[net], ESSENCE_BOOST[b.fuelId ?? 'essence_low'] ?? 1);
+      }
     }
     for (let i = 0; i < this.netRatio.length; i++) {
       this.netRatio[i] = this.netDemand[i] > 0 ? Math.min(1, this.netSupply[i] / this.netDemand[i]) : 0;
@@ -344,7 +364,7 @@ export class Factory {
       while (b.out.length > 0 && this.pushForward(b, b.out[0])) b.out.shift();
       const job = b.job;
       if (!job || !workbenchBusy(b)) continue;
-      b.progress = (b.progress ?? 0) + (dt * this.powerOf(b) * levelSpeed(b.level ?? 1)) / Math.max(1, job.time);
+      b.progress = (b.progress ?? 0) + (dt * this.powerOf(b) * this.boostOf(b) * levelSpeed(b.level ?? 1)) / Math.max(1, job.time);
       if (b.progress < 1) continue;
       b.progress = 0;
       if (job.kind === 'item') {
@@ -393,7 +413,7 @@ export class Factory {
       }
       if (b.crafting) {
         const recipe = RECIPE_BY_ID[b.crafting];
-        b.progress! += (dt * this.powerOf(b) * levelSpeed(b.level ?? 1)) / recipe.time;
+        b.progress! += (dt * this.powerOf(b) * this.boostOf(b) * levelSpeed(b.level ?? 1)) / recipe.time;
         if (b.progress! >= 1) {
           for (let i = 0; i < recipe.count; i++) b.out!.push(recipe.output);
           this.onCraft?.(recipe.output, recipe.count);

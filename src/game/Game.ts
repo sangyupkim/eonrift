@@ -13,7 +13,7 @@ import { CLASSES, CLASS_ORDER, expToNext, MAX_SKILL_LEVEL, SKILL_LEARN, skillUpg
 import { durability, equipName, GRADE, GRADES, newUid, rollEquip, type Equip } from '../data/equipment';
 import { rollManaGrade } from '../data/crafting';
 import { BUILDINGS, FACTORY_SIZES, OFFLINE_CAP_HOURS, type BuildingType, upgradeBlueprintCost } from '../data/factory';
-import { ITEMS, TIER_PLATE, ORE_TIERS, TIER_MANA_PLATE } from '../data/items';
+import { essenceForTier, ITEMS, TIER_PLATE, ORE_TIERS, TIER_MANA_PLATE } from '../data/items';
 import { QUEST_BY_ID, type NpcRef, type QuestDef } from '../data/quests';
 import type { Step } from '../data/story';
 import { moveWithCollision } from '../dungeon/collision';
@@ -60,7 +60,7 @@ interface Run {
   bossKilled?: boolean;
 }
 
-const ESSENCE = (tier: number) => (tier <= 3 ? 'essence_low' : tier <= 5 ? 'essence_mid' : 'essence_high');
+const ESSENCE = essenceForTier;
 const NPC_IDS = new Set<string>(NPCS.map((n) => n.id));
 const MAX_STAGE = 70;
 /** 가로 시야 기준 화면비 (막대형 휴대폰 가로) */
@@ -1286,6 +1286,12 @@ export class Game {
       const added = run.bag.add(id, n);
       if (added) loot(`+${added} ${ITEMS[id].name}`, hex(ITEMS[id].color));
       else this.hud.toast('가방이 가득 찼습니다');
+    }
+    // 차원 마력 정수: 5단계 이상 파수꾼·수호자, 7단계 정예가 가끔
+    const dimN = m.kind === 'boss' && tier >= 5 ? 1 + (rng.chance(0.5) ? 1 : 0) : m.kind === 'midboss' && tier >= 5 && rng.chance(0.35) ? 1 : m.kind === 'elite' && tier >= 7 && rng.chance(0.1) ? 1 : 0;
+    if (dimN) {
+      const added = run.bag.add('essence_dim', dimN);
+      if (added) loot(`+${added} ${ITEMS.essence_dim.name}`, hex(ITEMS.essence_dim.color));
     }
     // 장비: 중간보스는 좋은 장비를 넉넉히
     const eqCount = m.kind === 'boss' ? 2 : m.kind === 'midboss' ? 2 : rng.chance(m.kind === 'elite' ? 0.4 + run.stage * 0.02 : 0.008 + run.stage * 0.0008) ? 1 : 0;

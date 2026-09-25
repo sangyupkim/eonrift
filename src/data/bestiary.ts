@@ -1,4 +1,4 @@
-import { TIER_MANA_PLATE, TIER_PLATE } from './items';
+import { essenceForTier, TIER_MANA_PLATE, TIER_PLATE } from './items';
 import { BOSS_SPECIES, MIDBOSS_SPECIES, SPECIES, TIER_POOLS, type SpeciesDef } from './species';
 
 /**
@@ -42,7 +42,7 @@ export interface BestiaryReward {
   items: Record<string, number>;
 }
 
-const ESS = (t: number) => (t <= 3 ? 'essence_low' : t <= 5 ? 'essence_mid' : 'essence_high');
+const ESS = essenceForTier;
 
 export function milestoneReward(e: BestiaryEntry, idx: number): BestiaryReward {
   const t = e.tier;

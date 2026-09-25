@@ -36,9 +36,11 @@ const defs: ItemDef[] = [
   { id: 'fire_core', name: '화염 핵', color: 0xff6a2a, kind: 'material', value: 28, description: '(더 이상 쓰지 않는 재료) 상점에 팔 수 있다.' },
   { id: 'dimension_crystal', name: '차원 결정', color: 0x5ef0ff, kind: 'material', value: 34, description: '(더 이상 쓰지 않는 재료) 상점에 팔 수 있다.' },
   // 마력 정수 (공장 에너지원)
-  { id: 'essence_low', name: '하급 마력 정수', color: 0x7fd6ff, kind: 'essence', value: 5, description: '1~3단계 몬스터에게서 나온다. 발전기에 넣으면 2분 동안 탄다.' },
-  { id: 'essence_mid', name: '중급 마력 정수', color: 0x6f8cff, kind: 'essence', value: 14, description: '4~5단계 몬스터에게서 나온다. 발전기에서 5분 동안 탄다.' },
-  { id: 'essence_high', name: '상급 마력 정수', color: 0xd76fff, kind: 'essence', value: 30, description: '6~7단계 몬스터에게서 나온다. 발전기에서 10분 동안 탄다.' },
+  { id: 'essence_low', name: '하급 마력 정수', color: 0x7fd6ff, kind: 'essence', value: 5, description: '1~3단계 몬스터에게서 나온다. 발전기에 넣으면 2분 동안 탄다 (생산 속도 ×1.0).' },
+  { id: 'essence_mid', name: '중급 마력 정수', color: 0x6f8cff, kind: 'essence', value: 14, description: '4~5단계 몬스터에게서 나온다. 발전기에서 5분 동안 타고, 타는 동안 그 전력망의 생산 속도 ×1.15.' },
+  { id: 'essence_high', name: '상급 마력 정수', color: 0xd76fff, kind: 'essence', value: 30, description: '6단계 몬스터에게서 나온다. 발전기에서 10분 동안 타고, 생산 속도 ×1.3.' },
+  { id: 'essence_supreme', name: '최상급 마력 정수', color: 0xffc84a, kind: 'essence', value: 70, description: '7단계 몬스터에게서 나온다. 발전기에서 20분 동안 타고, 생산 속도 ×1.5.' },
+  { id: 'essence_dim', name: '차원 마력 정수', color: 0x5ef0ff, kind: 'essence', value: 160, description: '파수꾼·수호자(5단계 이상)와 7단계 정예가 가끔 떨어뜨린다. 발전기에서 40분 동안 타고, 생산 속도 ×1.8.' },
   // 가공품
   { id: 'copper_ingot', name: '구리 주괴', color: 0xe89a60, kind: 'processed', value: 8, description: '제작대에서 판자와 합성해 판을 만든다. 장비·도구 제작 재료.' },
   { id: 'iron_ingot', name: '철 주괴', color: 0xb5bcc8, kind: 'processed', value: 12, description: '제작대에서 판자와 합성해 판을 만든다. 장비·도구 제작 재료.' },
@@ -81,6 +83,11 @@ const TIER_LABEL = ['구리', '철', '황금', '다이아', '티타늄', '오리
 const WOOD_LABEL = ['참나무', '적송', '서리나무', '수정나무', '철목', '불꽃나무', '차원나무'];
 const WOOD_COLOR = [0xc99a62, 0xc8603a, 0xbfe4f4, 0xd0a8ff, 0x8a8a92, 0xff8a4a, 0x7ff4ff];
 const METAL_COLOR = [0xe08a50, 0xb0b8c4, 0xffd35a, 0xcff8ff, 0xb8c4d4, 0xff9a5a, 0x8a7cff];
+/** 마력 정수 5단계 (낮은 것부터) */
+export const ESSENCE_TIERS = ['essence_low', 'essence_mid', 'essence_high', 'essence_supreme', 'essence_dim'];
+/** 던전 단계에서 주로 나오는 마력 정수 (1~3 하급 · 4~5 중급 · 6 상급 · 7 최상급) */
+export const essenceForTier = (t: number) => (t <= 3 ? 'essence_low' : t <= 5 ? 'essence_mid' : t <= 6 ? 'essence_high' : 'essence_supreme');
+
 export const TIER_PLANK = ['plank', 'redpine_plank', 'frost_plank', 'crystal_plank', 'ironwood_plank', 'flame_plank', 'dim_plank'];
 export const TIER_MANA_METAL = ['mana_copper', 'mana_iron', 'mana_gold', 'mana_diamond', 'mana_titanium', 'mana_orichalcum', 'mana_dim'];
 export const TIER_MANA_PLANK = TIER_PLANK.map((_, i) => `mana_plank_${i + 1}`);
