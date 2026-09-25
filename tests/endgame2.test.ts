@@ -57,3 +57,17 @@ describe('직업 패치', () => {
     expect(CLASSES.archer.skills.some((s) => s.name === '후방 도약')).toBe(false);
   });
 });
+
+describe('보스 패턴', () => {
+  it('도넛 예고는 안쪽이 안전하다', async () => {
+    const { Telegraph } = await import('../src/game/Effects');
+    const t = new Telegraph({ kind: 'ring', r: 10, inner: 3 }, 0, 0, 0, 1);
+    expect(t.contains(1, 0)).toBe(false);
+    expect(t.contains(6, 0)).toBe(true);
+    expect(t.contains(12, 0)).toBe(false);
+  });
+  it('기절 약화가 있다', async () => {
+    const { DEBUFF_INFO } = await import('../src/data/species');
+    expect(DEBUFF_INFO.stun.name).toBe('기절');
+  });
+});

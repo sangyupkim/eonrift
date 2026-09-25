@@ -25,7 +25,9 @@ import {
 export type TelegraphShape =
   | { kind: 'circle'; r: number }
   | { kind: 'cone'; r: number; angle: number }
-  | { kind: 'line'; length: number; width: number };
+  | { kind: 'line'; length: number; width: number }
+  /** 도넛: 안쪽 원(inner)은 안전 */
+  | { kind: 'ring'; r: number; inner: number };
 
 /** 적의 공격 범위를 바닥에 미리 보여 준다. 안쪽 색이 차오르면 공격이 나간다 */
 export class Telegraph {
@@ -45,6 +47,7 @@ export class Telegraph {
     const geo = () => {
       let g: BufferGeometry;
       if (shape.kind === 'circle') g = new CircleGeometry(shape.r, 32);
+      else if (shape.kind === 'ring') g = new RingGeometry(shape.inner, shape.r, 40);
       else if (shape.kind === 'cone') {
         g = new CircleGeometry(shape.r, 24, -shape.angle / 2, shape.angle);
         g.rotateZ(Math.PI / 2);
@@ -90,6 +93,8 @@ export class Telegraph {
     switch (this.shape.kind) {
       case 'circle':
         return dist <= this.shape.r + pr;
+      case 'ring':
+        return dist <= this.shape.r + pr && dist >= this.shape.inner - pr;
       case 'cone':
         if (dist > this.shape.r + pr) return false;
         if (dist < pr + 0.3) return true;

@@ -236,7 +236,7 @@ export class Combat {
    */
   backstep(move: { x: number; y: number }): boolean {
     const player = this.host.player;
-    if (player.rollCooldown > 0 || player.state === 'dash' || !player.alive) return false;
+    if (player.buff('stun') || player.rollCooldown > 0 || player.state === 'dash' || !player.alive) return false;
     const p = player.position;
     const d = this.host.dungeon();
     const target = this.findTarget(12);

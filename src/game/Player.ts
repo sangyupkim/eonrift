@@ -145,7 +145,7 @@ export class Player {
   }
 
   get canAct(): boolean {
-    return this.state === 'idle' || this.state === 'move';
+    return (this.state === 'idle' || this.state === 'move') && !this.buff('stun');
   }
 
   get alive(): boolean {
@@ -186,7 +186,7 @@ export class Player {
 
   /** 마법사 블링크: 정해진 거리를 한순간에 이동한다. 무적은 없다 */
   startBlink(move: { x: number; y: number }, onEnd: () => void): boolean {
-    if (this.rollCooldown > 0 || this.state === 'dash' || !this.alive) return false;
+    if (this.buff('stun') || this.rollCooldown > 0 || this.state === 'dash' || !this.alive) return false;
     const dir = this.dodgeDir(move);
     this.startDash({ dirX: dir.x, dirZ: dir.z, speed: PLAYER.blinkDist / 0.1, duration: 0.1, pose: 'lunge', invuln: false, onEnd });
     this.rollCooldown = this.dodgeMax = PLAYER.blinkCooldown;
@@ -194,7 +194,7 @@ export class Player {
   }
 
   startRoll(move: { x: number; y: number }): boolean {
-    if (this.rollCooldown > 0 || this.state === 'dash' || !this.alive) return false;
+    if (this.buff('stun') || this.rollCooldown > 0 || this.state === 'dash' || !this.alive) return false;
     const d = Player.worldDir(move);
     const dir = d.len > 0.1 ? { x: d.x / d.len, z: d.z / d.len } : { x: Math.sin(this.facing), z: Math.cos(this.facing) };
     this.startDash({ dirX: dir.x, dirZ: dir.z, speed: PLAYER.rollSpeed, duration: PLAYER.rollTime, pose: 'roll', invuln: true });
@@ -366,7 +366,13 @@ export class Player {
         this.action = null;
         this.state = 'idle';
       }
+    } else if (this.buff('stun')) {
+      // 기절: 제자리에서 비틀거린다
+      this.speed = 0;
+      this.state = 'idle';
+      this.rig.body.rotation.z = Math.sin(this.time * 9) * 0.12;
     } else {
+      this.rig.body.rotation.z = 0;
       const targetSpeed = mag > 0.12 ? PLAYER.walkSpeed * (1 + this.moveBonus) * mag * (this.buff('windwalk') ? 1.4 : 1) * (this.buff('slow') ? 0.6 : 1) : 0;
       this.speed += (targetSpeed - this.speed) * Math.min(1, dt * 14);
       if (mag > 0.12) {

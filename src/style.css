@@ -2794,3 +2794,20 @@ img.mico-inline {
 .act.dodge .dodge-art { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
 .act.dodge .dodge-art img { width: 62%; height: 62%; object-fit: contain; }
 .act.dodge .dodge-art .lbl { font-size: 10px; font-weight: 800; margin-top: -4px; text-shadow: 0 1px 2px #000; }
+/* NPC 대화 선택 */
+.talk-panel { max-width: 460px; }
+.talk-line { font-size: 14px; line-height: 1.5; background: rgba(255, 255, 255, 0.05); border-left: 3px solid var(--accent); padding: 8px 10px; border-radius: 6px; margin: 4px 0 10px; }
+.talk-opts { display: grid; gap: 6px; }
+.talk-opt { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-radius: 8px; border: 1px solid var(--panel-line); background: rgba(255, 255, 255, 0.05); color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.talk-opt i { font-style: normal; width: 18px; text-align: center; font-weight: 900; }
+.talk-opt.offer i { color: #ffd23a; }
+.talk-opt.report { border-color: rgba(122, 255, 154, 0.6); }
+.talk-opt.report i { color: #7aff9a; }
+.talk-opt.story { border-color: rgba(94, 224, 255, 0.6); }
+.talk-opt.pending { opacity: 0.8; }
+.talk-opt.leave { opacity: 0.7; justify-content: center; }
+.talk-panel { display: flex; flex-direction: column; max-height: calc(100vh - 24px); }
+.talk-opts.scroll { overflow-y: auto; min-height: 0; flex: 1 1 auto; padding-right: 2px; }
+.talk-fixed { display: flex; gap: 6px; margin-top: 8px; }
+.talk-fixed .talk-opt { flex: 1 1 0; justify-content: center; }
+.talk-fixed .talk-opt.service { border-color: var(--accent); }

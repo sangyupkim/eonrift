@@ -24,7 +24,10 @@ export type MonsterKind = 'normal' | 'elite' | 'midboss' | 'boss';
 type State = 'idle' | 'chase' | 'windup' | 'dash' | 'recover' | 'down' | 'dead';
 
 /** 보스 패턴 + 일반 몬스터가 쓰는 공격 이름 */
-type BossPattern = 'slam' | 'cone' | 'volley' | 'charge' | 'summon' | 'rain' | 'cross' | 'nova' | 'barrage' | 'doom' | 'spin' | 'bolt' | 'aoe' | 'thrust';
+type BossPattern =
+  | 'slam' | 'cone' | 'volley' | 'charge' | 'summon' | 'rain' | 'cross' | 'nova' | 'barrage' | 'doom' | 'spin' | 'bolt' | 'aoe' | 'thrust'
+  // 보스 전용 추가 패턴
+  | 'crossX' | 'sweep' | 'spiral' | 'leap' | 'farblast' | 'chase' | 'frostring' | 'miasma' | 'hex';
 
 export interface ProjectileSpec {
   x: number;
@@ -60,15 +63,31 @@ export interface MonsterWorld {
   shake(amount: number): void;
 }
 
-/** 앞의 세 패턴은 중간보스도 쓰고, 수호자는 전부 쓴다 */
+/**
+ * 단계별 보스 패턴. 앞의 다섯 개는 중간보스(파수꾼)도 쓰고, 수호자는 전부 쓴다.
+ * crossX: 십자 → 대각선 두 번 피하기 · sweep: 도는 광선(원을 그리며 피하기) · spiral: 나선 탄막 ·
+ * leap: 뛰어올라 내려찍기(기절) · chase: 뒤쫓는 연속 폭발 · frostring: 도넛 냉기(보스 품으로) ·
+ * miasma: 독 웅덩이 · hex: 침묵 저주 · farblast: 멀리 있는 플레이어 주변을 크게 덮는 공격(보스마다 속성이 다르다)
+ */
 const BOSS_PATTERNS: BossPattern[][] = [
-  ['slam', 'cone', 'cross', 'summon', 'nova'],
-  ['charge', 'slam', 'cross', 'cone', 'barrage'],
-  ['volley', 'rain', 'nova', 'summon', 'cross'],
-  ['volley', 'slam', 'barrage', 'rain', 'nova'],
-  ['slam', 'charge', 'cross', 'volley', 'summon', 'barrage'],
-  ['cone', 'rain', 'nova', 'charge', 'slam', 'cross'],
-  ['volley', 'rain', 'cross', 'charge', 'summon', 'slam', 'nova', 'barrage'],
+  ['slam', 'cone', 'crossX', 'leap', 'miasma', 'summon', 'nova', 'chase'],
+  ['charge', 'slam', 'crossX', 'sweep', 'leap', 'cone', 'barrage', 'chase'],
+  ['volley', 'frostring', 'rain', 'spiral', 'crossX', 'summon', 'sweep', 'nova'],
+  ['volley', 'hex', 'spiral', 'chase', 'barrage', 'slam', 'nova', 'crossX'],
+  ['slam', 'charge', 'crossX', 'sweep', 'leap', 'summon', 'barrage', 'spiral'],
+  ['cone', 'miasma', 'leap', 'sweep', 'rain', 'nova', 'charge', 'crossX', 'frostring'],
+  ['crossX', 'sweep', 'spiral', 'leap', 'hex', 'frostring', 'chase', 'volley', 'miasma', 'barrage', 'summon', 'nova'],
+];
+
+/** 멀리서 싸우는 플레이어에게 쓰는 넓은 공격: 단계(보스)마다 속성과 남는 장판이 다르다 */
+const FAR_BLAST: { name: string; color: number; debuff: DebuffSpec }[] = [
+  { name: '가시 뿌리 폭발', color: 0x7aff5a, debuff: { id: 'poison', chance: 1, duration: 5 } },
+  { name: '모래 폭풍', color: 0xffa04a, debuff: { id: 'slow', chance: 1, duration: 3 } },
+  { name: '빙하 붕괴', color: 0x9fe3ff, debuff: { id: 'slow', chance: 1, duration: 4 } },
+  { name: '수정 공명', color: 0xd08aff, debuff: { id: 'silence', chance: 1, duration: 3 } },
+  { name: '강철 포격', color: 0xc8d2e0, debuff: { id: 'stun', chance: 0.6, duration: 1.2 } },
+  { name: '용암 분출', color: 0xff6a2a, debuff: { id: 'burn', chance: 1, duration: 5 } },
+  { name: '차원 붕괴', color: 0xb67cff, debuff: { id: 'curse', chance: 1, duration: 5 } },
 ];
 
 const HIT_TINT = new Color(0xffffff);
@@ -120,6 +139,16 @@ export class Monster {
   private bossQueue: BossPattern[] = [];
   private pattern: BossPattern | null = null;
   private rainSpots: Telegraph[] = [];
+  /** 보스의 여러 단계 패턴: 저마다 따로 터지는 예고들, 도는 광선, 나선 탄막, 도약, 예약된 동작 */
+  private timed: { tel: Telegraph; mult: number; debuff?: DebuffSpec; color: number; fx: 'slash' | 'blast' | 'ring'; pool?: { r: number; t: number; dps: number } }[] = [];
+  private sweep: { tel: Telegraph; speed: number; left: number; hitCd: number; warm: number } | null = null;
+  private spiral: { left: number; tick: number; angle: number; arms: number } | null = null;
+  private leapTo: { x: number; z: number; tel: Telegraph } | null = null;
+  private later: { at: number; fn: () => void }[] = [];
+  /** 여러 단계 패턴이 아직 진행 중인지 (끝날 때까지 다음 패턴을 쓰지 않는다) */
+  private get busy(): boolean {
+    return this.timed.length > 0 || !!this.sweep || !!this.spiral || !!this.leapTo || this.later.length > 0;
+  }
   private hpBar: Group;
   private hpFill: Mesh;
   readonly obstacle: CircleObstacle;
@@ -327,6 +356,120 @@ export class Monster {
       r.dispose();
     }
     this.rainSpots = [];
+    if (this.state === 'dead' || this.dooming) this.clearTimed(scene);
+  }
+
+  private clearTimed(scene: Scene): void {
+    for (const t of this.timed) {
+      scene.remove(t.tel.group);
+      t.tel.dispose();
+    }
+    this.timed = [];
+    if (this.sweep) {
+      scene.remove(this.sweep.tel.group);
+      this.sweep.tel.dispose();
+      this.sweep = null;
+    }
+    if (this.leapTo) {
+      scene.remove(this.leapTo.tel.group);
+      this.leapTo.tel.dispose();
+      this.leapTo = null;
+      this.rig.root.position.y = 0;
+    }
+    this.spiral = null;
+    this.later = [];
+  }
+
+  /** 따로 터지는 예고 하나 */
+  private addTimed(world: MonsterWorld, shape: TelegraphShape, x: number, z: number, facing: number, duration: number, mult: number, color: number, fx: 'slash' | 'blast' | 'ring', debuff?: DebuffSpec, pool?: { r: number; t: number; dps: number }): void {
+    const tel = new Telegraph(shape, x, z, facing, duration);
+    world.scene.add(tel.group);
+    this.timed.push({ tel, mult, debuff, color, fx, pool });
+  }
+
+  /** 보스 다단계 패턴 진행 (상태와 관계없이 매 프레임) */
+  private updateTimed(dt: number, world: MonsterWorld): void {
+    const p = world.player;
+    for (const l of this.later) l.at -= dt;
+    const due = this.later.filter((l) => l.at <= 0);
+    this.later = this.later.filter((l) => l.at > 0);
+    for (const l of due) l.fn();
+    for (let i = this.timed.length - 1; i >= 0; i--) {
+      const t = this.timed[i];
+      if (!t.tel.update(dt)) continue;
+      const tel = t.tel;
+      if (tel.contains(p.x, p.z, 0.35)) world.hurtPlayer(this.atk * t.mult, tel.x, tel.z, t.debuff);
+      if (t.fx === 'slash' && tel.shape.kind === 'line') world.effects.slash(tel.x, tel.z, tel.facing, tel.shape.length, t.color, 0.3, 0.5);
+      else if (t.fx === 'ring') world.effects.ring(tel.x, tel.z, tel.shape.kind === 'circle' || tel.shape.kind === 'ring' ? tel.shape.r : 3, t.color, 0.4);
+      else {
+        world.effects.explosion(tel.x, tel.z, tel.shape.kind === 'circle' ? tel.shape.r : 2, t.color);
+        world.burst(tel.x, 0.3, tel.z, t.color, 6);
+      }
+      if (t.pool) world.hazard(tel.x, tel.z, t.pool.r, t.pool.t, t.pool.dps, t.color, t.debuff);
+      world.shake(0.2);
+      world.scene.remove(tel.group);
+      tel.dispose();
+      this.timed.splice(i, 1);
+    }
+    const sw = this.sweep;
+    if (sw) {
+      if (sw.warm > 0) {
+        sw.warm -= dt;
+        sw.tel.update(dt);
+      } else {
+        sw.tel.facing += sw.speed * dt;
+        sw.tel.x = this.x;
+        sw.tel.z = this.z;
+        sw.tel.sync();
+        sw.left -= dt;
+        sw.hitCd -= dt;
+        if (Math.random() < dt * 20) world.effects.sparks(this.x + Math.sin(sw.tel.facing) * 6, 0.6, this.z + Math.cos(sw.tel.facing) * 6, 0xff7a4a, 2, { speed: 3 });
+        if (sw.hitCd <= 0 && sw.tel.contains(p.x, p.z, 0.3)) {
+          sw.hitCd = 0.5;
+          world.hurtPlayer(this.atk * 0.7, this.x, this.z);
+        }
+        if (sw.left <= 0) {
+          world.scene.remove(sw.tel.group);
+          sw.tel.dispose();
+          this.sweep = null;
+        }
+      }
+    }
+    const sp = this.spiral;
+    if (sp) {
+      sp.left -= dt;
+      sp.tick -= dt;
+      if (sp.tick <= 0) {
+        sp.tick = 0.12;
+        sp.angle += 0.23;
+        for (let a = 0; a < sp.arms; a++)
+          world.fireEnemyProjectile({ x: this.x, z: this.z, angle: sp.angle + (a / sp.arms) * Math.PI * 2, speed: 6.5, damage: this.atk * 0.45, color: MONSTER_COLORS[this.tier - 1].accent, radius: 0.3 });
+      }
+      if (sp.left <= 0) this.spiral = null;
+    }
+    const lp = this.leapTo;
+    if (lp) {
+      // 공중에 떠 있다가 예고가 끝나면 내려찍는다
+      const k = Math.min(1, lp.tel.t / lp.tel.duration);
+      this.rig.root.position.y = Math.sin(k * Math.PI) * 4;
+      if (lp.tel.update(dt)) {
+        if (isFloor(world.grid, Math.floor(lp.x / TILE), Math.floor(lp.z / TILE))) {
+          this.x = lp.x;
+          this.z = lp.z;
+          this.obstacle.x = this.x;
+          this.obstacle.z = this.z;
+        }
+        this.rig.root.position.y = 0;
+        if (lp.tel.contains(p.x, p.z, 0.35)) world.hurtPlayer(this.atk * 1.5, this.x, this.z, { id: 'stun', chance: 1, duration: 1.6 });
+        world.effects.explosion(this.x, this.z, 3.6, 0xffd08a);
+        world.effects.ring(this.x, this.z, 4.2, 0xffe0a0, 0.5);
+        world.burst(this.x, 0.4, this.z, 0x7a5a3a, 24, 2);
+        world.shake(0.7);
+        world.scene.remove(lp.tel.group);
+        lp.tel.dispose();
+        this.leapTo = null;
+      }
+    }
   }
 
   /** 제한 시간 초과: 방 전체를 뒤덮는 즉사기. 예고가 끝나면 무조건 쓰러진다 */
@@ -382,6 +525,7 @@ export class Monster {
       this.clearTelegraph(world.scene);
       world.effects.sparks(this.x, 0.6, this.z, 0xe6dcc0, 12, { speed: 3 });
     }
+    if (this.isBoss && this.state !== 'dead' && (this.busy || this.leapTo)) this.updateTimed(dt, world);
     if (this.state === 'dead' && this.pendingSplit) {
       // 슬라임: 작은 슬라임 둘로 나뉜다
       this.pendingSplit = false;
@@ -562,7 +706,7 @@ export class Monster {
       }
       case 'recover': {
         const rec = this.isBoss ? (this.phase2 ? 0.6 : 0.9) : this.def.recover;
-        if (this.t >= rec) this.setState('chase');
+        if (this.t >= rec && !(this.isBoss && this.busy)) this.setState('chase');
         break;
       }
     }
@@ -714,9 +858,12 @@ export class Monster {
   private beginBossPattern(world: MonsterWorld, dist: number, toPlayer: number): void {
     if (this.bossQueue.length === 0) {
       const pats = BOSS_PATTERNS[this.tier - 1];
-      this.bossQueue = [...(this.isFinal ? pats : pats.slice(0, 3))].sort(() => Math.random() - 0.5);
+      this.bossQueue = [...(this.isFinal ? pats : pats.slice(0, 5))].sort(() => Math.random() - 0.5);
     }
-    let pattern = this.bossQueue.shift()!;
+    let pattern: BossPattern;
+    // 멀리서 싸우면: 넓은 원거리 공격이나 도약으로 따라온다 (큐는 그대로 둔다)
+    if (dist > 9 && Math.random() < 0.65) pattern = Math.random() < 0.6 ? 'farblast' : 'leap';
+    else pattern = this.bossQueue.shift()!;
     if (pattern === 'charge' && dist < 3) pattern = 'slam';
     this.pattern = pattern;
     this.facing = toPlayer;
@@ -777,6 +924,92 @@ export class Monster {
           this.rainSpots.push(t);
         }
         break;
+      }
+      case 'crossX': {
+        // 십자 → 대각선: 두 번 피해야 한다
+        this.clearTelegraph(world.scene);
+        const c = 0xff8a5a;
+        const base = Math.random() < 0.5 ? 0 : Math.PI / 4;
+        for (let i = 0; i < 4; i++) this.addTimed(world, { kind: 'line', length: 16, width: 2.4 }, this.x, this.z, base + (i * Math.PI) / 2, 1.1 * speed, 1.2, c, 'slash');
+        for (let i = 0; i < 4; i++) this.addTimed(world, { kind: 'line', length: 16, width: 2.4 }, this.x, this.z, base + Math.PI / 4 + (i * Math.PI) / 2, 1.9 * speed + 0.2, 1.2, c, 'slash');
+        this.setState('recover');
+        world.announce(`${this.name}: 십자 베기 → 대각선 베기!`);
+        return;
+      }
+      case 'sweep': {
+        // 보스 둘레를 도는 광선: 원을 그리며 앞서 달려야 피한다
+        this.clearTelegraph(world.scene);
+        const tel = new Telegraph({ kind: 'line', length: 14, width: 1.6 }, this.x, this.z, toPlayer + Math.PI * 0.6, 0.9);
+        world.scene.add(tel.group);
+        this.sweep = { tel, speed: (Math.random() < 0.5 ? 1 : -1) * (this.phase2 ? 2.1 : 1.6), left: 3.4, hitCd: 0, warm: 0.9 };
+        this.setState('recover');
+        world.announce(`${this.name}: 회전 광선! 원을 그리며 피하라`);
+        return;
+      }
+      case 'spiral':
+        this.clearTelegraph(world.scene);
+        this.spiral = { left: this.phase2 ? 3 : 2.4, tick: 0.4, angle: Math.random() * Math.PI * 2, arms: this.phase2 ? 4 : 3 };
+        world.effects.glyph(this.x, this.z, 2.4, MONSTER_COLORS[this.tier - 1].accent, 1);
+        this.setState('recover');
+        return;
+      case 'leap': {
+        // 뛰어올라 플레이어가 있던 곳에 내려찍는다 (맞으면 기절)
+        this.clearTelegraph(world.scene);
+        const tel = new Telegraph({ kind: 'circle', r: 3.6 }, world.player.x, world.player.z, 0, (this.phase2 ? 1.05 : 1.35) * (speed < 1 ? 0.95 : 1));
+        world.scene.add(tel.group);
+        this.leapTo = { x: world.player.x, z: world.player.z, tel };
+        world.effects.ring(this.x, this.z, 2.5, 0xffe0a0, 0.3);
+        this.setState('recover');
+        return;
+      }
+      case 'farblast': {
+        // 멀리 있는 플레이어 주변을 크게 덮는다. 맞으면 속성 약화 + 장판이 남는다
+        this.clearTelegraph(world.scene);
+        const f = FAR_BLAST[this.tier - 1];
+        this.addTimed(world, { kind: 'circle', r: this.phase2 ? 7.5 : 6.5 }, world.player.x, world.player.z, 0, 1.5 * speed, 1.4, f.color, 'blast', f.debuff, { r: 3.5, t: 4, dps: this.atk * 0.25 });
+        world.announce(`${this.name}: ${f.name}!`);
+        this.setState('recover');
+        return;
+      }
+      case 'chase': {
+        // 뒤쫓는 폭발: 0.45초마다 지금 서 있는 자리에 폭발 예고
+        this.clearTelegraph(world.scene);
+        const n = this.phase2 ? 6 : 4;
+        for (let i = 0; i < n; i++)
+          this.later.push({
+            at: i * 0.45,
+            fn: () => this.addTimed(world, { kind: 'circle', r: 2.3 }, world.player.x, world.player.z, 0, 0.85, 1.0, 0xff5a3a, 'blast'),
+          });
+        this.setState('recover');
+        return;
+      }
+      case 'frostring': {
+        // 도넛 냉기: 바깥이 얼어붙는다. 보스 품으로 파고들어야 산다 (맞으면 둔화)
+        this.clearTelegraph(world.scene);
+        this.addTimed(world, { kind: 'ring', r: 11, inner: 2.8 }, this.x, this.z, 0, 1.6 * speed, 1.1, 0x9fe3ff, 'ring', { id: 'slow', chance: 1, duration: 4 });
+        world.announce(`${this.name}: 절대 냉기! 가까이 붙어라`);
+        this.setState('recover');
+        return;
+      }
+      case 'miasma': {
+        // 독 웅덩이: 플레이어 주변 여기저기에 떨어져 한동안 남는다
+        this.clearTelegraph(world.scene);
+        const n = this.phase2 ? 7 : 5;
+        for (let i = 0; i < n; i++) {
+          const a = Math.random() * Math.PI * 2;
+          const r = i === 0 ? 0 : 2 + Math.random() * 5;
+          this.addTimed(world, { kind: 'circle', r: 1.9 }, world.player.x + Math.cos(a) * r, world.player.z + Math.sin(a) * r, 0, 1.1 * speed + i * 0.1, 0.7, 0x8aff4a, 'blast', { id: 'poison', chance: 1, duration: 5 }, { r: 1.9, t: 6, dps: this.atk * 0.2 });
+        }
+        this.setState('recover');
+        return;
+      }
+      case 'hex': {
+        // 침묵 저주: 플레이어 쪽 넓은 부채꼴 (맞으면 스킬 봉인)
+        this.clearTelegraph(world.scene);
+        this.addTimed(world, { kind: 'cone', r: 12, angle: 1.3 }, this.x, this.z, toPlayer, 1.3 * speed, 1.0, 0xc07aff, 'blast', { id: 'silence', chance: 1, duration: 3.5 });
+        this.later.push({ at: 0.6, fn: () => this.addTimed(world, { kind: 'cone', r: 12, angle: 1.3 }, this.x, this.z, Math.atan2(world.player.x - this.x, world.player.z - this.z), 1.0 * speed, 1.0, 0xc07aff, 'blast', { id: 'curse', chance: 1, duration: 4 }) });
+        this.setState('recover');
+        return;
       }
       case 'rain': {
         this.clearTelegraph(world.scene);

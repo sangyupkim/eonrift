@@ -17,7 +17,7 @@ import { rollManaGrade } from '../data/crafting';
 import { BUILDINGS, FACTORY_SIZES, OFFLINE_CAP_HOURS, type BuildingType, upgradeBlueprintCost } from '../data/factory';
 import { essenceForTier, ITEMS, TIER_PLATE, ORE_TIERS, TIER_MANA_PLATE } from '../data/items';
 import { QUEST_BY_ID, type NpcRef, type QuestDef } from '../data/quests';
-import type { Step } from '../data/story';
+import { SCRIPTS, type Step } from '../data/story';
 import { moveWithCollision } from '../dungeon/collision';
 import { generateDungeon, generateTowerFloor, type GenOptions, isFloor, type FarmKind } from '../dungeon/generator';
 import { Factory, MACHINE_TYPES, RECIPE_BY_ID, type BuildingState, type Dir } from '../factory/sim';
@@ -911,32 +911,69 @@ export class Game {
   }
 
   /** NPC와 대화: 퀘스트 보고 → 이야기 → 새 퀘스트 → 진행 중 안내 → 인사와 시설 */
+  /**
+   * NPC와 대화: 먼저 인사말, 그 아래에서 이야기·퀘스트(보고·새 퀘스트·진행 중)·시설(상점·도면…)을 골라 이어 간다.
+   * 퀘스트 대사가 끝나면 다시 이 선택지로 돌아온다
+   */
   private talk(npc: NpcId): void {
     const p = this.progress;
     const q = this.quests;
     const ref = npc as NpcRef;
+    const back = () => this.talk(npc);
+    type Opt = { label: string; kind: 'story' | 'report' | 'offer' | 'pending' | 'service' | 'leave'; pick: () => void };
+    const opts: Opt[] = [];
+    const run = (f: () => void) => () => {
+      this.screens.close();
+      f();
+    };
 
-    const ready = q.activeFor(ref).find((x) => q.canComplete(x));
-    if (ready) return this.playSteps(ready.complete, () => this.completeQuest(ready));
-
-    // 이야기·퀘스트 대사가 끝나면 그 NPC의 기능(상점, 스킬, 도면, 일일 의뢰 …)을 이어서 연다
     if (hasStory(npc, p)) {
       const script = scriptFor(npc, p);
-      if (script === 'stone_n') p.setFlag(`stoneTalk${p.stoneCount}`);
-      return this.playScript(script, () => this.npcService(npc));
+      opts.push({
+        label: '이야기하기',
+        kind: 'story',
+        pick: run(() => {
+          if (script === 'stone_n') p.setFlag(`stoneTalk${p.stoneCount}`);
+          this.playScript(script, back);
+        }),
+      });
     }
-
-    // 메인 퀘스트는 언제나, 서브 퀘스트는 그 NPC의 서브를 진행 중이 아닐 때 하나씩 권한다
+    for (const x of q.activeFor(ref).filter((x) => q.canComplete(x)))
+      opts.push({ label: `보고하기: ${x.title}`, kind: 'report', pick: run(() => this.playSteps(x.complete, () => this.completeQuest(x, back))) });
+    // 메인 퀘스트는 언제나, 서브 퀘스트는 그 NPC의 서브를 진행 중이 아닐 때
     const busySub = q.activeFor(ref).some((x) => x.kind === 'sub');
-    const offer = q.available(ref).find((x) => x.kind === 'main' || !busySub);
-    if (offer) return this.playSteps(offer.offer, () => this.offerQuest(offer, () => this.npcService(npc)));
+    for (const x of q.available(ref).filter((x) => x.kind === 'main' || !busySub))
+      opts.push({ label: `${x.kind === 'main' ? '[메인] ' : '[서브] '}${x.title}`, kind: 'offer', pick: run(() => this.playSteps(x.offer, () => this.offerQuest(x, back))) });
+    for (const x of q.activeFor(ref).filter((x) => !q.canComplete(x) && x.pending))
+      opts.push({ label: `${x.title} (진행 중)`, kind: 'pending', pick: run(() => this.playSteps(x.pending!, back)) });
+    const service = this.npcServiceLabel(npc);
+    if (service) opts.push({ label: service, kind: 'service', pick: run(() => this.npcService(npc)) });
+    opts.push({ label: '대화 끝내기', kind: 'leave', pick: () => this.screens.close() });
 
-    const pending = q.activeFor(ref)[0];
-    if (pending?.pending) return this.playSteps(pending.pending, () => this.npcService(npc));
+    const idle = SCRIPTS[`${npc}_idle`]?.[0];
+    const def = NPCS.find((n) => n.id === npc)!;
+    this.openMenu(() => this.screens.npcTalk(def.name, idle && 't' in idle ? String(idle.t) : '…', opts, () => this.resume()));
+  }
 
-    const script = scriptFor(npc, p);
-    if (script === 'stone_n') p.setFlag(`stoneTalk${p.stoneCount}`);
-    this.playScript(script, () => this.npcService(npc));
+  /** NPC 기능 버튼 이름 (없으면 null) */
+  private npcServiceLabel(npc: NpcId): string | null {
+    const q = this.quests;
+    switch (npc) {
+      case 'merchant':
+        return '거래하기 (상점)';
+      case 'smith':
+        return '강화·수리·각인 (대장간)';
+      case 'trainer':
+        return '스킬 배우기·강화';
+      case 'researcher':
+        return q.isDone('m_research') ? '몬스터 도감 보상' : null;
+      case 'engineer':
+        return q.isDone('m4_factory') ? '도면 보기' : null;
+      case 'chief':
+        return this.dailyUnlocked() ? '일일 의뢰' : null;
+      default:
+        return null;
+    }
   }
 
   /** NPC 고유 기능. 퀘스트 진행 중이어도 언제나 쓸 수 있다 */
@@ -991,7 +1028,7 @@ export class Game {
     );
   }
 
-  private completeQuest(qd: QuestDef): void {
+  private completeQuest(qd: QuestDef, after?: () => void): void {
     const p = this.progress;
     if (!this.quests.canComplete(qd)) return;
     for (const o of qd.objectives) if (o.type === 'deliver') p.take(o.item, o.count);
@@ -1010,8 +1047,9 @@ export class Game {
       this.playScript(r.script, () => {
         // 차원집이 열리면 문이 빛나도록 마을을 다시 만든다 (서 있던 자리 그대로)
         if (r.flags?.includes('home') && this.level instanceof VillageScene) this.enterVillage(pos);
+        else after?.();
       });
-    }
+    } else after?.();
     this.refreshHud();
   }
 
@@ -1717,8 +1755,10 @@ export class Game {
       if (added) loot(`+${added} ${ITEMS[id].name}`, hex(ITEMS[id].color));
       else this.hud.toast('가방이 가득 찼습니다');
     }
-    // 차원 가루: 파수꾼 6~8, 수호자 16~24 (5단계 이상은 더), 7단계 정예는 가끔. 차원 응축기에서 파편·차원 정수로 가공한다
-    const dustN =
+    // 차원 가루 (후반·엔드 콘텐츠 재료): 스테이지 보스는 5단계부터 (엔딩 뒤에는 모든 단계), 7단계 정예는 가끔.
+    // 파수꾼 6~8, 수호자 16~24. 차원 응축기에서 파편·차원 정수로 가공한다
+    const dustOk = run.end || tier >= 5 || this.progress.flag('endgame') > 0;
+    const dustN = !dustOk ? 0 :
       m.kind === 'boss' ? rng.int(16, 24) + (tier >= 5 ? 6 : 0) : m.kind === 'midboss' ? rng.int(6, 8) + (tier >= 5 ? 3 : 0) : m.kind === 'elite' && tier >= 7 && rng.chance(0.15) ? 2 : 0;
     if (dustN && (!run.end || !m.isBoss)) {
       const added = run.bag.add(DUST, dustN);

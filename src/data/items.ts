@@ -71,7 +71,7 @@ const defs: ItemDef[] = [
   { id: 'frost_dust', name: '서리 가루', color: 0xc9f2ff, kind: 'processed', value: 26, description: '(더 이상 쓰지 않는 재료) 상점에 팔 수 있다.' },
   { id: 'mana_dust', name: '마력 가루', color: 0xd4a8ff, kind: 'processed', value: 34, description: '(더 이상 쓰지 않는 재료) 상점에 팔 수 있다.' },
   { id: 'fire_dust', name: '화염 가루', color: 0xff9a5a, kind: 'processed', value: 62, description: '(더 이상 쓰지 않는 재료) 상점에 팔 수 있다.' },
-  { id: 'dim_dust', name: '차원 가루', color: 0x8ff6ff, kind: 'material', value: 40, description: '파수꾼·수호자와 차원의 끝(무한의 탑·보스 러시·심연 균열)에서 모으는 차원의 가루. 차원집의 차원 응축기에서 차원 파편이나 차원 마력 정수로 압축한다.' },
+  { id: 'dim_dust', name: '차원 가루', color: 0x8ff6ff, kind: 'material', value: 40, description: '5단계 이상 파수꾼·수호자(엔딩 뒤에는 모든 단계)와 차원의 끝에서 모으는 차원의 가루. 차원집의 차원 응축기에서 차원 파편이나 차원 마력 정수로 압축한다.' },
   { id: 'mana_copper', name: '마력 구리', color: 0xffa070, kind: 'processed', value: 14, description: '마력판 재료. 귀환석에도 쓴다.' },
   { id: 'mana_iron', name: '마력 철', color: 0x8fb4ff, kind: 'processed', value: 22, description: '마력판 재료. 차원가방 확장 키트·차원집 확장에도 쓴다.' },
   { id: 'mana_gold', name: '마력 금', color: 0xffe08a, kind: 'processed', value: 45, description: '마력판 재료. 차원집 확장에도 쓴다.' },

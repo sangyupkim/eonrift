@@ -14,7 +14,7 @@ import { canEnqueue, enqueueJob, WORKBENCH_OUT_MAX, WORKBENCH_QUEUE_MAX, BOX_CAP
 import type { Bag, Slot } from '../game/Bag';
 import { stageIndex, STORAGE_EXPAND_STEP, STORE_STACK, warehouseSlots, type Progress } from '../game/Progress';
 import { objectiveNeed, objectiveProgress, objectiveText, todayKey, type Quests } from '../game/Quests';
-import { ICONS, mico } from './icons';
+import { ICONS, mico, richText } from './icons';
 import { buildingThumb } from './thumbs';
 import { gearLook } from '../models/items';
 import { equipIconUrl, heroPortraitUrl, itemIconUrl, monsterIconUrl, skillIconUrl, toolIconUrl } from './itemIcons';
@@ -639,7 +639,7 @@ export class Screens {
         ['essence_mid', '4~5챕터 몬스터'],
         ['essence_high', '6챕터 몬스터'],
         ['essence_supreme', '7챕터 몬스터'],
-        ['dim_dust', '파수꾼(6~8)·수호자(16~24) 확정, 7챕터 정예(가끔), 무한의 탑 첫 돌파·소탕, 보스 러시 완주, 심연 균열, 촌장 납품 의뢰'],
+        ['dim_dust', '5챕터 이상 파수꾼(6~8)·수호자(16~24) 확정 (엔딩 뒤에는 모든 챕터), 7챕터 정예(가끔), 무한의 탑 첫 돌파·소탕, 보스 러시 완주, 심연 균열, 촌장 납품 의뢰'],
         ['dim_shard', '차원 응축기: 차원 가루 8 + 상급 정수 + 티타늄판 → 궁극기 강화 · 각인 · 초월'],
         ['essence_dim', '차원 응축기: 차원 가루 4 + 최상급 정수 + 오리하르콘 주괴 → 최고 연료'],
         ['dim_alloy', '차원집 제작대 Lv.4 (구리·철·황금·다이아판 + 상급 정수) → 심연 균열 1~10단계 입장, 보스 러시 추가 도전'],
@@ -1289,6 +1289,27 @@ export class Screens {
   }
 
   // ---------------- 퀘스트 제안 ----------------
+  /** NPC와 대화: 인사말을 보여 주고, 이야기·퀘스트·시설 중에서 고른다 */
+  npcTalk(name: string, greeting: string, options: { label: string; kind: 'story' | 'report' | 'offer' | 'pending' | 'service' | 'leave'; pick: () => void }[], onClose: () => void): void {
+    const mark = { story: '💬', report: '✔', offer: '!', pending: '…', service: '▸', leave: '' } as const;
+    const btn = (o: (typeof options)[number], i: number) => `<button class="talk-opt ${o.kind}" data-opt="${i}"><i>${mark[o.kind]}</i><span>${o.label}</span></button>`;
+    // 퀘스트·이야기는 스크롤되는 목록, 시설·대화 끝내기는 아래에 고정
+    const rows = options.map((o, i) => (o.kind === 'service' || o.kind === 'leave' ? '' : btn(o, i))).join('');
+    const fixed = options.map((o, i) => (o.kind === 'service' || o.kind === 'leave' ? btn(o, i) : '')).join('');
+    const s = this.open(
+      'npc-talk',
+      `<div class="panel talk-panel">
+         <button class="close">${ICONS.close}</button>
+         <h2>${esc(name)}</h2>
+         <p class="talk-line">${richText(esc(greeting))}</p>
+         ${rows ? `<div class="talk-opts scroll">${rows}</div>` : ''}
+         <div class="talk-fixed">${fixed}</div>
+       </div>`,
+      onClose,
+    );
+    this.on(s, '[data-opt]', (b) => options[Number(b.dataset.opt)].pick());
+  }
+
   questOffer(q: QuestDef, onAccept: () => void, onClose: () => void): void {
     const obj = q.objectives.map((o) => `<li><span class="key">▸</span><div><b>${objectiveText(o)}</b><small>${o.type === 'clear' ? '' : `${objectiveNeed(o)}${o.type === 'deliver' || o.type === 'gather' || o.type === 'craft' ? '개' : o.type === 'build' ? '개 설치' : '마리'}`}</small></div></li>`).join('');
     const r = q.rewards;
@@ -1816,7 +1837,7 @@ export class Screens {
          ${message ? `<div class="notice">${message}</div>` : ''}
          <p class="hint">스킬은 직업마다 따로 배웁니다. 강화할 때마다 공격 스킬은 위력 +15%, 방어·보조 스킬은 지속 시간이 늘고, 재사용 대기 -6% (최대 Lv.${MAX_SKILL_LEVEL}). 상위 스킬은 판·마력 금속이 필요합니다. 배운 스킬은 캐릭터 → 스킬에서 퀵슬롯에 놓으세요.</p>
          <ul class="list scroll">${rows}
-           <li class="sub-head"><div><b>궁극기 강화</b><small class="dim">${inlineGem('dim_shard')}차원 파편은 파수꾼·수호자와 차원의 끝에서 모은 차원 가루를 차원집의 차원 응축기로 압축해 만듭니다. 레벨마다 위력 +25%, 재사용 대기 -5초 (최대 Lv.${MAX_ULT_LEVEL}).</small></div></li>
+           <li class="sub-head"><div><b>궁극기 강화</b><small class="dim">${inlineGem('dim_shard')}차원 파편은 5단계 이상 파수꾼·수호자와 차원의 끝에서 모은 차원 가루를 차원집의 차원 응축기로 압축해 만듭니다. 레벨마다 위력 +25%, 재사용 대기 -5초 (최대 Lv.${MAX_ULT_LEVEL}).</small></div></li>
            ${ultRows}</ul>
        </div>`,
       onClose,

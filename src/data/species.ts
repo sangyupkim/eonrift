@@ -43,7 +43,7 @@ export type ModelSpec = HumanoidSpec | BeastSpec;
 export type Trait = 'revive' | 'split' | 'lifesteal' | 'regen' | 'evasive' | 'coward';
 
 /** 플레이어에게 거는 약화 효과 */
-export type DebuffId = 'slow' | 'poison' | 'burn' | 'curse' | 'silence';
+export type DebuffId = 'slow' | 'poison' | 'burn' | 'curse' | 'silence' | 'stun';
 export interface DebuffSpec {
   id: DebuffId;
   chance: number;
@@ -65,6 +65,7 @@ export const DEBUFF_INFO: Record<DebuffId, { name: string; text: string; color: 
   burn: { name: '화상', text: '초마다 큰 피해', color: 0xff7a2a },
   curse: { name: '저주', text: '주는 피해 -30%', color: 0xb67cff },
   silence: { name: '침묵', text: '스킬 사용 불가', color: 0xc8c8d8 },
+  stun: { name: '기절', text: '움직일 수도 공격할 수도 없음', color: 0xffe04a },
 };
 
 export interface SpeciesDef {
