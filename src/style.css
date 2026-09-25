@@ -2883,3 +2883,5 @@ h3.sub { margin: 10px 0 6px; font-size: 14px; display: flex; align-items: center
 .qty-row { display: flex; align-items: center; gap: 6px; margin: 6px 0; font-size: 13px; }
 .qty-row input { width: 64px; padding: 5px; font: inherit; text-align: center; border-radius: 6px; border: 1px solid var(--panel-line); background: rgba(0, 0, 0, 0.35); color: inherit; }
 .qty-row button { padding: 5px 9px; border-radius: 6px; border: 1px solid var(--panel-line); background: rgba(255, 255, 255, 0.06); color: inherit; font: inherit; cursor: pointer; }
+.drop-row { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.tool-sm.danger { background: #8a2a2a; border-color: #ff6a6a; color: #fff; }

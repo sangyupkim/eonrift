@@ -1779,8 +1779,8 @@ export class Game {
       if (added + stored) loot(`+${added + stored} ${ITEMS[DUST].name}`, hex(ITEMS[DUST].color));
       if (stored) this.hud.toast(`가방이 가득 차서 차원 가루 ${stored}개를 창고로 보냈습니다`);
     }
-    // 장비: 중간보스는 좋은 장비를 넉넉히
-    const eqCount = m.kind === 'boss' ? 2 : m.kind === 'midboss' ? 2 : rng.chance(m.kind === 'elite' ? 0.4 + run.stage * 0.02 : 0.008 + run.stage * 0.0008) ? 1 : 0;
+    // 장비: 수호자 2개, 파수꾼 1개, 정예는 가끔, 일반 몬스터는 드물게
+    const eqCount = m.kind === 'boss' ? 2 : m.kind === 'midboss' ? 1 : rng.chance(m.kind === 'elite' ? 0.22 + run.stage * 0.01 : 0.004 + run.stage * 0.0003) ? 1 : 0;
     const bonus = (m.kind === 'midboss' ? 0.35 : m.kind === 'boss' ? 0.3 : m.kind === 'elite' ? 0.12 : 0) + run.stage * 0.01 + (run.end?.kind === 'rift' ? riftLuck(run.end.level) : 0);
     for (let i = 0; i < eqCount; i++) {
       // 차원 등급: 보스만, 아주 낮은 확률 (수호자 1%, 파수꾼 0.3%)

@@ -78,3 +78,24 @@ describe('차원집 일반 창고', () => {
     expect(p.homeStored('copper_ore')).toBe(5);
   });
 });
+
+describe('던전 가방 확장', () => {
+  it('20칸에서 2칸씩 10번 늘려 40칸까지, 저장을 다시 읽어도 유지된다', async () => {
+    const { Progress, newSave, parseSave, bagUpgradeCost } = await import('../src/game/Progress');
+    const p = new Progress(newSave());
+    expect(p.data.inventory.length).toBe(20);
+    expect(p.bagLevel).toBe(0);
+    expect(p.upgradeBag()).toBe(false);
+    for (let l = 0; l < 10; l++) {
+      const c = bagUpgradeCost(l)!;
+      p.data.gold += c.gold;
+      for (const [id, n] of Object.entries(c.items)) p.add(id, n);
+      expect(p.upgradeBag()).toBe(true);
+    }
+    expect(p.data.inventory.length).toBe(40);
+    expect(p.bagLevel).toBe(10);
+    expect(p.bagUpgrade).toBeNull();
+    const d = parseSave(JSON.stringify(p.data))!;
+    expect(d.inventory.length).toBe(40);
+  });
+});

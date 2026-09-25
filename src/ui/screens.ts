@@ -12,7 +12,7 @@ import type { QuestDef } from '../data/quests';
 import { THEMES } from '../data/themes';
 import { canEnqueue, enqueueJob, WORKBENCH_OUT_MAX, WORKBENCH_QUEUE_MAX, BOX_CAPACITY, boxTotal, ESSENCES, MACHINE_TYPES, RECIPE_BY_ID, recipesFor, type BuildingState, type Factory, type WorkJob } from '../factory/sim';
 import type { Bag, Slot } from '../game/Bag';
-import { stageIndex, STORAGE_MAX_LEVEL, storageSlotsFor, STORE_STACK, warehouseSlots, type Progress } from '../game/Progress';
+import { BAG_MAX_LEVEL, BAG_STEP, stageIndex, STORAGE_MAX_LEVEL, storageSlotsFor, STORE_STACK, warehouseSlots, type Progress } from '../game/Progress';
 import { objectiveNeed, objectiveProgress, objectiveText, todayKey, type Quests } from '../game/Quests';
 import { ICONS, mico, richText } from './icons';
 import { buildingThumb } from './thumbs';
@@ -597,8 +597,17 @@ export class Screens {
 
   // ---------------- 던전 가방: 누르면 정보, 반대쪽 가방을 누르면 옮기기 ----------------
   bag(bag: Bag, dimBag: Bag, onMove: (from: 'bag' | 'dim', index: number) => boolean, onClose: () => void, onEquip?: () => void): void {
-    let info = '아이템을 누르면 정보가 나옵니다. 그다음 반대쪽 가방을 누르면 그쪽으로 옮겨집니다.';
+    let info = '아이템을 누르면 정보가 나옵니다. 그다음 반대쪽 가방을 누르면 그쪽으로 옮겨지고, [버리기]로 버릴 수 있습니다.';
     let sel: { from: 'bag' | 'dim'; i: number } | null = null;
+    /** 버리기는 한 번 더 눌러야 한다 */
+    let dropArm = false;
+    const dropRow = () => {
+      if (!sel) return '';
+      const x = (sel.from === 'bag' ? bag : dimBag).slots[sel.i];
+      if (!x) return '';
+      const many = !x.equip && x.count > 1;
+      return `<div class="drop-row">${many ? '<button class="tool-sm" data-a="drop1">1개 버리기</button>' : ''}<button class="tool-sm ${dropArm ? 'danger' : ''}" data-a="drop">${dropArm ? '정말 버릴까요? 한 번 더 누르세요' : many ? `전부 버리기 (${x.count}개)` : '버리기'}</button></div>`;
+    };
     const render = () => {
       const cell = (s: Slot | null, from: string, i: number) => {
         const on = sel && sel.from === from && sel.i === i ? 'sel' : '';
@@ -613,13 +622,38 @@ export class Screens {
            <button class="close">${ICONS.close}</button>
            <h2>가방 <small>${bag.used}/${bag.slots.length}</small> ${onEquip ? `<button class="tool-sm" data-a="equip">${SPK('shield', '🛡')} 장비 교체</button>` : ''}</h2>
            <div class="bag-grid ${target === 'bag' ? 'drop' : ''}" data-bag="bag">${bag.slots.map((x, i) => cell(x, 'bag', i)).join('')}</div>
-           <div class="item-info">${info}</div>
+           <div class="item-info">${info}${dropRow()}</div>
            <h3>차원가방 <small>쓰러져도 지켜지는 가방 · ${dimBag.used}/${dimBag.slots.length}</small></h3>
            <div class="bag-grid dim-row ${target === 'dim' ? 'drop' : ''}" data-bag="dim">${dimBag.slots.map((x, i) => cell(x, 'dim', i)).join('')}</div>
          </div>`,
         onClose,
       );
       if (onEquip) this.on(s, '[data-a="equip"]', onEquip);
+      const discard = (one: boolean) => {
+        if (!sel) return;
+        const b = sel.from === 'bag' ? bag : dimBag;
+        const x = b.slots[sel.i];
+        if (!x) return;
+        const name = x.equip ? equipName(x.equip) : ITEMS[x.itemId].name;
+        if (one && !x.equip && x.count > 1) {
+          x.count--;
+          info = `${name} 1개를 버렸습니다`;
+          this.click();
+          return render();
+        }
+        if (!dropArm) {
+          dropArm = true;
+          return render();
+        }
+        info = `${name}${x.equip ? '' : ` ${x.count}개`}을(를) 버렸습니다`;
+        b.slots[sel.i] = null;
+        sel = null;
+        dropArm = false;
+        this.click();
+        render();
+      };
+      this.on(s, '[data-a="drop"]', () => discard(false));
+      this.on(s, '[data-a="drop1"]', () => discard(true));
       s.querySelectorAll<HTMLElement>('.bag-grid').forEach((grid) =>
         grid.addEventListener('click', (e) => {
           const el = (e.target as HTMLElement).closest<HTMLElement>('.slot');
@@ -628,6 +662,7 @@ export class Screens {
           if (sel && gridName !== sel.from) {
             const src = (sel.from === 'bag' ? bag : dimBag).slots[sel.i];
             const name = src ? (src.equip ? equipName(src.equip) : ITEMS[src.itemId].name) : '';
+            dropArm = false;
             info = onMove(sel.from, sel.i) ? `${name} → ${sel.from === 'bag' ? '차원가방' : '일반 가방'}으로 옮겼습니다` : '<span class="bad">옮길 칸이 없습니다</span>';
             sel = null;
             this.click();
@@ -637,6 +672,7 @@ export class Screens {
             const from = el.dataset.from as 'bag' | 'dim';
             const i = Number(el.dataset.i);
             sel = sel && sel.from === from && sel.i === i ? null : { from, i };
+            dropArm = false;
             info = sel ? `${slotInfo((from === 'bag' ? bag : dimBag).slots[i]!)}<br><small class="ok">▶ ${from === 'bag' ? '차원가방' : '일반 가방'}을 누르면 옮겨집니다</small>` : info;
             this.click();
             render();
@@ -1071,6 +1107,12 @@ export class Screens {
       const up = p.storageUpgrade;
       const upOk = !!up && p.data.gold >= up.gold && p.hasAll(up.items);
       const upTxt = up ? `${up.gold} G · ${Object.entries(up.items).map(([id, n]) => `<span class="${p.count(id) >= n ? '' : 'bad'}">${inlineGem(id)}${n}</span>`).join(' ')}` : '';
+      // 던전에 들고 가는 가방 확장 (2칸씩, 최대 40칸)
+      const bup = p.bagUpgrade;
+      const bupOk = !!bup && p.data.gold >= bup.gold && p.hasAll(bup.items);
+      const bagBtn = bup
+        ? `<button class="tool-sm" data-a="bagup" ${bupOk ? '' : 'disabled'}>가방 확장 ${p.bagLevel}/${BAG_MAX_LEVEL} → ${bag.slots.length + BAG_STEP}칸 · ${bup.gold} G · ${Object.entries(bup.items).map(([id, n]) => `<span class="${p.count(id) >= n ? '' : 'bad'}">${inlineGem(id)}${n}</span>`).join(' ')}</button>`
+        : '<small class="ok">가방 최대 (40칸)</small>';
       const emptyCells = Array.from({ length: Math.max(0, Math.min(cap - used, 40)) }, () => '<div class="slot"></div>').join('');
       const storeEq = p.data.equips
         .map((e) => `<div class="slot filled ${sel?.from === 'storeEq' && sel.uid === e.uid ? 'sel' : ''}" data-storeeq="${e.uid}">${equipGem(e)}<span class="cnt">+${e.plus}</span></div>`)
@@ -1086,7 +1128,7 @@ export class Screens {
            <div class="item-info">${info}</div>
            <div class="store-split scroll">
              <div>
-               <h3>가방 <small>${bag.used}/${bag.slots.length}</small></h3>
+               <h3>가방 <small>${bag.used}/${bag.slots.length}</small> ${bagBtn}</h3>
                <div class="bag-grid inv-grid ${toBag ? 'drop' : ''}" data-grid="bag">${bag.slots.map((x, i) => cell(x, 'bag', i)).join('')}</div>
                <h3>차원가방 <small>${dim.used}/${dim.slots.length}</small></h3>
                <div class="bag-grid inv-grid ${toBag ? 'drop' : ''}" data-grid="dim">${dim.slots.map((x, i) => cell(x, 'dim', i)).join('')}</div>
@@ -1181,6 +1223,12 @@ export class Screens {
           });
         sel = null;
         info = n ? `재료 ${n}개를 창고에 넣었습니다${left ? ` <span class="bad">(칸이 모자라 ${left}개는 가방에)</span>` : ''}` : left ? '<span class="bad">창고에 빈 칸이 없습니다</span>' : '넣을 재료가 없습니다';
+        render();
+      });
+      this.on(sc, '[data-a="bagup"]', () => {
+        if (!p.upgradeBag()) return;
+        info = `<b class="ok">가방이 ${p.data.inventory.length}칸이 되었습니다</b>`;
+        onChange?.();
         render();
       });
       this.on(sc, '[data-a="expand"]', () => {

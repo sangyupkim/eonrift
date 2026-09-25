@@ -195,6 +195,16 @@ export function storageUpgradeCost(level: number): { gold: number; items: Record
   const t = Math.min(6, Math.floor(level * 0.7));
   return { gold: 1500 * level * level, items: { [TIER_PLATE[t]]: 6 + level * 2, [TIER_PLANK[t]]: 8 + level * 2 } };
 }
+/** 던전에 들고 가는 가방: 기본 20칸, 확장할 때마다 2칸씩 10번 → 최대 40칸 */
+export const BAG_MAX_LEVEL = 10;
+export const BAG_STEP = 2;
+/** 가방 확장 L → L+1 비용 (L = 0~9): 골드 + 그 무렵 단계의 판자·판 */
+export function bagUpgradeCost(level: number): { gold: number; items: Record<string, number> } | null {
+  if (level >= BAG_MAX_LEVEL) return null;
+  const n = level + 1;
+  const t = Math.min(6, Math.floor(level * 0.6));
+  return { gold: 600 * n * n, items: { [TIER_PLANK[t]]: 4 + n * 2, [TIER_PLATE[t]]: 2 + n } };
+}
 /** 일반 창고 레벨별 칸 수 */
 export const warehouseSlots = (level: number) => 20 * level;
 const slotsOf = (r: Record<string, number>) => Object.values(r).reduce((a, n) => a + (n > 0 ? Math.ceil(n / STORE_STACK) : 0), 0);
@@ -609,6 +619,23 @@ export class Progress {
   get storageHasSlot(): boolean {
     return this.storageUsed < this.storageCapacity;
   }
+  /** 가방 확장 단계 (0~10): 칸 수에서 거꾸로 센다 */
+  get bagLevel(): number {
+    return Math.max(0, Math.round((this.data.inventory.length - BAG_SLOTS) / BAG_STEP));
+  }
+  get bagUpgrade(): { gold: number; items: Record<string, number> } | null {
+    return bagUpgradeCost(this.bagLevel);
+  }
+  /** 가방을 2칸 늘린다 (돈·재료가 모자라면 false) */
+  upgradeBag(): boolean {
+    const c = this.bagUpgrade;
+    if (!c || this.data.gold < c.gold || !this.hasAll(c.items)) return false;
+    this.data.gold -= c.gold;
+    this.takeAll(c.items);
+    for (let i = 0; i < BAG_STEP; i++) this.data.inventory.push(null);
+    return true;
+  }
+
   /** 다음 창고 레벨업 비용 (없으면 최대) */
   get storageUpgrade(): { gold: number; items: Record<string, number> } | null {
     return storageUpgradeCost(this.data.storageLevel ?? 1);

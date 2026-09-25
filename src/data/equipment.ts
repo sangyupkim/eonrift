@@ -143,10 +143,10 @@ export function rollGrade(r: number, bonus: number, dimChance = 0): number {
   const table: [number, number][] = [
     [GRADE.dimension, dimChance],
     [GRADE.legend, 0.002 * luck],
-    [GRADE.unique, 0.012 * luck],
-    [GRADE.hero, 0.045 * luck],
-    [GRADE.rare, 0.12 * luck],
-    [GRADE.magic, 0.25 * (1 + bonus * 2)],
+    [GRADE.unique, 0.008 * luck],
+    [GRADE.hero, 0.03 * luck],
+    [GRADE.rare, 0.07 * luck],
+    [GRADE.magic, 0.18 * (1 + bonus * 1.5)],
   ];
   let acc = 0;
   for (const [g, p] of table) {
