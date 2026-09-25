@@ -100,8 +100,20 @@ describe('초월 · 칭호 · 음식 · 납품', () => {
     expect(p.transcendUps).toBe(2);
     expect(p.transcendPoints()).toBe(2);
     const before = p.stats().atk;
-    p.cls.tpts = { atk: 2 };
+    // 파편이 없으면 찍을 수 없다
+    expect(p.spendTranscend('atk', 1)).toBe(false);
+    p.add('dim_shard', 2);
+    expect(p.spendTranscend('atk', 2)).toBe(true);
+    expect(p.count('dim_shard')).toBe(0);
     expect(p.stats().atk).toBeGreaterThan(before);
+    expect(p.transcendPoints()).toBe(0);
+  });
+  it('초월 포인트는 많이 찍을수록 파편이 더 든다', async () => {
+    const { transcendCost, transcendPointCost } = await import('../src/data/bonus');
+    expect(transcendPointCost(0)).toBe(1);
+    expect(transcendPointCost(5)).toBe(2);
+    expect(transcendPointCost(50)).toBe(11);
+    expect(transcendCost(3, 5)).toBe(1 + 1 + 2 + 2 + 2);
   });
   it('칭호 조건', () => {
     const t = TITLES.find((x) => x.id === 'tower10')!;

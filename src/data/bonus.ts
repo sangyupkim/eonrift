@@ -137,6 +137,20 @@ export function transcendExp(t: number): number {
   return Math.round(120000 * (1 + t * 0.08));
 }
 
+/**
+ * 초월 포인트를 찍을 때 드는 차원 파편: 이미 찍은 포인트가 많을수록 비싸다.
+ * 1~5번째 점 1개씩, 6~10번째 2개씩, 11~15번째 3개씩 … (5점마다 +1)
+ */
+export function transcendPointCost(spent: number): number {
+  return 1 + Math.floor(spent / 5);
+}
+/** 지금까지 spent점을 찍었을 때 n점을 더 찍는 비용 */
+export function transcendCost(spent: number, n: number): number {
+  let sum = 0;
+  for (let i = 0; i < n; i++) sum += transcendPointCost(spent + i);
+  return sum;
+}
+
 /** 초월 포인트 1점당 보너스 */
 export const TRANSCEND_STATS: { key: BonusKey; per: number }[] = [
   { key: 'atk', per: 0.01 },

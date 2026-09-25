@@ -7,6 +7,14 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '6.2',
+    date: '2026-09-25',
+    items: [
+      '초월 포인트를 찍을 때 차원 파편이 든다. 1~5번째 점은 1점당 1개, 6~10번째 2개, 11~15번째 3개 … 찍은 포인트 5점마다 1점당 1개씩 늘어남 (모든 항목 합계 기준)',
+      '능력치 탭의 +1/+5 버튼에 필요한 파편 수 표시',
+    ],
+  },
+  {
     version: '6.1',
     date: '2026-09-25',
     items: [

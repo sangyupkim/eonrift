@@ -21,7 +21,7 @@ import { equipIconUrl, heroPortraitUrl, itemIconUrl, monsterIconUrl, skillIconUr
 import { BESTIARY, BESTIARY_BY_ID, COLLECTION_MILESTONES, killMilestones, milestoneReward, RESEARCH_BONUS, type BestiaryReward } from '../data/bestiary';
 import { DEBUFF_INFO, TRAIT_TEXT, type Faction } from '../data/species';
 import { AFFIXES, ALLOY, formatClock, riftAffixes, riftMult, riftReward, riftYield, RIFT_ALLOY, RIFT_TIME, rushReward, RUSH_DAILY, RUSH_DIFFS, RUSH_EXTRA_ALLOY, RUSH_ORDER, SHARD, DUST, DUST_PER_SHARD, towerBoss, towerDaily, towerFirstClear, towerMult, towerStartFloor, type RushDiff } from '../data/endgame';
-import { BONUS_NAMES, bonusText, TRANSCEND_STATS, transcendExp, engraveCost, engraveRange, ENGRAVE_STAGES, ENGRAVE_STAGE_NAMES, rollEngrave, TITLES, type BonusKey } from '../data/bonus';
+import { BONUS_NAMES, bonusText, TRANSCEND_STATS, transcendCost, transcendExp, engraveCost, engraveRange, ENGRAVE_STAGES, ENGRAVE_STAGE_NAMES, rollEngrave, TITLES, type BonusKey } from '../data/bonus';
 import { Rng } from '../core/rng';
 import type { Archetype } from '../data/monsters';
 
@@ -926,11 +926,7 @@ export class Screens {
       again();
     });
     this.on(s, '[data-tp]', (b) => {
-      const k = b.dataset.tp as BonusKey;
-      const n = Math.min(Number(b.dataset.n ?? 1), p.transcendPoints());
-      if (n <= 0) return;
-      const t = (p.cls.tpts ??= {});
-      t[k] = (t[k] ?? 0) + n;
+      if (!p.spendTranscend(b.dataset.tp as BonusKey, Number(b.dataset.n ?? 1))) return;
       onChange();
       again();
     });
@@ -946,9 +942,14 @@ export class Screens {
     if (c.level < MAX_LEVEL) return html;
     const pts = p.transcendPoints();
     const need = transcendExp(c.tlv ?? 0);
+    const spent = p.transcendSpent();
+    const shards = p.count('dim_shard');
+    const c1 = transcendCost(spent, 1);
+    const c5 = transcendCost(spent, 5);
     html += `<h3>초월 Lv.${c.tlv ?? 0} <small>경험치 ${c.texp ?? 0} / ${need} · 남은 초월 포인트 <b class="${pts ? 'ok' : ''}">${pts}</b></small></h3>
+      <p class="hint">포인트를 찍을 때 ${inlineGem('dim_shard')}차원 파편이 듭니다 (보유 <b class="${shards >= c1 ? '' : 'bad'}">${shards}</b>). 찍은 포인트 5점마다 1점당 파편이 1개씩 늘어납니다 · 지금 1점당 ${c1}개</p>
       <div class="stat-rows">${TRANSCEND_STATS.map((t) => `<div class="stat-row"><b>${BONUS_NAMES[t.key]}</b><span class="num">${c.tpts?.[t.key] ?? 0}</span><small>1포인트당 ${bonusText(t.key, t.per)}</small>
-        <button data-tp="${t.key}" data-n="1" ${pts > 0 ? '' : 'disabled'}>+1</button><button data-tp="${t.key}" data-n="5" ${pts >= 5 ? '' : 'disabled'}>+5</button></div>`).join('')}</div>`;
+        <button data-tp="${t.key}" data-n="1" ${pts > 0 && shards >= c1 ? '' : 'disabled'}>+1 <small>(파편 ${c1})</small></button><button data-tp="${t.key}" data-n="5" ${pts >= 5 && shards >= c5 ? '' : 'disabled'}>+5 <small>(파편 ${c5})</small></button></div>`).join('')}</div>`;
     return html;
   }
 

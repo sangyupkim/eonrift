@@ -5,7 +5,7 @@ import { FACTORY_SIZES, RECIPES, RECIPE_RENAMES } from '../data/factory';
 import { ITEM_RENAMES } from '../data/items';
 import type { BuildingState, FactoryState } from '../factory/sim';
 import { newEndgame, type EndgameState } from '../data/endgame';
-import { addBonus, BONUS_CAP, FOODS, TITLES, TRANSCEND_STATS, transcendExp, type Bonus, type BonusKey } from '../data/bonus';
+import { addBonus, BONUS_CAP, FOODS, TITLES, TRANSCEND_STATS, transcendCost, transcendExp, type Bonus, type BonusKey } from '../data/bonus';
 import { BESTIARY, bestiaryId, COLLECTION_MILESTONES, killMilestones, RESEARCH_BONUS } from '../data/bestiary';
 import { Bag, type Slot } from './Bag';
 import { BAG_SLOTS } from '../config';
@@ -406,6 +406,19 @@ export class Progress {
   }
   bonus(k: BonusKey): number {
     return this.bonuses()[k] ?? 0;
+  }
+  /** 찍은 초월 포인트 합계 (모든 항목) */
+  transcendSpent(clsId: ClassId = this.data.currentClass): number {
+    return Object.values(this.data.classes[clsId].tpts ?? {}).reduce((a, n) => a + (n ?? 0), 0);
+  }
+  /** 초월 포인트 n점을 k에 찍는다 (차원 파편이 든다). 성공하면 true */
+  spendTranscend(k: BonusKey, n: number): boolean {
+    if (n <= 0 || this.transcendPoints() < n) return false;
+    const cost = transcendCost(this.transcendSpent(), n);
+    if (!this.take('dim_shard', cost)) return false;
+    const t = (this.cls.tpts ??= {});
+    t[k] = (t[k] ?? 0) + n;
+    return true;
   }
   /** 남은 초월 포인트 */
   transcendPoints(clsId: ClassId = this.data.currentClass): number {
