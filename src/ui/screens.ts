@@ -230,16 +230,27 @@ export class Screens {
            ${canInstall() ? `<button class="install" data-a="install">${SPK('phone', '📲')} 앱으로 설치</button>` : ''}
            <button class="update" data-a="loadcode">${SPK('key', '📥')} 저장 코드로 불러오기</button>
            <button class="update" data-a="update">${SPK('refresh', '🔄')} 업데이트 확인</button>
-           ${onTest ? `<button class="update test-btn" data-a="test">${SPK('sparkle', '🧪')} 테스트 캐릭터 (만렙·최종 장비)</button>` : ''}
          </div>
        </div>
+       ${onTest ? '<div class="secret-spot" data-a="secret" aria-hidden="true"></div>' : ''}
        <button class="patch-btn" data-a="patch">${SPK('scroll', '📜')} 패치노트</button>
        <div class="version">v${GAME_VERSION} (${BUILD_ID}) · 모바일 가로 화면 권장</div>`,
     );
     this.on(s, '[data-a="continue"]', onContinue);
     this.on(s, '[data-a="install"]', () => void promptInstall());
     if (onLoadCode) this.on(s, '[data-a="loadcode"]', onLoadCode);
-    if (onTest) this.on(s, '[data-a="test"]', onTest);
+    // 숨은 입구: 왼쪽 위 빈 곳을 3초 안에 5번 누르면 테스트 캐릭터
+    if (onTest) {
+      let taps: number[] = [];
+      this.on(s, '[data-a="secret"]', () => {
+        const now = performance.now();
+        taps = [...taps.filter((t) => now - t < 3000), now];
+        if (taps.length >= 5) {
+          taps = [];
+          onTest();
+        }
+      });
+    }
     this.on(s, '[data-a="patch"]', () => this.patchNotes(() => this.title(hasSave, onNew, onContinue, onLoadCode, onTest)));
     // 업데이트 확인 → 새 버전이 있으면 같은 버튼이 "업데이트" 버튼으로 바뀐다
     let remote: RemoteVersion | null = null;
