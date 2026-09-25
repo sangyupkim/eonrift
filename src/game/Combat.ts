@@ -332,13 +332,13 @@ export class Combat {
     const color = COLORS[cls];
 
     const speed = this.host.stats().speed;
-    // 검사이거나 던전 밖이면 근접 휘두르기
-    if (cls === 'sword' || !this.host.dungeon()) {
-      const combo = cls === 'sword' ? this.combo : 0;
+    // 검사: 3타 베기 콤보 (마을·차원집에서도 같다)
+    if (cls === 'sword') {
+      const combo = this.combo;
       const big = combo === 2;
       player.startAction(
         {
-          pose: cls === 'sword' ? 'swing' : 'thrust',
+          pose: 'swing',
           combo,
           duration: (player.cls.attackTime * (big ? 1.25 : 1)) / speed,
           hitAt: 0.45,
@@ -352,14 +352,34 @@ export class Combat {
         },
         this.angleTo(target),
       );
-      if (cls === 'sword') {
-        this.combo = (this.combo + 1) % 3;
-        this.comboTimer = 0.9;
-      }
+      this.combo = (this.combo + 1) % 3;
+      this.comboTimer = 0.9;
       return;
     }
 
-    const d = this.host.dungeon()!;
+    // 마을·차원집: 쏠 적이 없으니 자세와 빛줄기만 보여 준다 (직업 고유 모습 그대로)
+    const d = this.host.dungeon();
+    if (!d) {
+      const mage = cls === 'mage';
+      player.startAction(
+        {
+          pose: mage ? 'cast' : 'shoot',
+          duration: player.cls.attackTime / speed,
+          hitAt: mage ? 0.5 : 0.55,
+          onHit: () => {
+            this.host.sfx(mage ? 'magic' : 'bow');
+            const x = player.position.x;
+            const z = player.position.z;
+            const len = mage ? 5 : 7;
+            level.effects.streak(x, z, x + Math.sin(player.facing) * len, z + Math.cos(player.facing) * len, color, mage ? 0.7 : 0.35);
+            level.effects.sparks(x + Math.sin(player.facing) * 0.8, 1.2, z + Math.cos(player.facing) * 0.8, color, mage ? 10 : 5, { speed: 3 });
+          },
+        },
+        player.facing,
+      );
+      return;
+    }
+
     const aim = this.angleTo(target) ?? player.facing;
     if (cls === 'mage') {
       player.startAction(
