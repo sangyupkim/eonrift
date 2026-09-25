@@ -385,6 +385,7 @@ export class Game {
     for (const b of this.factory.state.buildings) if (b.type === 'healer') b.active = false;
     this.level = level;
     this.hud.setWave(0, 0, false, true);
+    this.hud.setBossTags([]);
     // 차원집 안에서는 일반 창고의 재료도 가진 것으로 친다
     this.progress.atHome = level instanceof HomeScene;
     this.buildMode(false);
@@ -2211,7 +2212,22 @@ export class Game {
     }
     this.camera.zoom = 1;
     this.camera.updateProjectionMatrix();
+    this.buildPan.set(0, 0, 0);
     if (on) this.fitBuildCamera();
+  }
+
+  /** 건설 모드 화면 이동 (공장 가운데에서 얼마나 옮겼는지) */
+  private buildPan = new Vector3();
+  private panning: { id: number; from: Vector3; start: Vector3 } | null = null;
+  private touches = new Set<number>();
+
+  /** 화면 좌표 → 바닥 위의 점 */
+  private groundAt(e: PointerEvent): Vector3 | null {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const ndc = new Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
+    this.raycaster.setFromCamera(ndc, this.camera);
+    const hit = new Vector3();
+    return this.raycaster.ray.intersectPlane(this.ground, hit) ? hit : null;
   }
 
   private setBuilding(on: boolean): void {
@@ -2226,7 +2242,8 @@ export class Game {
     const viewW = this.camera.right - this.camera.left;
     // 건설 도구줄이 차지하는 높이를 빼고 공장이 다 보이게
     const free = Math.max(0.4, 1 - (this.buildBar.root.offsetHeight + 12) / Math.max(1, this.container.clientHeight));
-    this.camera.zoom = Math.min(1, viewW / (L * 1.55), (viewH * free) / (L * 1.25));
+    // 너무 작아지지 않게: 원래 비율에 가깝게 보여 주고, 넓은 차원집은 끌어서 둘러본다
+    this.camera.zoom = Math.max(0.85, Math.min(1, viewW / (L * 1.55), (viewH * free) / (L * 1.25)));
     this.camera.updateProjectionMatrix();
   }
 
@@ -2251,8 +2268,19 @@ export class Game {
     const isLine = () => this.buildBar.tool === 'belt' || this.buildBar.tool === 'wire' || this.buildBar.tool === 'remove';
     canvas.addEventListener('pointerdown', (e) => {
       if (!this.building || this.mode !== 'play') return;
+      this.touches.add(e.pointerId);
       const cell = this.pickCell(e);
-      if (!cell) return;
+      // 화면 이동: 화면 이동 도구, 두 손가락, 오른쪽·가운데 버튼, 공장 밖에서 누르기
+      if (this.buildBar.tool === 'pan' || !cell || e.button === 1 || e.button === 2 || this.touches.size >= 2) {
+        const g = this.groundAt(e);
+        if (g) {
+          canvas.setPointerCapture(e.pointerId);
+          this.panning = { id: e.pointerId, from: g, start: this.buildPan.clone() };
+          this.dragCell = this.ghostCell = null;
+          if (this.level instanceof HomeScene) this.level.hideGhost();
+        }
+        return;
+      }
       canvas.setPointerCapture(e.pointerId);
       const tool = this.buildBar.tool;
       if (tool === 'rotate') {
@@ -2281,6 +2309,21 @@ export class Game {
     });
     canvas.addEventListener('pointermove', (e) => {
       if (!this.building || !(this.level instanceof HomeScene)) return;
+      if (this.panning) {
+        if (e.pointerId !== this.panning.id) return;
+        const g = this.groundAt(e);
+        if (!g) return;
+        // 누른 곳이 손가락 밑에 그대로 있도록 카메라를 옮긴다
+        this.buildPan.x -= g.x - this.panning.from.x;
+        this.buildPan.z -= g.z - this.panning.from.z;
+        const half = (this.factory.size * TILE) / 2 + 4;
+        this.buildPan.x = Math.max(-half, Math.min(half, this.buildPan.x));
+        this.buildPan.z = Math.max(-half, Math.min(half, this.buildPan.z));
+        this.camTarget.x -= g.x - this.panning.from.x;
+        this.camTarget.z -= g.z - this.panning.from.z;
+        this.updateCameraNow();
+        return;
+      }
       const cell = this.pickCell(e);
       if (this.buildBar.tool === 'move' || this.buildBar.tool === 'rotate') {
         if (this.moveFrom && cell) {
@@ -2312,6 +2355,11 @@ export class Game {
       if (this.dragCell) this.dragCell = cell;
     });
     const end = (e: PointerEvent) => {
+      this.touches.delete(e.pointerId);
+      if (this.panning) {
+        if (e.pointerId === this.panning.id) this.panning = null;
+        return;
+      }
       this.dragCell = null;
       if (this.moveFrom) {
         const from = this.moveFrom;
@@ -2339,6 +2387,10 @@ export class Game {
     };
     canvas.addEventListener('pointerup', end);
     canvas.addEventListener('pointercancel', end);
+    // 오른쪽 버튼으로 끌어 화면 이동할 때 메뉴가 뜨지 않게
+    canvas.addEventListener('contextmenu', (e) => {
+      if (this.building) e.preventDefault();
+    });
   }
 
   /** 이동 도구: 옮기는 건물을 손가락 아래에 미리 보여 준다 */
@@ -2355,7 +2407,7 @@ export class Game {
   private updateGhost(cell: { x: number; y: number }): void {
     if (!(this.level instanceof HomeScene)) return;
     const tool = this.buildBar.tool;
-    if (tool === 'remove' || tool === 'move' || tool === 'rotate') return;
+    if (tool === 'remove' || tool === 'move' || tool === 'rotate' || tool === 'pan') return;
     const existing = this.factory.at(cell.x, cell.y);
     const ok = (!existing || existing.type === tool) && this.progress.hasAll(BUILDINGS[tool].cost);
     this.level.showGhost(tool, cell.x, cell.y, existing && existing.type === tool ? existing.dir : this.buildBar.dir, ok);
@@ -2366,7 +2418,7 @@ export class Game {
     const f = this.factory;
     const p = this.progress;
     const tool = this.buildBar.tool;
-    if (tool === 'move' || tool === 'rotate') return;
+    if (tool === 'move' || tool === 'rotate' || tool === 'pan') return;
     const existing = f.at(cell.x, cell.y);
     if (tool === 'remove') {
       if (!existing) return;
@@ -2609,6 +2661,16 @@ export class Game {
     if (level instanceof DungeonScene && this.run) {
       // 보스가 여럿이면 (보스 러시) 쓰러진 보스 다음으로 살아 있는 보스를 보여 준다
       if (level.boss && !level.boss.alive) level.boss = level.monsters.find((m) => m.alive && m.isBoss) ?? level.boss;
+      // 보스가 둘 이상이면 머리 위에 각자의 체력 (남은 줄 수 ×N)
+      const bosses = level.monsters.filter((m) => m.alive && m.isBoss);
+      this.hud.setBossTags(
+        bosses.length > 1
+          ? bosses.map((m) => {
+              const sp = this.toScreen(m.x, m.rig.height * m.rig.root.scale.y + 0.9, m.z);
+              return { x: sp.x, y: sp.y, name: m.name, ratio: m.hp / m.maxHp, bars: m.bars, shielded: m.shielded };
+            })
+          : [],
+      );
       const boss = level.boss;
       if (boss && boss.alive && boss.aggro) {
         // 보스 제한 시간: 싸움이 시작되면 흐른다
@@ -2864,7 +2926,7 @@ export class Game {
   }
 
   private updateCamera(dt: number): void {
-    let target: { x: number; z: number } = this.building && this.level instanceof HomeScene ? this.level.center : this.player.position;
+    let target: { x: number; z: number } = this.building && this.level instanceof HomeScene ? { x: this.level.center.x + this.buildPan.x, z: this.level.center.z + this.buildPan.z } : this.player.position;
     if (this.building && this.level instanceof HomeScene) {
       // 아래쪽 건설 도구줄에 가리지 않게 공장을 도구줄 높이의 절반만큼 위로 올려 보여 준다
       const barPx = this.buildBar.root.offsetHeight + 12;
@@ -2883,6 +2945,13 @@ export class Game {
     const sz = (Math.random() - 0.5) * s;
     this.camera.position.set(this.camTarget.x + CAMERA_OFFSET.x + sx, CAMERA_OFFSET.y, this.camTarget.z + CAMERA_OFFSET.z + sz);
     this.camera.lookAt(this.camTarget.x + sx, 0, this.camTarget.z + sz);
+  }
+
+  /** 끄는 동안 카메라를 바로 옮긴다 (한 박자 늦게 따라오지 않게) */
+  private updateCameraNow(): void {
+    this.camera.position.set(this.camTarget.x + CAMERA_OFFSET.x, CAMERA_OFFSET.y, this.camTarget.z + CAMERA_OFFSET.z);
+    this.camera.lookAt(this.camTarget.x, 0, this.camTarget.z);
+    this.camera.updateMatrixWorld();
   }
 
   /** 개발용 (?debug): 현재 상태 */

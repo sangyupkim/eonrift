@@ -20,7 +20,7 @@ import { gearLook } from '../models/items';
 import { equipIconUrl, heroPortraitUrl, itemIconUrl, monsterIconUrl, skillIconUrl, toolIconUrl } from './itemIcons';
 import { BESTIARY, BESTIARY_BY_ID, COLLECTION_MILESTONES, killMilestones, milestoneReward, RESEARCH_BONUS, type BestiaryReward } from '../data/bestiary';
 import { DEBUFF_INFO, TRAIT_TEXT, type Faction } from '../data/species';
-import { endLock, AFFIXES, ALLOY, ALLOY2, RIFT_ALLOY2_FROM, riftEntry, rushEntry, formatClock, riftAffixes, riftMult, riftReward, RIFT_ALLOY, RIFT_TIME, rushReward, RUSH_DAILY, RUSH_DIFFS, RUSH_EXTRA_ALLOY, SHARD, DUST, DUST_PER_SHARD, END_NAMES, type EndContent, readTrialCode, trialCode, trialGrade, TRIAL_GRADES, trialSpec, TRIAL_TIME, weekKey, towerBoss, towerDaily, towerFirstClear, towerMult, towerStartFloor, type RushDiff } from '../data/endgame';
+import { endLock, AFFIXES, ALLOY, ALLOY2, RIFT_ALLOY2_FROM, riftEntry, rushEntry, formatClock, riftAffixes, riftMult, riftReward, RIFT_ALLOY, RIFT_TIME, rushReward, RUSH_DAILY, RUSH_DIFFS, RUSH_EXTRA_ALLOY, SHARD, DUST, DUST_PER_SHARD, END_NAMES, type EndContent, readTrialCode, trialCode, trialGrade, TRIAL_GRADES, trialSpec, TRIAL_TIME, weekKey, towerBoss, towerDaily, towerFirstClear, towerMult, rushFights, type RushDiff } from '../data/endgame';
 import { BONUS_NAMES, bonusText, TRANSCEND_STATS, transcendCost, transcendExp, engraveCost, engraveRange, ENGRAVE_STAGES, ENGRAVE_STAGE_NAMES, rollEngrave, TITLES, type BonusKey } from '../data/bonus';
 import { Rng } from '../core/rng';
 import type { Archetype } from '../data/monsters';
@@ -334,103 +334,140 @@ export class Screens {
     message?: string,
     sel?: { tier: number; level: number },
     only: EndContent = 'tower',
+    view: 'main' | 'info' | 'titles' = 'main',
   ): void {
     const e = p.data.end!;
     const today = todayKey();
     const cur = { tier: sel?.tier ?? Math.min(7, p.maxTier), level: sel?.level ?? Math.max(1, e.riftBest + 1) };
-    const alloy = p.count(ALLOY);
-    const alloy2 = p.count(ALLOY2);
-    const shardTxt = (n: number) => (n ? ` · ${inlineGem(DUST)}차원 가루 ${n}` : '');
-    // 무한의 탑
-    const start = towerStartFloor(e.towerBest);
-    const next = e.towerBest + 1;
-    const daily = towerDaily(e.towerBest);
-    const dailyDone = e.towerDailyDate === today;
-    const tower = `<section class="end-card">
-        <h3>${SPK('tower', '▲')} 무한의 탑 <small>최고 ${e.towerBest}층</small></h3>
-        <p class="hint">층마다 방 몇 개를 정리하고 올라갑니다. 1~10층은 층마다 +5%, 11층부터는 10층마다 한 번에 +15% 벽이 생깁니다. 5층마다 파수꾼, 10층마다 수호자.</p>
-        <p class="dim">다음 도전 ${next}층: 몬스터 ×${towerMult(next).toFixed(2)}${towerBoss(next) ? ` · ${towerBoss(next)!.kind === 'boss' ? '수호자' : '파수꾼'}` : ''} · 첫 돌파 보상 ${towerFirstClear(next).gold} G${shardTxt(towerFirstClear(next).dust)}</p>
-        <div class="menu row">
-          <button class="primary" data-tower="${start}">${start}층부터 도전</button>
-          ${start > 1 ? `<button data-tower="1">1층부터</button>` : ''}
-          <button data-daily ${dailyDone || e.towerBest < 1 ? 'disabled' : ''}>${dailyDone ? '오늘 소탕 완료' : `소탕 보상 ${daily.gold} G${shardTxt(daily.dust)}`}</button>
-        </div>
-      </section>`;
-    // 보스 러시
+    const dust = (n: number) => (n ? `${inlineGem(DUST)}${n}` : '');
+    const res = (id: string) => `<span class="res-chip">${inlineGem(id)}${p.count(id)}</span>`;
     const used = e.rushDate === today ? e.rushUsed : 0;
-    const rush = `<section class="end-card">
-        <h3>${SPK('skull', '☠')} 보스 러시 <small>일반·하드 오늘 무료 ${Math.max(0, RUSH_DAILY - used)}/${RUSH_DAILY}${used >= RUSH_DAILY ? ` · 추가 도전 ${inlineGem(ALLOY)}차원 합금 ${RUSH_EXTRA_ALLOY} (보유 ${alloy})` : ''} · 지옥은 매번 ${inlineGem(ALLOY2)}상급 차원 합금 1 (보유 ${alloy2})</small></h3>
-        <p class="hint">1단계 파수꾼부터 7단계 수호자까지 연속으로. 하드는 두 마리, 지옥은 세 마리가 한꺼번에 나옵니다. 보스 사이에 체력 25%만 회복. 10분 안 S · 15분 A · 20분 B. 보상은 완주했을 때 한꺼번에.</p>
-        <div class="rush-row">${RUSH_DIFFS.map((d, i) => {
-          const locked = i > 0 && !e.rushGradeBest[i - 1];
-          const best = e.rushBest[i] ? `최고 ${formatClock(e.rushBest[i])} · ${e.rushGradeBest[i]}등급` : '기록 없음';
-          const r = rushReward(i as RushDiff, 'S');
-          const short = !locked && !p.hasAll(rushEntry(i as RushDiff, used));
-          return `<button class="rush-btn ${locked || short ? 'locked' : ''}" data-rush="${i}" ${locked || short ? 'disabled' : ''}><b>${d.name}</b><small>${locked ? `${RUSH_DIFFS[i - 1].name} 완주 후 열림` : d.desc}</small><small class="dim">${best} · S ${r.gold} G${shardTxt(r.dust)}</small></button>`;
-        }).join('')}</div>
-      </section>`;
-    // 심연 균열
-    const affixes = riftAffixes(cur.level, today);
-    const rr = riftReward(cur.level, true);
     const maxLevel = e.riftBest + 1;
-    const tiers = THEMES.map((t) => `<button class="chip ${t.tier === cur.tier ? 'on' : ''}" data-rtier="${t.tier}" ${t.tier > p.maxTier ? 'disabled' : ''} style="--c:${hex(t.portalColor)}">${t.tier} ${t.name}</button>`).join('');
-    const rift = `<section class="end-card">
-        <h3>${SPK('portal', '◎')} 심연 균열 <small>최고 ${e.riftBest}단계</small></h3>
-        <p class="hint">원하는 맵(1~7단계)을 7-10보다 강한 난이도로 엽니다. 차원 가루와 좋은 장비를 파밍하는 곳이라 광맥·나무는 적게 나옵니다 (자원은 기본 스테이지·채집 특화 맵에서). ${Math.floor(RIFT_TIME / 60)}분 안에 모두 쓰러뜨리면 다음 단계가 열립니다. 입장: 1~${RIFT_ALLOY2_FROM - 1}단계 ${inlineGem(ALLOY)}차원 합금 ${RIFT_ALLOY} (보유 ${alloy}) · ${RIFT_ALLOY2_FROM}단계부터 ${inlineGem(ALLOY2)}상급 차원 합금 ${RIFT_ALLOY} (보유 ${alloy2})</p>
-        <div class="chips">${tiers}</div>
-        <div class="menu row stepper">
-          <button data-rlv="-1" ${cur.level <= 1 ? 'disabled' : ''}>−</button>
-          <b>${cur.level}단계</b>
-          <button data-rlv="1" ${cur.level >= maxLevel ? 'disabled' : ''}>+</button>
-          <span class="dim">몬스터 ×${riftMult(cur.level).toFixed(2)} · 보상 ${rr.gold} G${shardTxt(rr.dust)}</span>
-        </div>
-        <p class="dim">오늘의 변이: ${affixes.length ? affixes.map((a) => `<span class="affix" style="color:${hex(AFFIXES[a].color)}">${AFFIXES[a].name}</span> (${AFFIXES[a].text})`).join(' · ') : '없음'}</p>
-        <div class="menu row"><button class="primary" data-rift ${p.count(riftEntry(cur.level).id) < riftEntry(cur.level).n ? 'disabled' : ''}>${cur.tier}단계 맵 · 균열 ${cur.level}단계 입장</button></div>
-      </section>`;
-    // 주간 차원 시련
     const tr = e.trial;
     const spec = trialSpec(weekKey());
-    const g = tr ? trialGrade(tr.best) : -1;
-    const gradeTag = (i: number) => (i >= 0 ? `<b style="color:${hex(TRIAL_GRADES[i].color)}">${TRIAL_GRADES[i].name}</b>` : '<span class="dim">등급 없음</span>');
-    const top = tr?.topGrade ?? -1;
-    const worn = p.data.aura ?? -1;
-    const claims = TRIAL_GRADES.map((t, i) => {
-      const open = top >= i;
-      return `<button class="rush-btn aura-btn ${open ? '' : 'locked'} ${worn === i ? 'on' : ''}" data-taura="${i}" ${open ? '' : 'disabled'} style="--c:${hex(t.color)}"><b style="color:${hex(t.color)}">${t.name} <small>${t.min}점</small></b><small>${t.aura}</small><small class="dim">${worn === i ? '두르는 중' : open ? '누르면 두르기' : '미달성'}</small></button>`;
-    }).join('');
-    const code = tr && tr.best ? trialCode(tr.week, tr.cls, tr.best, tr.time, tr.hits) : '';
-    const hist = tr?.history.length ? tr.history.slice(0, 5).map((x) => `${x.week} ${x.best}점 ${x.grade >= 0 ? TRIAL_GRADES[x.grade].name : '-'} (${CLASSES[x.cls as ClassId]?.name ?? ''})`).join(' · ') : '없음';
-    const trialCard = `<section class="end-card">
-        <h3>${SPK('hourglass', '⏳')} 주간 차원 시련 <small>${weekKey()} · 이번 주 최고 ${tr?.best ?? 0}점 ${gradeTag(g)}</small></h3>
-        <p class="hint">일주일 동안 모두 같은 맵·몬스터·변이. 능력치는 <b>고정 스펙</b>(99레벨·7단계 유니크 +5 전 부위, 배운 스킬은 최고 레벨, 궁극기 Lv.1, 각인·초월·칭호·음식 무시)으로 바뀌어 실력만 겨룹니다. 물약은 중급 3개가 주어지고, 쓰러져도 짐을 잃지 않습니다. 몇 번이든 도전할 수 있고, 그 주의 최고 점수로 등급이 매겨집니다.</p>
-        <p class="dim">점수: 클리어 10000 + 남은 시간(${formatClock(TRIAL_TIME)} 기준)×10 + 최고 연속 처치×25 − 피격×40 − 물약×400 · 이번 주: ${THEMES[spec.tier - 1].name} · 변이 ${spec.affixes.map((a) => `<span class="affix" style="color:${hex(AFFIXES[a].color)}">${AFFIXES[a].name}</span>`).join(' · ')}</p>
-        <div class="menu row"><button class="primary" data-trial>도전하기</button>${tr?.best ? `<span class="dim">최고 기록: ${formatClock(tr.time)} · 피격 ${tr.hits} · ${CLASSES[tr.cls as ClassId]?.name ?? ''}</span>` : ''}</div>
-        <p class="dim">보상: 등급을 처음 달성하면 그 등급의 <b>발밑 오라</b>를 영원히 쓸 수 있습니다 ${worn >= 0 ? '<button class="chip" data-taura="-1">오라 끄기</button>' : ''}</p>
-        <div class="rush-row trial-row">${claims}</div>
-        ${code ? `<p class="dim">기록 코드 (친구와 비교): <input class="code-box" readonly value="${code}"></p>` : ''}
-        <p class="dim">친구 코드 확인: <input class="code-box" data-tcode placeholder="DT-..."> <span data-tcode-out></span></p>
-        <p class="dim">지난 기록: ${hist}</p>
-      </section>`;
-    // 칭호
-    const titles = TITLES.map((t) => {
+
+    // ---------- 첫 화면: 필요한 것만 ----------
+    let main = '';
+    if (only === 'tower') {
+      // 탑: 층 목록 (위가 높은 층). 들어오면 다음 도전 층이 보이도록 스크롤
+      const next = e.towerBest + 1;
+      const top = Math.max(next + 9, 20);
+      const daily = towerDaily(e.towerBest);
+      const dailyDone = e.towerDailyDate === today;
+      const rows: string[] = [];
+      for (let f = top; f >= 1; f--) {
+        const b = towerBoss(f);
+        const done = f <= e.towerBest;
+        const isNext = f === next;
+        const fc = towerFirstClear(f);
+        const tag = b ? `<span class="fl-boss">${b.kind === 'boss' ? '수호자' : '파수꾼'}</span>` : '';
+        const wall = f > 10 && f % 10 === 1 ? '<span class="fl-wall">+15% 벽</span>' : '';
+        const right = done
+          ? `<span class="ok">✓</span><button class="fl-go" data-tower="${f}">여기서</button>`
+          : isNext
+            ? `<button class="primary fl-go" data-tower="${f}">도전</button>`
+            : `<span class="dim">${fc.gold} G ${dust(fc.dust)}</span>`;
+        rows.push(`<div class="floor ${done ? 'done' : ''} ${isNext ? 'next' : ''} ${f > next ? 'locked' : ''}" ${isNext ? 'data-next' : ''}><b>${f}층</b>${tag}${wall}<span class="dim fl-m">×${towerMult(f).toFixed(2)}</span><span class="fl-r">${right}</span></div>`);
+      }
+      main = `<div class="end-summary"><span>최고 <b>${e.towerBest}층</b></span>
+          <button class="small" data-daily ${dailyDone || e.towerBest < 1 ? 'disabled' : ''}>${dailyDone ? '오늘 소탕 완료' : `소탕 ${daily.gold} G ${dust(daily.dust)}`}</button></div>
+        <div class="floor-list scroll" data-floors>${rows.join('')}</div>`;
+    } else if (only === 'rush') {
+      main = `<div class="end-summary"><span>일반·하드 무료 <b>${Math.max(0, RUSH_DAILY - used)}/${RUSH_DAILY}</b></span></div>
+        <div class="rush-row">${RUSH_DIFFS.map((d, i) => {
+          const locked = i > 0 && !e.rushGradeBest[i - 1];
+          const cost = rushEntry(i as RushDiff, used);
+          const short = !locked && !p.hasAll(cost);
+          const costTxt = Object.entries(cost).map(([id, n]) => `${inlineGem(id)}${n}`).join(' ') || '무료';
+          const best = e.rushBest[i] ? `${formatClock(e.rushBest[i])} · ${e.rushGradeBest[i]}` : '-';
+          return `<button class="rush-btn big ${locked || short ? 'locked' : ''}" data-rush="${i}" ${locked || short ? 'disabled' : ''}>
+            <b>${d.name}</b><small>${d.per}마리씩 · ${rushFights(i as RushDiff).length}전</small>
+            <small class="dim">${locked ? `${RUSH_DIFFS[i - 1].name} 완주 후` : `최고 ${best}`}</small><small>${locked ? '' : costTxt}</small></button>`;
+        }).join('')}</div>`;
+    } else if (only === 'rift') {
+      const affixes = riftAffixes(cur.level, today);
+      const rr = riftReward(cur.level, true);
+      const entry = riftEntry(cur.level);
+      main = `<div class="end-summary"><span>최고 <b>${e.riftBest}단계</b></span></div>
+        <div class="chips">${THEMES.map((t) => `<button class="chip ${t.tier === cur.tier ? 'on' : ''}" data-rtier="${t.tier}" ${t.tier > p.maxTier ? 'disabled' : ''} style="--c:${hex(t.portalColor)}">${t.tier} ${t.name}</button>`).join('')}</div>
+        <div class="menu row stepper">
+          <button data-rlv="-1" ${cur.level <= 1 ? 'disabled' : ''}>−</button><b>${cur.level}단계</b><button data-rlv="1" ${cur.level >= maxLevel ? 'disabled' : ''}>+</button>
+          <span class="dim">보상 ${rr.gold} G ${dust(rr.dust)}</span>
+        </div>
+        <div class="chips">${affixes.length ? affixes.map((a) => `<span class="chip" style="--c:${hex(AFFIXES[a].color)}">${AFFIXES[a].name}</span>`).join('') : '<span class="dim">변이 없음</span>'}</div>
+        <div class="menu row"><button class="primary" data-rift ${p.count(entry.id) < entry.n ? 'disabled' : ''}>입장 · ${inlineGem(entry.id)}${entry.n}</button></div>`;
+    } else {
+      const g = tr ? trialGrade(tr.best) : -1;
+      const topG = tr?.topGrade ?? -1;
+      const worn = p.data.aura ?? -1;
+      main = `<div class="end-summary"><span>${weekKey()} · ${THEMES[spec.tier - 1].name}</span>
+          <span>이번 주 <b>${tr?.best ?? 0}점</b> ${g >= 0 ? `<b style="color:${hex(TRIAL_GRADES[g].color)}">${TRIAL_GRADES[g].name}</b>` : ''}</span></div>
+        <div class="chips">${spec.affixes.map((a) => `<span class="chip" style="--c:${hex(AFFIXES[a].color)}">${AFFIXES[a].name}</span>`).join('')}</div>
+        <div class="menu row"><button class="primary" data-trial>도전하기</button></div>
+        <h3 class="sub">발밑 오라 ${worn >= 0 ? '<button class="chip" data-taura="-1">끄기</button>' : ''}</h3>
+        <div class="rush-row trial-row">${TRIAL_GRADES.map((t, i) => {
+          const open = topG >= i;
+          return `<button class="rush-btn aura-btn ${open ? '' : 'locked'} ${worn === i ? 'on' : ''}" data-taura="${i}" ${open ? '' : 'disabled'} style="--c:${hex(t.color)}"><b style="color:${hex(t.color)}">${t.name}</b><small class="dim">${t.min}점</small></button>`;
+        }).join('')}</div>`;
+    }
+
+    // ---------- 설명: 규칙·보상·재료 ----------
+    const infoOf: Record<EndContent, string> = {
+      tower: `<ul class="info-list">
+          <li>한 층은 둥근 단 하나. 웨이브 3번을 모두 정리하면 가운데 문으로 위층에 오릅니다.</li>
+          <li>5층마다 파수꾼, 10층마다 수호자가 마지막 웨이브에 나옵니다.</li>
+          <li>난이도: 1층은 7-10 수준. 1~10층은 층마다 +5%, 11층부터 층마다 +3%에 10층마다 한 번에 +15% 벽.</li>
+          <li>보상: 층을 처음 돌파하면 골드와 ${inlineGem(DUST)}차원 가루. 하루 한 번 최고 층만큼 소탕 보상.</li>
+          <li>깬 층은 어디서든 다시 시작할 수 있습니다 (다시 깨면 몬스터 전리품만).</li>
+        </ul>`,
+      rush: `<ul class="info-list">
+          <li>1단계 파수꾼부터 7단계 수호자까지 연속으로 싸웁니다. 보스 사이에 체력 25%만 회복.</li>
+          <li>일반: 한 마리씩 14전 · 하드: 두 마리씩 7전(체력 ×1.5, 공격 ×1.3) · 지옥: 세 마리씩 5전(체력 ×2.2, 공격 ×1.6).</li>
+          <li>일반·하드는 하루 ${RUSH_DAILY}번 무료, 그 뒤는 ${inlineGem(ALLOY)}차원 합금 ${RUSH_EXTRA_ALLOY}. 지옥은 매번 ${inlineGem(ALLOY2)}상급 차원 합금 1.</li>
+          <li>등급: 10분 안 S · 15분 A · 20분 B · 그 밖 C. 보상은 완주했을 때 한꺼번에 (S: 일반 ${dust(rushReward(0, 'S').dust)} · 하드 ${dust(rushReward(1, 'S').dust)} · 지옥 ${dust(rushReward(2, 'S').dust)}).</li>
+        </ul>`,
+      rift: `<ul class="info-list">
+          <li>고른 맵(1~7단계)을 7-10보다 강한 난이도로 엽니다. 단계마다 몬스터 +12% (지금 ×${riftMult(cur.level).toFixed(2)}).</li>
+          <li>${Math.floor(RIFT_TIME / 60)}분 안에 모두 쓰러뜨리면 다음 단계가 열리고 보상 전부, 늦으면 절반.</li>
+          <li>차원 가루와 좋은 장비를 파밍하는 곳이라 광맥·나무는 적습니다 (자원은 기본 스테이지·채집 특화 맵).</li>
+          <li>입장: 1~${RIFT_ALLOY2_FROM - 1}단계 ${inlineGem(ALLOY)}차원 합금 ${RIFT_ALLOY} · ${RIFT_ALLOY2_FROM}단계부터 ${inlineGem(ALLOY2)}상급 차원 합금 ${RIFT_ALLOY} (제작대).</li>
+          <li>오늘의 변이: ${riftAffixes(cur.level, today).map((a) => `<b style="color:${hex(AFFIXES[a].color)}">${AFFIXES[a].name}</b> ${AFFIXES[a].text}`).join(' · ') || '없음'}</li>
+        </ul>`,
+      trial: `<ul class="info-list">
+          <li>일주일 동안 모두 같은 맵·몬스터·변이. 능력치는 고정 스펙(99레벨·7단계 유니크 +5, 배운 스킬 최고 레벨, 궁극기 Lv.1, 각인·초월·칭호·음식 무시).</li>
+          <li>중급 물약 3개 지급, ${formatClock(TRIAL_TIME)} 제한, 쓰러져도 짐을 잃지 않음. 몇 번이든 도전 가능.</li>
+          <li>점수: 클리어 10000 + 남은 시간×10 + 최고 연속 처치×25 − 피격×40 − 물약×400.</li>
+          <li>등급(${TRIAL_GRADES.map((t) => `${t.name} ${t.min}`).join(' · ')})을 처음 달성하면 그 등급의 발밑 오라를 얻습니다.</li>
+          ${tr && tr.best ? `<li>내 기록 코드: <input class="code-box" readonly value="${trialCode(tr.week, tr.cls, tr.best, tr.time, tr.hits)}"></li>` : ''}
+          <li>친구 코드 확인: <input class="code-box" data-tcode placeholder="DT-..."> <span data-tcode-out></span></li>
+          <li>지난 기록: ${tr?.history.length ? tr.history.slice(0, 5).map((x) => `${x.week} ${x.best}점 ${x.grade >= 0 ? TRIAL_GRADES[x.grade].name : '-'}`).join(' · ') : '없음'}</li>
+        </ul>`,
+    };
+    const common = `<p class="dim">보상은 ${inlineGem(DUST)}차원 가루로 받습니다. 차원집의 차원 응축기에서 가루 ${DUST_PER_SHARD} + 상급 정수 + 티타늄판 → ${inlineGem(SHARD)}차원 파편(궁극기 강화·각인·초월).</p>`;
+    const titles = `<ul class="list">${TITLES.map((t) => {
       const got = p.data.titles?.includes(t.id);
       return `<li class="${got ? '' : 'locked'}"><div><b>${got ? `「${t.name}」` : '???'}</b><small>${t.cond} · ${Object.entries(t.bonus).map(([k, v]) => bonusText(k as BonusKey, v!)).join(', ')}</small></div>${got ? '<span class="ok">획득</span>' : ''}</li>`;
-    }).join('');
+    }).join('')}</ul>`;
+    const chips = only === 'tower' || only === 'trial' ? res(DUST) : `${res(DUST)}${res(ALLOY)}${res(ALLOY2)}`;
+
+    const body = view === 'info' ? `<div class="scroll">${infoOf[only]}${only === 'trial' ? '' : common}</div>` : view === 'titles' ? `<div class="scroll">${titles}</div>` : main;
     const s = this.open(
       'endgame',
-      `<div class="panel wide tall">
-         <button class="close">${ICONS.close}</button>
-         <h2>${END_NAMES[only]} <small>${inlineGem(DUST)}차원 가루 ${p.count(DUST)} · ${inlineGem(SHARD)}차원 파편 ${p.count(SHARD)} · ${inlineGem(ALLOY)}차원 합금 ${alloy} · ${inlineGem(ALLOY2)}상급 ${alloy2}</small></h2>
-         <p class="hint">보상은 차원 가루로 받습니다. 차원집의 <b>차원 응축기</b>(세라의 도면)에서 가루 ${DUST_PER_SHARD}개 + 상급 정수 + 티타늄판으로 차원 파편을, 가루 4개 + 최상급 정수 + 오리하르콘 주괴로 차원 마력 정수를 만듭니다.</p>
-         ${message ? `<div class="notice">${message}</div>` : ''}
-         <div class="scroll">
-           ${{ tower, rush, rift, trial: trialCard }[only]}
-           <section class="end-card"><h3>${SPK('sparkle', '✦')} 칭호 <small>${p.data.titles?.length ?? 0}/${TITLES.length} · 얻은 칭호의 보너스는 모두 적용</small></h3><ul class="list">${titles}</ul></section>
+      `<div class="panel wide tall end-panel">
+         <div class="end-head">
+           ${view !== 'main' ? '<button class="small" data-view="main">← 돌아가기</button>' : ''}
+           <h2>${END_NAMES[only]}${view === 'info' ? ' · 설명' : view === 'titles' ? ' · 칭호' : ''}</h2>
+           <span class="res">${chips}</span>
+           <span class="head-btns">${view === 'main' ? `<button class="small" data-view="info">설명</button><button class="small" data-view="titles">칭호 ${p.data.titles?.length ?? 0}</button>` : ''}<button class="close-inline">${ICONS.close}</button></span>
          </div>
+         ${message ? `<div class="notice">${message}</div>` : ''}
+         ${body}
        </div>`,
       onClose,
     );
-    const again = (m?: string, ns = cur) => this.endgame(p, h, onClose, m, ns, only);
+    const again = (m?: string, ns = cur, v = view) => this.endgame(p, h, onClose, m, ns, only, v);
+    this.on(s, '[data-view]', (b) => again(undefined, cur, b.dataset.view as 'main' | 'info' | 'titles'));
+    this.on(s, '.close-inline', () => this.close());
     this.on(s, '[data-tower]', (b) => h.tower(Number(b.dataset.tower)));
     this.on(s, '[data-daily]', () => h.towerDaily());
     this.on(s, '[data-rush]', (b) => h.rush(Number(b.dataset.rush) as RushDiff));
@@ -439,11 +476,15 @@ export class Screens {
     this.on(s, '[data-rift]', () => h.rift(cur.tier, cur.level));
     this.on(s, '[data-trial]', () => h.trial());
     this.on(s, '[data-taura]', (b) => h.trialAura(Number(b.dataset.taura)));
+    // 탑: 다음 도전 층이 목록 가운데 오도록
+    const list = s.querySelector<HTMLElement>('[data-floors]');
+    const nextRow = s.querySelector<HTMLElement>('[data-next]');
+    if (list && nextRow) list.scrollTop = nextRow.offsetTop - list.offsetTop - list.clientHeight / 2 + nextRow.clientHeight / 2;
     const input = s.querySelector<HTMLInputElement>('[data-tcode]');
     const out = s.querySelector<HTMLElement>('[data-tcode-out]');
     input?.addEventListener('input', () => {
       const r = readTrialCode(input.value);
-      if (out) out.innerHTML = !input.value.trim() ? '' : r ? `<b>${r.week}</b> ${CLASSES[r.cls as ClassId]?.name ?? r.cls} · <b>${r.score}점</b> ${r.score >= 0 && trialGrade(r.score) >= 0 ? TRIAL_GRADES[trialGrade(r.score)].name : ''} · ${formatClock(r.seconds)} · 피격 ${r.hits}` : '<span class="bad">올바르지 않은 코드</span>';
+      if (out) out.innerHTML = !input.value.trim() ? '' : r ? `<b>${r.week}</b> ${CLASSES[r.cls as ClassId]?.name ?? r.cls} · <b>${r.score}점</b> ${trialGrade(r.score) >= 0 ? TRIAL_GRADES[trialGrade(r.score)].name : ''} · ${formatClock(r.seconds)} · 피격 ${r.hits}` : '<span class="bad">올바르지 않은 코드</span>';
     });
   }
 

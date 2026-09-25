@@ -3,7 +3,7 @@ import { ITEMS } from '../data/items';
 import { hex } from './screens';
 import { buildingThumb } from './thumbs';
 
-export type BuildTool = BuildingType | 'remove' | 'move' | 'rotate';
+export type BuildTool = BuildingType | 'remove' | 'move' | 'rotate' | 'pan';
 
 const DIR_ARROWS = ['→', '↓', '←', '↑'];
 
@@ -11,7 +11,7 @@ const DIR_ARROWS = ['→', '↓', '←', '↑'];
 export class BuildBar {
   readonly root: HTMLDivElement;
   private info: HTMLDivElement;
-  tool: BuildTool = 'belt';
+  tool: BuildTool = 'pan';
   dir = 0;
 
   constructor(
@@ -35,6 +35,7 @@ export class BuildBar {
       .join('');
     this.root.innerHTML = `
       <div class="build-top">
+        <button class="tool-sm" data-tool="pan">✋ 화면 이동</button>
         <button class="tool-sm" data-act="rotate">새 건물 방향 <b class="dir">${DIR_ARROWS[this.dir]}</b></button>
         <button class="tool-sm" data-tool="move">이동</button>
         <button class="tool-sm" data-tool="rotate">회전</button>
@@ -74,7 +75,8 @@ export class BuildBar {
   }
 
   private refreshInfo(): void {
-    if (this.tool === 'remove') this.info.innerHTML = '<b>철거</b> · 누른 건물을 없애고 재료를 돌려받습니다';
+    if (this.tool === 'pan') this.info.innerHTML = '<b>화면 이동</b> · 끌어서 차원집을 둘러봅니다 (다른 도구를 쓸 때도 두 손가락·오른쪽 버튼·공장 밖에서 끌면 이동)';
+    else if (this.tool === 'remove') this.info.innerHTML = '<b>철거</b> · 누른 건물을 없애고 재료를 돌려받습니다';
     else if (this.tool === 'move') this.info.innerHTML = '<b>이동</b> · 건물을 누른 채 끌어서 빈 칸에 놓으면 옮겨집니다 (안에 든 재료·작업은 그대로)';
     else if (this.tool === 'rotate') this.info.innerHTML = '<b>회전</b> · 지어 둔 건물을 누를 때마다 방향이 시계 방향으로 돕니다';
     else {

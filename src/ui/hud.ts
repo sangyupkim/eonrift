@@ -314,6 +314,33 @@ export class Hud {
     if (this.locationEl.innerHTML !== html) this.locationEl.innerHTML = html;
   }
 
+  private bossTagEls: HTMLDivElement[] = [];
+  /** 보스가 여럿일 때 (보스 러시) 머리 위 체력: 지금 줄 채움과 남은 줄 수 ×N */
+  setBossTags(list: { x: number; y: number; name: string; ratio: number; bars: number; shielded: boolean }[]): void {
+    const COLORS = ['#ff5a4a', '#ff9a3a', '#ffd23a', '#7aff9a', '#5ac8ff', '#a07aff', '#ff6ad0'];
+    while (this.bossTagEls.length < list.length) {
+      const d = el('div', 'boss-tag', '<span class="n"></span><div class="row"><b class="x"></b><div class="track"><div class="fill"></div></div></div>');
+      this.labelLayer.appendChild(d);
+      this.bossTagEls.push(d);
+    }
+    this.bossTagEls.forEach((d, i) => {
+      const b = list[i];
+      d.style.display = b ? '' : 'none';
+      if (!b) return;
+      const total = Math.max(0, b.ratio) * b.bars;
+      const left = Math.ceil(total - 1e-6);
+      const cur = left > 0 ? total - (left - 1) : 0;
+      d.style.transform = `translate(${b.x}px, ${b.y}px) translate(-50%, -100%)`;
+      (d.querySelector('.n') as HTMLElement).textContent = b.name;
+      (d.querySelector('.x') as HTMLElement).textContent = `×${left}`;
+      const fill = d.querySelector('.fill') as HTMLElement;
+      fill.style.width = `${cur * 100}%`;
+      fill.style.background = COLORS[(left - 1 + COLORS.length) % COLORS.length];
+      (d.querySelector('.track') as HTMLElement).style.background = left > 1 ? COLORS[(left - 2 + COLORS.length) % COLORS.length] + '55' : 'rgba(0,0,0,0.6)';
+      d.classList.toggle('shielded', b.shielded);
+    });
+  }
+
   private waveEl: HTMLDivElement | null = null;
   /** 웨이브 표시 (무한의 탑): 화면 위 가운데. null이면 숨김 */
   setWave(cur: number, total: number, cleared = false, hide = false): void {

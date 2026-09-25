@@ -1,4 +1,7 @@
 import {
+  AdditiveBlending,
+  BoxGeometry,
+  SphereGeometry,
   Color,
   DoubleSide,
   Group,
@@ -141,7 +144,7 @@ export class Monster {
   private rainSpots: Telegraph[] = [];
   /** 보스의 여러 단계 패턴: 저마다 따로 터지는 예고들, 도는 광선, 나선 탄막, 도약, 예약된 동작 */
   private timed: { tel: Telegraph; mult: number; debuff?: DebuffSpec; color: number; fx: 'slash' | 'blast' | 'ring'; pool?: { r: number; t: number; dps: number } }[] = [];
-  private sweep: { tel: Telegraph; speed: number; left: number; hitCd: number; warm: number } | null = null;
+  private sweep: { tel: Telegraph; speed: number; left: number; hitCd: number; warm: number; beam: Group | null } | null = null;
   private spiral: { left: number; tick: number; angle: number; arms: number } | null = null;
   private leapTo: { x: number; z: number; tel: Telegraph } | null = null;
   private later: { at: number; fn: () => void }[] = [];
@@ -368,6 +371,7 @@ export class Monster {
     if (this.sweep) {
       scene.remove(this.sweep.tel.group);
       this.sweep.tel.dispose();
+      if (this.sweep.beam) this.disposeBeam(scene, this.sweep.beam);
       this.sweep = null;
     }
     if (this.leapTo) {
@@ -378,6 +382,31 @@ export class Monster {
     }
     this.spiral = null;
     this.later = [];
+  }
+
+  /** 회전 광선: 빛나는 기둥 (예고 바닥판 대신 실제 광선처럼) */
+  private makeBeam(length: number, color: number): Group {
+    const g = new Group();
+    const mat = (c: number, o: number) => new MeshBasicMaterial({ color: c, transparent: true, opacity: o, blending: AdditiveBlending, depthWrite: false });
+    const outer = new Mesh(new BoxGeometry(1.5, 0.9, length), mat(color, 0.35));
+    outer.position.set(0, 0.9, length / 2);
+    const core = new Mesh(new BoxGeometry(0.45, 0.35, length), mat(0xfff4e0, 0.9));
+    core.position.set(0, 0.9, length / 2);
+    const floor = new Mesh(new BoxGeometry(1.8, 0.04, length), mat(color, 0.25));
+    floor.position.set(0, 0.05, length / 2);
+    const orb = new Mesh(new SphereGeometry(0.8, 12, 10), mat(color, 0.6));
+    orb.position.y = 0.9;
+    g.add(outer, core, floor, orb);
+    return g;
+  }
+
+  private disposeBeam(scene: Scene, beam: Group): void {
+    scene.remove(beam);
+    beam.traverse((o) => {
+      const m = o as Mesh;
+      if (m.geometry) m.geometry.dispose();
+      if (m.material) (m.material as MeshBasicMaterial).dispose();
+    });
   }
 
   /** 따로 터지는 예고 하나 */
@@ -416,14 +445,31 @@ export class Monster {
       if (sw.warm > 0) {
         sw.warm -= dt;
         sw.tel.update(dt);
+        if (sw.warm <= 0) {
+          // 예고가 끝나면 바닥판을 치우고 진짜 광선을 켠다
+          world.scene.remove(sw.tel.group);
+          sw.beam = this.makeBeam(14, 0xff6a3a);
+          world.scene.add(sw.beam);
+          world.shake(0.3);
+        }
       } else {
         sw.tel.facing += sw.speed * dt;
         sw.tel.x = this.x;
         sw.tel.z = this.z;
-        sw.tel.sync();
+        if (sw.beam) {
+          sw.beam.position.set(this.x, 0, this.z);
+          sw.beam.rotation.y = sw.tel.facing;
+          const pulse = 1 + Math.sin(this.t * 30) * 0.12;
+          sw.beam.children[0].scale.set(pulse, pulse, 1);
+          sw.beam.children[3].scale.setScalar(pulse);
+        }
+        this.facing = sw.tel.facing;
         sw.left -= dt;
         sw.hitCd -= dt;
-        if (Math.random() < dt * 20) world.effects.sparks(this.x + Math.sin(sw.tel.facing) * 6, 0.6, this.z + Math.cos(sw.tel.facing) * 6, 0xff7a4a, 2, { speed: 3 });
+        if (Math.random() < dt * 30) {
+          const d = 2 + Math.random() * 12;
+          world.effects.sparks(this.x + Math.sin(sw.tel.facing) * d, 0.9, this.z + Math.cos(sw.tel.facing) * d, 0xffb07a, 2, { speed: 3, up: true });
+        }
         if (sw.hitCd <= 0 && sw.tel.contains(p.x, p.z, 0.3)) {
           sw.hitCd = 0.5;
           world.hurtPlayer(this.atk * 0.7, this.x, this.z);
@@ -431,6 +477,7 @@ export class Monster {
         if (sw.left <= 0) {
           world.scene.remove(sw.tel.group);
           sw.tel.dispose();
+          if (sw.beam) this.disposeBeam(world.scene, sw.beam);
           this.sweep = null;
         }
       }
@@ -941,7 +988,7 @@ export class Monster {
         this.clearTelegraph(world.scene);
         const tel = new Telegraph({ kind: 'line', length: 14, width: 1.6 }, this.x, this.z, toPlayer + Math.PI * 0.6, 0.9);
         world.scene.add(tel.group);
-        this.sweep = { tel, speed: (Math.random() < 0.5 ? 1 : -1) * (this.phase2 ? 2.1 : 1.6), left: 3.4, hitCd: 0, warm: 0.9 };
+        this.sweep = { tel, speed: (Math.random() < 0.5 ? 1 : -1) * (this.phase2 ? 2.1 : 1.6), left: 3.4, hitCd: 0, warm: 0.9, beam: null };
         this.setState('recover');
         world.announce(`${this.name}: 회전 광선! 원을 그리며 피하라`);
         return;

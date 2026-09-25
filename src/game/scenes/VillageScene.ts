@@ -274,10 +274,11 @@ export class VillageScene extends Level {
         const lock = end.locked[id];
         spot(id, tx, ty, range, lock ? '확인' : label, lock ? `${title} (잠김)` : title);
       };
-      endSpot('tower', 6, 27, 3.2, '입장', '무한의 탑');
-      endSpot('rush', 14, 28, 3.2, '입장', '보스 러시');
-      endSpot('trial', 22, 27, 3.2, '입장', '주간 차원 시련');
-      endSpot('rift', 18, 3.5, 3, '입장', '심연 균열');
+      // 건물 어느 쪽에 붙어도 들어갈 수 있게 건물 한가운데를 기준으로 넉넉하게
+      endSpot('tower', 6, 25, 3.8, '입장', '무한의 탑');
+      endSpot('rush', 14, 26, 3.6, '입장', '보스 러시');
+      endSpot('trial', 22, 25, 3.8, '입장', '주간 차원 시련');
+      endSpot('rift', 18, 2, 3.2, '입장', '심연 균열');
     }
 
     const start =
