@@ -7,6 +7,13 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '5.8.1',
+    date: '2026-09-25',
+    items: [
+      '버그 수정: 마력 주입기가 몇 개 만든 뒤 멈추던 문제. 하급 정수는 마력 구리·철·금·판자 여러 레시피에 쓰이는데, 주입기가 첫 레시피(마력 구리)만 보고 판자·철 주괴가 들어 있으면 정수를 거부했음. 이미 멈춘 주입기도 자동으로 다시 돌아감',
+    ],
+  },
+  {
     version: '5.8',
     date: '2026-09-25',
     items: [

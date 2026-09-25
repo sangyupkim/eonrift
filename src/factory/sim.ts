@@ -530,17 +530,18 @@ export class Factory {
       case 'alchemy': {
         // 가공할 재료를 한 번 분량만 받는다. 한 재료를 여러 개 쓰는 레시피는 레일이 막히지 않게 두 번 분량까지
         // 건물 레벨보다 높은 단계 재료는 받지 않는다
+        // 한 재료가 여러 레시피에 쓰일 수 있다 (하급 정수: 마력 구리·철·금·판자). 첫 레시피만 보면
+        // 판자가 들어 있는 주입기가 정수를 '다른 재료'로 보고 거부해 영원히 멈췄다 → 지금 든 재료와 맞는 레시피를 모두 본다
         const recipes = (target.recipe ? [RECIPE_BY_ID[target.recipe]] : recipesFor(target.type)).filter((r) => r.tier <= (target.level ?? 1));
-        const recipe = recipes.find((r) => r.inputs[item] !== undefined);
-        if (!recipe) return false;
-        if (!target.recipe) {
-          // 자동 레시피 기계는 다른 재료가 들어 있으면 받지 않는다
-          const other = Object.entries(target.buffer!).some(([id, n]) => n > 0 && recipe.inputs[id] === undefined);
-          if (other) return false;
-        }
-        // 두 번 분량까지 받아 둔다 (레일 위에서 기다리던 재료가 들어올 수 있게)
         const have = target.buffer![item] ?? 0;
-        if (have >= recipe.inputs[item] * 2) return false;
+        const ok = recipes.some((r) => {
+          if (r.inputs[item] === undefined) return false;
+          // 자동 레시피 기계는 이 레시피에 없는 재료가 들어 있으면 받지 않는다
+          if (!target.recipe && Object.entries(target.buffer!).some(([id, n]) => n > 0 && r.inputs[id] === undefined)) return false;
+          // 두 번 분량까지 받아 둔다 (레일 위에서 기다리던 재료가 들어올 수 있게)
+          return have < r.inputs[item] * 2;
+        });
+        if (!ok) return false;
         target.buffer![item] = have + 1;
         return true;
       }

@@ -99,6 +99,27 @@ describe('판자·마력 가공', () => {
   it('마력 주입기는 판자와 정수로 마력 판자를 만든다', () => {
     expect(line('infuser', 1, { plank: 2, essence_low: 2 }).mana_plank_1).toBe(2);
   });
+  // 버그(v5.8까지): 정수는 여러 레시피(마력 구리·철·금·판자)에 쓰이는데, 주입기가 '정수가 들어가는 첫 레시피(마력 구리)'만 보고
+  // 판자·철 주괴가 들어 있으면 정수를 거부 → 판자만 든 채 영원히 멈췄다 (상자를 주입기에 바로 붙였을 때 특히)
+  it('마력 주입기는 판자·철 주괴를 오래 넣어도 멈추지 않는다', () => {
+    const run = (level: number, input: Record<string, number>, belts: number) => {
+      const g = new Factory({ sizeLevel: 0, buildings: [] }, 10);
+      g.place('box', 0, 0, 0)!.buffer = input;
+      for (let i = 1; i <= belts; i++) g.place('belt', i, 0, 0);
+      g.place('infuser', belts + 1, 0, 0)!.level = level;
+      const out = g.place('box', belts + 2, 0, 0)!;
+      out.mode = 'out';
+      g.place('wire', belts + 1, 1, 0);
+      g.place('generator', belts + 1, 2, 0)!.buffer = { essence_low: 50 };
+      g.simulate(1200);
+      return Object.values(out.buffer!).reduce((a, b) => a + b, 0);
+    };
+    for (const belts of [0, 2]) {
+      expect(run(1, { plank: 12, essence_low: 12 }, belts)).toBe(12);
+      expect(run(2, { iron_ingot: 12, essence_low: 12 }, belts)).toBe(12);
+      expect(run(1, { copper_ingot: 6, plank: 6, essence_low: 12 }, belts)).toBe(12);
+    }
+  }, 20000);
 });
 
 describe('부족한 재료 안내', () => {
