@@ -184,8 +184,8 @@ export class Audio {
   /** 파일로 된 배경음 (sound/ 폴더, CC BY 4.0 · orangefreesounds.com) */
   private static readonly FILES: Record<string, string | string[]> = {
     dungeon: 'sound/dungeon.mp3',
-    // 마을은 두 곡을 번갈아 (들어올 때마다, 오래 머물면 몇 분마다 바뀐다)
-    village: ['sound/village.mp3', 'sound/village2.mp3'],
+    // 여러 곡을 넣으면 번갈아 튼다 (들어올 때마다, 오래 머물면 몇 분마다 바뀐다)
+    village: 'sound/village2.mp3',
     home: 'sound/home.mp3',
     boss: 'sound/boss.mp3',
   };
@@ -246,7 +246,7 @@ export class Audio {
     });
   }
 
-  /** 장소별 배경음 (마을 두 곡·던전·차원집·보스전은 파일, 파일을 못 읽으면 합성음) */
+  /** 장소별 배경음 (마을·던전·차원집·보스전은 파일, 파일을 못 읽으면 합성음) */
   playMusic(kind: string, force = false): void {
     if (this.musicKind === kind && !force) return;
     this.musicKind = kind;

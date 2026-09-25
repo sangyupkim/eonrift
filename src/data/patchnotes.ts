@@ -7,6 +7,11 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '7.6.2',
+    date: '2026-09-25',
+    items: ['마을 배경음: 4초짜리 짧은 반복 곡을 빼고 Dreamy Ambient Loop만 튼다', '의견함: 30초에 한 번 보낼 수 있다'],
+  },
+  {
     version: '7.6.1',
     date: '2026-09-25',
     items: ['의견 보내기가 실패하면 원인(연결 실패·시트 스크립트 오류 등)을 함께 보여 준다'],
