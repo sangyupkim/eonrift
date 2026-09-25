@@ -2944,3 +2944,6 @@ h3.sub { margin: 10px 0 6px; font-size: 14px; display: flex; align-items: center
   .title-box h1 { font-size: clamp(34px, 10vh, 64px); margin: 4px 0 8px; }
   .title-menu button:not(.update):not(.install) { padding: 9px; font-size: 15px; }
 }
+/* 소리 조절 막대: 이름(아이콘+글자)을 한 칸으로 묶어야 막대가 가운데 넓은 칸을 차지한다 */
+.volume { grid-template-columns: auto minmax(0, 1fr) 32px; }
+.volume .vol-name { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; min-width: 70px; }

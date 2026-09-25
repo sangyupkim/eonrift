@@ -628,8 +628,8 @@ export class Screens {
              <button data-aim="auto" class="${opts.autoAim ? 'on' : ''}">${SPK('target', '🎯')} 자동 조준</button>
              <button data-aim="face" class="${opts.autoAim ? '' : 'on'}">${SPK('arrow', '➡')} 바라보는 방향</button></div>
            <label class="toggle"><input type="checkbox" data-t="sound" ${opts.sound ? 'checked' : ''}/> 소리 켜기</label>
-           <label class="volume">${SPK('music', '🎵')} 배경음 <input type="range" min="0" max="100" step="5" value="${Math.round(opts.music * 100)}" data-v="music"/><b data-vl="music">${Math.round(opts.music * 100)}</b></label>
-           <label class="volume">${SPK('speaker', '🔊')} 효과음 <input type="range" min="0" max="100" step="5" value="${Math.round(opts.sfx * 100)}" data-v="sfx"/><b data-vl="sfx">${Math.round(opts.sfx * 100)}</b></label>
+           <label class="volume"><span class="vol-name">${SPK('music', '🎵')} 배경음</span><input type="range" min="0" max="100" step="5" value="${Math.round(opts.music * 100)}" data-v="music"/><b data-vl="music">${Math.round(opts.music * 100)}</b></label>
+           <label class="volume"><span class="vol-name">${SPK('speaker', '🔊')} 효과음</span><input type="range" min="0" max="100" step="5" value="${Math.round(opts.sfx * 100)}" data-v="sfx"/><b data-vl="sfx">${Math.round(opts.sfx * 100)}</b></label>
            ${opts.foods?.length ? `<div class="food-row">${opts.foodLeft ? `<small class="dim">먹은 음식: ${opts.foodLeft}</small>` : ''}${opts.foods.map((f) => `<button data-eat="${f.id}">${inlineGem(f.id)}${ITEMS[f.id].name} 먹기 (${f.count})</button>`).join('')}</div>` : ''}
            ${opts.onBestiary ? `<button data-a="bestiary">${SPK('book', '📖')} 몬스터 도감</button>` : ''}
            <button data-a="savecode">${SPK('disk', '💾')} 저장 코드 만들기</button>
