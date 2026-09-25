@@ -104,6 +104,31 @@ export function buildTree(foliage: number): BufferGeometry {
   ]);
 }
 
+/** 뾰족한 침엽수 */
+export function buildPine(foliage: number): BufferGeometry {
+  return merge([
+    part(new CylinderGeometry(0.14, 0.22, 1, 6), 0x5e3f26, { pos: [0, 0.5, 0] }),
+    part(new ConeGeometry(1.0, 1.4, 7), foliage, { pos: [0, 1.5, 0] }),
+    part(new ConeGeometry(0.78, 1.2, 7), foliage, { pos: [0, 2.2, 0], rot: [0, 0.4, 0] }),
+    part(new ConeGeometry(0.5, 1.0, 7), foliage, { pos: [0, 2.85, 0], rot: [0, 0.8, 0] }),
+  ]);
+}
+
+/** 낮은 덤불 (막지 않는다) */
+export function buildBush(color: number, berries = 0): BufferGeometry {
+  const parts = [
+    part(new DodecahedronGeometry(0.42, 0), color, { pos: [0, 0.3, 0], scale: [1.2, 0.8, 1] }),
+    part(new DodecahedronGeometry(0.3, 0), color, { pos: [0.35, 0.22, 0.15], scale: [1, 0.8, 1] }),
+  ];
+  if (berries) for (const [x, y, z] of [
+    [0.1, 0.55, 0.3],
+    [-0.3, 0.4, 0.25],
+    [0.4, 0.35, 0.35],
+  ])
+    parts.push(part(new SphereGeometry(0.06, 4, 3), berries, { pos: [x, y, z] }));
+  return merge(parts);
+}
+
 export function buildBarrel(): BufferGeometry {
   return merge([
     part(new CylinderGeometry(0.35, 0.35, 0.8, 8), 0x8a5a34, { pos: [0, 0.4, 0] }),

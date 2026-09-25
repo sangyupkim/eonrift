@@ -11,7 +11,7 @@ import { TILE } from '../../config';
 import { Rng } from '../../core/rng';
 import { CELL_FLOOR, type DungeonData } from '../../dungeon/generator';
 import { buildHero, type HeroLook, type HeroRig } from '../../models/hero';
-import { buildDecorGeometry, buildPortalFrame } from '../../models/props';
+import { buildPortalFrame } from '../../models/props';
 import { merge } from '../../models/util';
 import {
   buildBarrel,
@@ -28,7 +28,11 @@ import {
   buildStall,
   buildStatue,
   buildTree,
+  buildPine,
+  buildBush,
 } from '../../models/village';
+import { VILLAGE_GROUND } from '../../models/terrain';
+import { smoothstep } from '../../core/noise';
 import { Level } from './Level';
 import { VillageWeather } from './Weather';
 
@@ -77,6 +81,88 @@ const H_BASE = 22;
 const H_END = 30;
 let H = H_BASE;
 
+interface Road {
+  a: [number, number];
+  b: [number, number];
+  /** 반폭 (칸) */
+  hw: number;
+  /** 자갈을 깐다 (아니면 흙길) */
+  cobble: boolean;
+}
+
+function segDist(px: number, py: number, a: [number, number], b: [number, number]): number {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const len = dx * dx + dy * dy;
+  const t = len > 0 ? Math.max(0, Math.min(1, ((px - a[0]) * dx + (py - a[1]) * dy) / len)) : 0;
+  return Math.hypot(px - (a[0] + dx * t), py - (a[1] + dy * t));
+}
+
+/** 가장 가까운 길까지의 거리와 그 길의 반폭 (칸 단위). 길 가장자리 기준으로 비교한다 */
+function roadDist(roads: Road[], x: number, y: number, cobbleOnly = false): { d: number; hw: number } {
+  let best = { d: 99, hw: 0 };
+  let bestEdge = 99;
+  for (const r of roads) {
+    if (cobbleOnly && !r.cobble) continue;
+    const d = segDist(x, y, r.a, r.b);
+    if (d - r.hw < bestEdge) {
+      bestEdge = d - r.hw;
+      best = { d, hw: r.hw };
+    }
+  }
+  return best;
+}
+
+/**
+ * 마을 길: 차원문 광장 → 분수 광장 → 시작 자리(→ 차원의 끝 구역)로 큰길을 내고,
+ * 시설과 집 앞에서 가장 가까운 큰길까지 알아서 샛길을 잇는다.
+ */
+function villageRoads(endShow: boolean, houseDoors: { x: number; y: number }[]): Road[] {
+  const roads: Road[] = [];
+  const road = (a: [number, number], b: [number, number], hw: number, cobble = true) => roads.push({ a, b, hw, cobble });
+  // 광장 (점 하나짜리 길 = 원)
+  road([14.5, 4.8], [14.5, 4.8], 2.9);
+  road([13.5, 13.5], [13.5, 13.5], 2.9);
+  // 큰길
+  road([14.5, 7], [13.9, 11], 0.85);
+  road([13.9, 16], [14.5, 18.6], 0.85);
+  road([10.8, 13.3], [16.2, 13.3], 0.8);
+  road([16.2, 13.3], [21.8, 11.6], 0.75);
+  if (endShow) {
+    road([14.5, 18.6], [14.5, 23], 0.85);
+    road([4.2, 23], [24.8, 23], 0.8);
+  }
+  // 시설 앞 → 가장 가까운 큰길
+  const main = roads.slice();
+  const link = (door: [number, number], hw: number, cobble: boolean) => {
+    let best: [number, number] = door;
+    let bd = 99;
+    for (const r of main) {
+      const dx = r.b[0] - r.a[0];
+      const dy = r.b[1] - r.a[1];
+      const len = dx * dx + dy * dy;
+      const t = len > 0 ? Math.max(0, Math.min(1, ((door[0] - r.a[0]) * dx + (door[1] - r.a[1]) * dy) / len)) : 0;
+      const q: [number, number] = [r.a[0] + dx * t, r.a[1] + dy * t];
+      const d = Math.hypot(q[0] - door[0], q[1] - door[1]) - r.hw;
+      if (d < bd) {
+        bd = d;
+        best = q;
+      }
+    }
+    road(door, best, hw, cobble);
+  };
+  const doors: [number, number][] = [
+    [8.5, 6.4], // 대장간
+    [9.4, 12.6], // 상점
+    [20.5, 6.9], // 직업의 전당
+    [11.5, 17.2], // 창고
+  ];
+  if (endShow) doors.push([18.5, 3.9], [6.5, 24.2], [14.5, 24.8], [22.5, 24.2]);
+  for (const d of doors) link(d, 0.6, true);
+  for (const h of houseDoors) link([h.x, h.y], 0.42, false);
+  return roads;
+}
+
 const toWorld = (tx: number, ty: number) => ({ x: (tx + 0.5) * TILE, z: (ty + 0.5) * TILE });
 
 function makeGrid(): DungeonData {
@@ -119,7 +205,7 @@ export class VillageScene extends Level {
     super();
     const rng = new Rng(12345);
     this.setupLights(0x1c1a30, 0xffe8d0, 0xffe2b8, 1.8, 2.3);
-    this.buildTiles(this.grid, { floorA: 0x8f8a7c, floorB: 0x9a9486, wallSide: 0x3f5a34, wallTop: 0x5d8a44 }, rng, 1.6);
+    this.buildTiles(this.grid, { floorA: 0x8f8a7c, floorB: 0x9a9486, wallSide: 0x3f5a34, wallTop: 0x5d8a44 }, rng, 1.6, false);
 
     const mat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
     const place = (geo: Mesh['geometry'], tx: number, ty: number, rot: number, radius: number, height = 0) => {
@@ -171,7 +257,7 @@ export class VillageScene extends Level {
       [1, 13],
       [26, 12],
       [26, 7],
-      [14, 20],
+      [12, 21],
       [6, 1],
       [21, 1],
     ])
@@ -182,17 +268,6 @@ export class VillageScene extends Level {
       [25, 15],
     ])
       place(buildBarrel(), x, y, 0, 0.45);
-
-    // 풀 장식
-    const decor = [];
-    for (let i = 0; i < 70; i++) {
-      const x = rng.range(0.5, W - 0.5);
-      const y = rng.range(0.5, H - 0.5);
-      const g = buildDecorGeometry(rng.chance(0.7) ? 'grass' : 'mushroom', rng.chance(0.7) ? 0x6aa048 : 0xd9543f, rng);
-      g.translate(x * TILE, 0, y * TILE);
-      decor.push(g);
-    }
-    this.addMesh(merge(decor), mat, 0, 0, 0, false);
 
     // 차원문 광장 (큰 차원문)
     const portal = toWorld(14, 4);
@@ -280,6 +355,59 @@ export class VillageScene extends Level {
       endSpot('trial', 22, 25, 3.8, '입장', '주간 차원 시련');
       endSpot('rift', 18, 2, 3.2, '입장', '심연 균열');
     }
+
+    // 길과 바닥: 큰길(자갈)은 광장끼리, 시설 앞에서 큰길까지는 좁은 자갈길, 집 앞은 흙길
+    const roads = villageRoads(end.show, houses.map(([x, y, , , rot]) => ({ x: x + 0.5 + Math.sin(rot) * 1.6, y: y + 0.5 + Math.cos(rot) * 1.6 })));
+    const arrivals = [toWorld(14, 17), toWorld(14, 7), toWorld(21, 11)];
+    const blocked = (x: number, z: number, pad: number) =>
+      this.obstacles.some((o) => Math.hypot(o.x - x, o.z - z) < o.radius + pad) ||
+      this.interactables.some((o) => Math.hypot(o.x - x, o.z - z) < pad + 1.2) ||
+      arrivals.some((a) => Math.hypot(a.x - x, a.z - z) < pad + 1.5);
+    // 나무를 더 심는다: 길과 건물을 피해 가장자리 쪽에 무리 지어
+    const trees = new Rng(777);
+    let planted = 0;
+    for (let i = 0; i < 400 && planted < (end.show ? 30 : 22); i++) {
+      const tx = trees.range(0.6, W - 0.6);
+      const ty = trees.range(0.6, H - 0.6);
+      const edge = Math.min(tx, ty, W - tx, H - ty);
+      // 가장자리일수록 잘 자란다
+      if (trees.next() > (edge < 2.5 ? 0.9 : 0.25)) continue;
+      const p = { x: tx * TILE, z: ty * TILE };
+      if (roadDist(roads, tx, ty).d < 1.4 || blocked(p.x, p.z, 1.6)) continue;
+      const pine = trees.chance(0.4);
+      const geo = pine ? buildPine(trees.pick([0x2f6a3a, 0x3a7a44, 0x2a5e36])) : buildTree(trees.pick([0x4f8a3c, 0x5a9a44, 0x3f7a34, 0x6aa048]));
+      const mesh = this.addMesh(geo, mat, p.x, p.z, trees.range(0, 6));
+      mesh.scale.setScalar(trees.range(0.85, 1.2));
+      this.obstacles.push({ x: p.x, z: p.z, radius: 0.8 });
+      this.addOccluder(mesh, p.x, p.z, 0.9, 3);
+      planted++;
+    }
+    // 덤불: 막지 않는 작은 수풀
+    const bushes = [];
+    for (let i = 0, n = 0; i < 300 && n < 34; i++) {
+      const tx = trees.range(0.5, W - 0.5);
+      const ty = trees.range(0.5, H - 0.5);
+      const p = { x: tx * TILE, z: ty * TILE };
+      if (roadDist(roads, tx, ty).d < 1 || blocked(p.x, p.z, 0.6)) continue;
+      const g = buildBush(trees.pick([0x4a8a3a, 0x5a9a44, 0x3f7a34]), trees.chance(0.3) ? trees.pick([0xe84a4a, 0x8a5ae8]) : 0);
+      g.rotateY(trees.range(0, 6));
+      g.translate(p.x, 0, p.z);
+      bushes.push(g);
+      n++;
+    }
+    if (bushes.length) this.addMesh(merge(bushes), mat, 0, 0, 0, false);
+    this.buildGround(this.grid, VILLAGE_GROUND, {
+      seed: 9,
+      path: (x, z) => {
+        const r = roadDist(roads, x / TILE, z / TILE);
+        return smoothstep(r.hw + 0.55, r.hw - 0.15, r.d);
+      },
+      paved: (x, z) => {
+        const r = roadDist(roads, x / TILE, z / TILE, true);
+        return smoothstep(r.hw + 0.05, r.hw - 0.3, r.d);
+      },
+      avoid: (x, z) => this.obstacles.some((o) => Math.hypot(o.x - x, o.z - z) < o.radius * 0.85),
+    });
 
     const start =
       typeof arrival === 'object'

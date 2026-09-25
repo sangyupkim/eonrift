@@ -9,7 +9,7 @@ describe('공유 창고 칸', () => {
     p.data.equips = [];
     p.data.storageLevel = 1;
     const cap = p.storageCapacity;
-    expect(cap).toBe(40);
+    expect(cap).toBe(24);
     p.data.storage.iron_ore = (cap - 2) * STORE_STACK;
     expect(p.depositItem('wood', 150)).toBe(150);
     expect(p.depositItem('wood', 100)).toBe(50);
@@ -19,7 +19,7 @@ describe('공유 창고 칸', () => {
 
   it('레벨 1~10: 레벨마다 20칸, 비용은 골드와 판·판자, 10레벨이 끝', () => {
     const p = new Progress(newSave());
-    expect(storageSlotsFor(10)).toBe(220);
+    expect(storageSlotsFor(10)).toBe(222);
     const c1 = storageUpgradeCost(1)!;
     const c9 = storageUpgradeCost(9)!;
     expect(c9.gold).toBeGreaterThan(c1.gold);
@@ -30,8 +30,13 @@ describe('공유 창고 칸', () => {
   });
 
   it('예전 저장의 칸 수는 잃지 않는 레벨로 옮긴다', () => {
-    const d = parseSave(JSON.stringify({ ...newSave(), storageSlots: 130, storageLevel: undefined }))!;
+    const d = parseSave(JSON.stringify({ ...newSave(), storageSlots: 130, storageLevel: undefined, storageV2: undefined }))!;
     expect(storageSlotsFor(d.storageLevel!)).toBeGreaterThanOrEqual(130);
+    // v6.8 레벨(Lv.3 = 80칸)은 칸이 줄지 않는 레벨로
+    const d2 = parseSave(JSON.stringify({ ...newSave(), storageLevel: 3, storageV2: undefined }))!;
+    expect(storageSlotsFor(d2.storageLevel!)).toBeGreaterThanOrEqual(80);
+    // 새 게임은 Lv.1 그대로
+    expect(parseSave(JSON.stringify(newSave()))!.storageLevel).toBe(1);
   });
 });
 

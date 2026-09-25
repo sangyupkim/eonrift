@@ -97,6 +97,8 @@ export interface SaveData {
   storageSlots?: number;
   /** 공유 창고 레벨 1~10 */
   storageLevel?: number;
+  /** 창고 레벨 칸 수 개편(v6.9)을 반영했는지 */
+  storageV2?: boolean;
   /** 차원집 일반 창고 (차원집 안의 모든 일반 창고가 함께 쓰는 보관함) */
   homeStorage?: Record<string, number>;
   settings: { shadows: boolean; sound: boolean; music?: number; sfx?: number; autoAim?: boolean; timersOpen?: boolean };
@@ -182,9 +184,11 @@ export function loadSave(): SaveData | null {
 
 /** 공유 창고·일반 창고 한 칸에 쌓이는 수 */
 export const STORE_STACK = 100;
-/** 공유 창고 레벨 (1~10): 레벨마다 20칸씩, Lv.1 40칸 → Lv.10 220칸 */
+/** 공유 창고 레벨 (1~10): Lv.1 24칸, 레벨마다 22칸씩 → Lv.10 222칸 */
 export const STORAGE_MAX_LEVEL = 10;
-export const storageSlotsFor = (level: number) => 40 + 20 * (Math.max(1, Math.min(STORAGE_MAX_LEVEL, level)) - 1);
+export const storageSlotsFor = (level: number) => 24 + 22 * (Math.max(1, Math.min(STORAGE_MAX_LEVEL, level)) - 1);
+/** v6.8의 칸 수 (Lv.1 40칸, 레벨마다 20칸): 이미 레벨을 올린 저장이 칸을 잃지 않게 옮길 때 쓴다 */
+const oldSlotsFor = (level: number) => 40 + 20 * (level - 1);
 /** 창고 레벨 L → L+1 비용: 골드 + 그 무렵 단계의 판·판자 */
 export function storageUpgradeCost(level: number): { gold: number; items: Record<string, number> } | null {
   if (level >= STORAGE_MAX_LEVEL) return null;
@@ -248,9 +252,17 @@ function migrate(d: SaveData & { maxTier?: number }): SaveData {
     if (b.type === 'generator') b.buffer ??= {};
   }
   // 창고 레벨: 예전 칸 수(확장한 만큼)를 잃지 않는 레벨로 옮긴다. 칸 수가 없던 저장은 쓰는 칸보다 넉넉하게
+  // v6.8 창고 레벨(Lv.1 40칸)을 쓰던 저장: 칸이 줄지 않는 새 레벨로
+  if (d.storageLevel !== undefined && !d.storageV2) {
+    const want = oldSlotsFor(d.storageLevel);
+    let lv = d.storageLevel;
+    while (lv < STORAGE_MAX_LEVEL && storageSlotsFor(lv) < want) lv++;
+    d.storageLevel = lv;
+  }
+  d.storageV2 = true;
   if (d.storageLevel === undefined) {
     const used = Object.values(d.storage).reduce((a, n) => a + (n > 0 ? Math.ceil(n / STORE_STACK) : 0), 0) + d.equips.length;
-    const want = Math.max(d.storageSlots ?? 60, used + 10);
+    const want = Math.max(d.storageSlots ?? 0, used + 10);
     let lv = 1;
     while (lv < STORAGE_MAX_LEVEL && storageSlotsFor(lv) < want) lv++;
     d.storageLevel = lv;

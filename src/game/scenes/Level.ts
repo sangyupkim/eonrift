@@ -15,6 +15,7 @@ import { TILE, WALL_HEIGHT } from '../../config';
 import { Rng } from '../../core/rng';
 import type { CircleObstacle } from '../../dungeon/collision';
 import { isFloor, type DungeonData } from '../../dungeon/generator';
+import { buildGround, type GroundOptions, type GroundStyle } from '../../models/terrain';
 import { paint, paintTop } from '../../models/util';
 import { Effects } from '../Effects';
 import { Particles } from '../Particles';
@@ -85,7 +86,7 @@ export abstract class Level {
   }
 
   /** 바닥과 벽을 인스턴싱으로 그린다 */
-  protected buildTiles(grid: Grid, colors: TileColors, rng: Rng, wallHeight = WALL_HEIGHT): void {
+  protected buildTiles(grid: Grid, colors: TileColors, rng: Rng, wallHeight = WALL_HEIGHT, drawFloor = true): void {
     const { width, height } = grid;
     const floorCells: [number, number][] = [];
     const wallCells: [number, number][] = [];
@@ -107,17 +108,19 @@ export abstract class Level {
     const a = new Color(colors.floorA);
     const b = new Color(colors.floorB);
 
-    const floorGeo = new BoxGeometry(TILE, 0.3, TILE);
-    floorGeo.translate(0, -0.15, 0);
-    const floor = new InstancedMesh(floorGeo, new MeshLambertMaterial(), floorCells.length);
-    floorCells.forEach(([x, y], i) => {
-      m.makeTranslation((x + 0.5) * TILE, 0, (y + 0.5) * TILE);
-      floor.setMatrixAt(i, m);
-      c.copy((x + y) % 2 ? a : b).multiplyScalar(rng.range(0.93, 1.05));
-      floor.setColorAt(i, c);
-    });
-    floor.receiveShadow = true;
-    this.scene.add(floor);
+    if (drawFloor) {
+      const floorGeo = new BoxGeometry(TILE, 0.3, TILE);
+      floorGeo.translate(0, -0.15, 0);
+      const floor = new InstancedMesh(floorGeo, new MeshLambertMaterial(), floorCells.length);
+      floorCells.forEach(([x, y], i) => {
+        m.makeTranslation((x + 0.5) * TILE, 0, (y + 0.5) * TILE);
+        floor.setMatrixAt(i, m);
+        c.copy((x + y) % 2 ? a : b).multiplyScalar(rng.range(0.93, 1.05));
+        floor.setColorAt(i, c);
+      });
+      floor.receiveShadow = true;
+      this.scene.add(floor);
+    }
 
     if (wallCells.length === 0) return;
     const wallGeo = paintTop(paint(new BoxGeometry(TILE, wallHeight, TILE), colors.wallSide), colors.wallTop);
@@ -133,6 +136,15 @@ export abstract class Level {
     });
     walls.receiveShadow = true;
     this.scene.add(walls);
+  }
+
+  /** 격자 대신 자연스러운 바닥 (땅 얼룩 + 판 + 소품) */
+  protected buildGround(grid: Grid, style: GroundStyle, opts: GroundOptions): void {
+    const g = buildGround(grid, style, opts);
+    this.scene.add(g.ground);
+    if (g.details) this.scene.add(g.details);
+    if (g.glow) this.scene.add(g.glow);
+    if (g.veins) this.scene.add(g.veins);
   }
 
   protected addMesh(geo: Mesh['geometry'], material: Material, x: number, z: number, rotY = 0, shadow = true): Mesh {

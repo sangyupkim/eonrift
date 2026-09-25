@@ -2007,13 +2007,14 @@ export class Screens {
   }
 
   // ---------------- 공장: 보관상자 ----------------
-  box(b: BuildingState, p: Progress, onChange: () => void, onClose: () => void): void {
+  box(b: BuildingState, p: Progress, onChange: () => void, onClose: () => void, qty = 10): void {
     const inside = Object.entries(b.buffer ?? {}).filter(([, n]) => n > 0);
+    // 개수 입력: 위의 칸에 적은 수만큼 넣고 꺼낸다
     const insideRows = inside
-      .map(([id, n]) => `<li>${itemGem(id)}<div><b>${ITEMS[id].name}</b><small>상자 안 ${n}개</small></div><button data-out="${id}" data-n="1">1개</button><button data-out="${id}" data-n="10">10개</button><button data-out="${id}" data-n="all">전부 꺼내기</button></li>`)
+      .map(([id, n]) => `<li>${itemGem(id)}<div><b>${ITEMS[id].name}</b><small>상자 안 ${n}개</small></div><button data-out="${id}" data-n="q">${qty}개 꺼내기</button><button data-out="${id}" data-n="all">전부</button></li>`)
       .join('');
     const storeRows = ITEM_LIST.filter((i) => i.kind !== 'key' && p.count(i.id) > 0)
-      .map((i) => `<li>${itemGem(i.id)}<div><b>${i.name}</b><small>창고 ${p.count(i.id)}개</small></div><button data-in="${i.id}" data-n="1">1개</button><button data-in="${i.id}" data-n="10">10개</button><button data-in="${i.id}" data-n="all">전부 넣기</button></li>`)
+      .map((i) => `<li>${itemGem(i.id)}<div><b>${i.name}</b><small>창고 ${p.count(i.id)}개</small></div><button data-in="${i.id}" data-n="q">${qty}개 넣기</button><button data-in="${i.id}" data-n="all">전부</button></li>`)
       .join('');
     const s = this.open(
       'factory-config',
@@ -2024,6 +2025,7 @@ export class Screens {
            <button data-mode="in" class="${b.mode === 'in' ? 'on' : ''}">투입 (앞 기계로 보내기)</button>
            <button data-mode="out" class="${b.mode === 'out' ? 'on' : ''}">출하 (완성품 받기)</button>
          </div>
+         <div class="qty-row">개수 <button data-q="-10">−10</button><button data-q="-1">−1</button><input type="number" min="1" max="${BOX_CAPACITY}" value="${qty}" data-qty><button data-q="1">+1</button><button data-q="10">+10</button></div>
          <div class="scroll">
            <h3>상자 안</h3>
            <ul class="list">${insideRows || '<li class="empty">비어 있습니다</li>'}</ul>
@@ -2033,10 +2035,13 @@ export class Screens {
        </div>`,
       onClose,
     );
-    const again = () => {
+    const readQty = () => Math.max(1, Math.min(BOX_CAPACITY, Math.floor(Number(s.querySelector<HTMLInputElement>('[data-qty]')?.value) || qty)));
+    const again = (q = readQty()) => {
       onChange();
-      this.box(b, p, onChange, onClose);
+      this.box(b, p, onChange, onClose, q);
     };
+    this.on(s, '[data-q]', (el) => again(Math.max(1, Math.min(BOX_CAPACITY, readQty() + Number(el.dataset.q)))));
+    s.querySelector<HTMLInputElement>('[data-qty]')?.addEventListener('change', () => again());
     this.bindRotate(s, b, again);
     this.on(s, '[data-mode]', (el) => {
       b.mode = el.dataset.mode as 'in' | 'out';
@@ -2045,7 +2050,7 @@ export class Screens {
     this.on(s, '[data-out]', (el) => {
       const id = el.dataset.out!;
       const have = b.buffer![id] ?? 0;
-      const n = el.dataset.n === 'all' ? have : Math.min(have, Number(el.dataset.n));
+      const n = el.dataset.n === 'all' ? have : Math.min(have, readQty());
       if (n > 0) {
         b.buffer![id] -= n;
         if (b.buffer![id] <= 0) delete b.buffer![id];
@@ -2056,7 +2061,7 @@ export class Screens {
     this.on(s, '[data-in]', (el) => {
       const id = el.dataset.in!;
       const room = BOX_CAPACITY - boxTotal(b);
-      const n = Math.min(room, el.dataset.n === 'all' ? p.count(id) : Math.min(p.count(id), Number(el.dataset.n)));
+      const n = Math.min(room, el.dataset.n === 'all' ? p.count(id) : Math.min(p.count(id), readQty()));
       if (n > 0 && p.take(id, n)) b.buffer![id] = (b.buffer![id] ?? 0) + n;
       again();
     });

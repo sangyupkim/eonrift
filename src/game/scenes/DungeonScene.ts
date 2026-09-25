@@ -27,6 +27,7 @@ import { AFFIXES, type AffixId } from '../../data/endgame';
 import type { MonsterMods } from '../../data/monsters';
 import { Monster, type MonsterWorld, type ProjectileSpec } from '../Monster';
 import { Projectiles, type Projectile, type ProjectileOptions } from '../Projectiles';
+import { groundStyleFor, type GroundOptions } from '../../models/terrain';
 import { Level } from './Level';
 
 const WHITE = new Color(0xffffff);
@@ -107,7 +108,8 @@ export class DungeonScene extends Level {
     this.theme = themeForTier(grid.tier);
     this.rng = new Rng(grid.seed ^ 0x5bd1e995);
     this.setupLights(this.theme.background, this.theme.ambient, this.theme.sun);
-    this.buildTiles(grid, this.theme, this.rng);
+    this.buildTiles(grid, this.theme, this.rng, undefined, false);
+    this.buildGround(grid, groundStyleFor(grid.tier), DungeonScene.groundOptions(grid));
     this.buildDecor();
     this.buildNodes();
     this.buildPortals();
@@ -195,6 +197,36 @@ export class DungeonScene extends Level {
   private frostT = 8;
   /** 이번 방에 나오는 종족 몇 가지 */
   private pool: [string, number][] = [];
+
+  /** 복도는 닳은 길, 방 안에는 판이 깔린다. 탑은 가운데 둥근 단에 판을 빙 둘러 깐다 */
+  static groundOptions(grid: DungeonData): GroundOptions {
+    const { width, height } = grid;
+    const corridor = (cx: number, cy: number) =>
+      cx >= 0 && cy >= 0 && cx < width && cy < height && isFloor(grid, cx, cy) && grid.roomIndex[cy * width + cx] < 0 ? 1 : 0;
+    // 칸 중심 값을 이웃과 이어 부드럽게
+    const path = (x: number, z: number) => {
+      const gx = x / TILE - 0.5;
+      const gz = z / TILE - 0.5;
+      const x0 = Math.floor(gx);
+      const z0 = Math.floor(gz);
+      const tx = gx - x0;
+      const tz = gz - z0;
+      const v =
+        corridor(x0, z0) * (1 - tx) * (1 - tz) + corridor(x0 + 1, z0) * tx * (1 - tz) + corridor(x0, z0 + 1) * (1 - tx) * tz + corridor(x0 + 1, z0 + 1) * tx * tz;
+      return Math.min(1, v * 1.2);
+    };
+    if (grid.tower) {
+      const c = (width / 2) * TILE;
+      return {
+        seed: grid.seed,
+        paved: (x, z) => {
+          const d = Math.hypot(x - c, z - c) / TILE;
+          return d < 3.2 ? 1 : d > 5.4 && d < 6.6 ? 0.85 : 0;
+        },
+      };
+    }
+    return { seed: grid.seed, path, pavedBias: (x, z) => 0.85 - path(x, z) * 0.6 };
+  }
 
   static toWorld(tx: number, ty: number): { x: number; z: number } {
     return { x: (tx + 0.5) * TILE, z: (ty + 0.5) * TILE };
