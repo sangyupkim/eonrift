@@ -241,13 +241,16 @@ export function trialScore(cleared: boolean, seconds: number, hits: number, poti
   return { ...s, total: Math.max(0, s.base + s.timeBonus + s.comboBonus - s.hitPenalty - s.potionPenalty) };
 }
 
-/** 등급과 주간 보상 (등급마다 한 주에 한 번, 낮은 등급 보상도 함께) */
-export const TRIAL_GRADES: { name: string; min: number; color: number; gold: number; items: Record<string, number> }[] = [
-  { name: '브론즈', min: 6000, color: 0xc98a50, gold: 5000, items: { dim_dust: 16 } },
-  { name: '실버', min: 10000, color: 0xc8d2e0, gold: 10000, items: { dim_dust: 24 } },
-  { name: '골드', min: 13000, color: 0xffd23a, gold: 20000, items: { dim_dust: 40, dim_alloy2: 1 } },
-  { name: '플래티넘', min: 15500, color: 0x7ff4ff, gold: 30000, items: { dim_dust: 64, dim_shard: 3 } },
-  { name: '차원', min: 17500, color: 0xb67cff, gold: 50000, items: { dim_dust: 100, dim_shard: 5 } },
+/**
+ * 등급. 보상은 물건이 아니라 발밑 오라: 한 번 달성한 등급의 오라는 영원히 쓸 수 있다
+ * (등급이 높을수록 고리·문양·빛기둥·떠오르는 빛이 더해진다)
+ */
+export const TRIAL_GRADES: { name: string; min: number; color: number; aura: string }[] = [
+  { name: '브론즈', min: 6000, color: 0xc98a50, aura: '구릿빛 고리' },
+  { name: '실버', min: 10000, color: 0xdfe8f4, aura: '은빛 이중 고리' },
+  { name: '골드', min: 13000, color: 0xffd23a, aura: '황금 문양' },
+  { name: '플래티넘', min: 15500, color: 0x7ff4ff, aura: '백금 빛기둥' },
+  { name: '차원', min: 17500, color: 0xb67cff, aura: '차원의 소용돌이' },
 ];
 
 /** 점수의 등급 번호 (-1 = 등급 없음) */

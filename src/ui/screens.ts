@@ -316,7 +316,7 @@ export class Screens {
   // ---------------- 차원의 끝 (엔드 콘텐츠) ----------------
   endgame(
     p: Progress,
-    h: { tower: (floor: number) => void; towerDaily: () => void; rush: (diff: RushDiff) => void; rift: (tier: number, level: number) => void; trial: () => void; trialClaim: (grade: number) => void },
+    h: { tower: (floor: number) => void; towerDaily: () => void; rush: (diff: RushDiff) => void; rift: (tier: number, level: number) => void; trial: () => void; trialAura: (grade: number) => void },
     onClose: () => void,
     message?: string,
     sel?: { tier: number; level: number },
@@ -378,19 +378,20 @@ export class Screens {
     const spec = trialSpec(weekKey());
     const g = tr ? trialGrade(tr.best) : -1;
     const gradeTag = (i: number) => (i >= 0 ? `<b style="color:${hex(TRIAL_GRADES[i].color)}">${TRIAL_GRADES[i].name}</b>` : '<span class="dim">등급 없음</span>');
+    const top = tr?.topGrade ?? -1;
+    const worn = p.data.aura ?? -1;
     const claims = TRIAL_GRADES.map((t, i) => {
-      const got = tr?.claimed.includes(i);
-      const ok = !got && g >= i;
-      const rew = `${t.gold} G · ${Object.entries(t.items).map(([id, n]) => `${inlineGem(id)}${ITEMS[id].name} ${n}`).join(' · ')}`;
-      return `<button class="rush-btn ${ok ? '' : 'locked'}" data-tclaim="${i}" ${ok ? '' : 'disabled'}><b style="color:${hex(t.color)}">${t.name} <small>${t.min}점</small></b><small>${rew}</small><small class="dim">${got ? '받음' : g >= i ? '받을 수 있음' : '미달성'}</small></button>`;
+      const open = top >= i;
+      return `<button class="rush-btn aura-btn ${open ? '' : 'locked'} ${worn === i ? 'on' : ''}" data-taura="${i}" ${open ? '' : 'disabled'} style="--c:${hex(t.color)}"><b style="color:${hex(t.color)}">${t.name} <small>${t.min}점</small></b><small>${t.aura}</small><small class="dim">${worn === i ? '두르는 중' : open ? '누르면 두르기' : '미달성'}</small></button>`;
     }).join('');
     const code = tr && tr.best ? trialCode(tr.week, tr.cls, tr.best, tr.time, tr.hits) : '';
     const hist = tr?.history.length ? tr.history.slice(0, 5).map((x) => `${x.week} ${x.best}점 ${x.grade >= 0 ? TRIAL_GRADES[x.grade].name : '-'} (${CLASSES[x.cls as ClassId]?.name ?? ''})`).join(' · ') : '없음';
     const trialCard = `<section class="end-card">
         <h3>${SPK('hourglass', '⏳')} 주간 차원 시련 <small>${weekKey()} · 이번 주 최고 ${tr?.best ?? 0}점 ${gradeTag(g)}</small></h3>
-        <p class="hint">일주일 동안 모두 같은 맵·몬스터·변이. 능력치는 <b>고정 스펙</b>(99레벨·7단계 유니크 +5 전 부위, 배운 스킬은 최고 레벨, 궁극기 Lv.1, 각인·초월·칭호·음식 무시)으로 바뀌어 실력만 겨룹니다. 물약은 중급 3개가 주어지고, 쓰러져도 짐을 잃지 않습니다. 몇 번이든 도전할 수 있고, 그 주의 최고 점수로 등급 보상을 받습니다.</p>
+        <p class="hint">일주일 동안 모두 같은 맵·몬스터·변이. 능력치는 <b>고정 스펙</b>(99레벨·7단계 유니크 +5 전 부위, 배운 스킬은 최고 레벨, 궁극기 Lv.1, 각인·초월·칭호·음식 무시)으로 바뀌어 실력만 겨룹니다. 물약은 중급 3개가 주어지고, 쓰러져도 짐을 잃지 않습니다. 몇 번이든 도전할 수 있고, 그 주의 최고 점수로 등급이 매겨집니다.</p>
         <p class="dim">점수: 클리어 10000 + 남은 시간(${formatClock(TRIAL_TIME)} 기준)×10 + 최고 연속 처치×25 − 피격×40 − 물약×400 · 이번 주: ${THEMES[spec.tier - 1].name} · 변이 ${spec.affixes.map((a) => `<span class="affix" style="color:${hex(AFFIXES[a].color)}">${AFFIXES[a].name}</span>`).join(' · ')}</p>
         <div class="menu row"><button class="primary" data-trial>도전하기</button>${tr?.best ? `<span class="dim">최고 기록: ${formatClock(tr.time)} · 피격 ${tr.hits} · ${CLASSES[tr.cls as ClassId]?.name ?? ''}</span>` : ''}</div>
+        <p class="dim">보상: 등급을 처음 달성하면 그 등급의 <b>발밑 오라</b>를 영원히 쓸 수 있습니다 ${worn >= 0 ? '<button class="chip" data-taura="-1">오라 끄기</button>' : ''}</p>
         <div class="rush-row trial-row">${claims}</div>
         ${code ? `<p class="dim">기록 코드 (친구와 비교): <input class="code-box" readonly value="${code}"></p>` : ''}
         <p class="dim">친구 코드 확인: <input class="code-box" data-tcode placeholder="DT-..."> <span data-tcode-out></span></p>
@@ -423,7 +424,7 @@ export class Screens {
     this.on(s, '[data-rlv]', (b) => again(message, { ...cur, level: Math.max(1, Math.min(maxLevel, cur.level + Number(b.dataset.rlv))) }));
     this.on(s, '[data-rift]', () => h.rift(cur.tier, cur.level));
     this.on(s, '[data-trial]', () => h.trial());
-    this.on(s, '[data-tclaim]', (b) => h.trialClaim(Number(b.dataset.tclaim)));
+    this.on(s, '[data-taura]', (b) => h.trialAura(Number(b.dataset.taura)));
     const input = s.querySelector<HTMLInputElement>('[data-tcode]');
     const out = s.querySelector<HTMLElement>('[data-tcode-out]');
     input?.addEventListener('input', () => {

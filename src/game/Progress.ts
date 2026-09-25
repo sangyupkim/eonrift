@@ -73,6 +73,8 @@ export interface SaveData {
   end?: EndgameState;
   /** 얻은 칭호 */
   titles?: string[];
+  /** 두른 발밑 오라 (주간 시련 등급 번호, 없으면 -1) */
+  aura?: number;
   /** 먹은 음식과 효과가 끝나는 시각 */
   food?: { id: string; until: number };
   factory: FactoryState;

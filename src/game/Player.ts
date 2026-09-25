@@ -1,5 +1,5 @@
 import type { DebuffId } from '../data/species';
-import { AdditiveBlending, AlwaysStencilFunc, Color, GreaterDepth, Material, Mesh, MeshBasicMaterial, MeshLambertMaterial, NotEqualStencilFunc, Plane, ReplaceStencilOp, Vector3 } from 'three';
+import { AdditiveBlending, AlwaysStencilFunc, Color, CylinderGeometry, DoubleSide, GreaterDepth, Group, Material, Mesh, MeshBasicMaterial, MeshLambertMaterial, NotEqualStencilFunc, OctahedronGeometry, Plane, ReplaceStencilOp, RingGeometry, Vector3 } from 'three';
 import { PLAYER, SCREEN_RIGHT, SCREEN_UP } from '../config';
 import type { ClassDef } from '../data/classes';
 import { buildHero, glowColor, type HeroGear, type HeroRig } from '../models/hero';
@@ -226,7 +226,81 @@ export class Player {
     for (const [slot, plus] of Object.entries(glow) as [keyof typeof glow, number][]) add(this.rig.gearMeshes[slot], plus, slot === 'weapon' ? 1.14 : 1.08);
   }
 
+  private aura: { group: Group; spin: Group; motes: Mesh[]; mats: MeshBasicMaterial[]; level: number } | null = null;
+
+  /** 발밑 오라 (주간 시련 보상). level 0~4: 고리 → 이중 고리 → 문양 → 빛기둥 → 떠오르는 빛 */
+  setAura(level: number, color: number): void {
+    if (this.aura) {
+      this.rig.root.remove(this.aura.group);
+      this.aura = null;
+    }
+    if (level < 0) return;
+    const group = new Group();
+    const spin = new Group();
+    group.add(spin);
+    const mats: MeshBasicMaterial[] = [];
+    const mat = (opacity: number) => {
+      const m = new MeshBasicMaterial({ color, transparent: true, opacity, blending: AdditiveBlending, depthWrite: false, side: DoubleSide });
+      mats.push(m);
+      return m;
+    };
+    const flat = (g: RingGeometry, o: number, y = 0.04) => {
+      const m = new Mesh(g, mat(o));
+      m.rotation.x = -Math.PI / 2;
+      m.position.y = y;
+      m.renderOrder = 2;
+      spin.add(m);
+      return m;
+    };
+    flat(new RingGeometry(0.62, 0.8, 40), 0.5);
+    flat(new RingGeometry(0.2, 0.62, 40), 0.12);
+    if (level >= 1) flat(new RingGeometry(0.95, 1.0, 48), 0.45, 0.05);
+    if (level >= 2) {
+      // 바깥 고리 위의 여섯 문양
+      for (let i = 0; i < 6; i++) {
+        const d = new Mesh(new OctahedronGeometry(0.09, 0), mat(0.8));
+        const a = (i / 6) * Math.PI * 2;
+        d.position.set(Math.cos(a) * 0.98, 0.08, Math.sin(a) * 0.98);
+        d.scale.set(1, 0.3, 1.6);
+        d.rotation.y = -a;
+        spin.add(d);
+      }
+    }
+    if (level >= 3) {
+      const col = new Mesh(new CylinderGeometry(0.72, 0.8, 1.6, 24, 1, true), mat(0.1));
+      col.position.y = 0.8;
+      group.add(col);
+    }
+    const motes: Mesh[] = [];
+    if (level >= 4) {
+      for (let i = 0; i < 8; i++) {
+        const m = new Mesh(new OctahedronGeometry(0.06, 0), mat(0.9));
+        m.userData.phase = i / 8;
+        group.add(m);
+        motes.push(m);
+      }
+    }
+    this.rig.root.add(group);
+    this.aura = { group, spin, motes, mats, level };
+  }
+
+  private updateAura(): void {
+    const a = this.aura;
+    if (!a) return;
+    // 캐릭터가 도는 방향과 관계없이 천천히 돈다
+    a.group.rotation.y = -this.facing;
+    a.spin.rotation.y = this.time * (0.6 + a.level * 0.15);
+    a.mats[0].opacity = 0.4 + 0.15 * Math.sin(this.time * 2.4);
+    for (const m of a.motes) {
+      const k = (this.time * 0.35 + (m.userData.phase as number)) % 1;
+      const ang = (m.userData.phase as number) * Math.PI * 2 + this.time * 1.2;
+      m.position.set(Math.cos(ang) * 0.75, k * 2, Math.sin(ang) * 0.75);
+      (m.material as MeshBasicMaterial).opacity = 0.9 * (1 - k);
+    }
+  }
+
   update(dt: number, ctx: MoveContext): void {
+    this.updateAura();
     // 강화 빛은 천천히 숨 쉬듯 밝아졌다 어두워진다
     for (const g of this.glows) g.mat.opacity = g.base * (0.65 + 0.35 * Math.sin(this.time * g.speed));
     this.time += dt;

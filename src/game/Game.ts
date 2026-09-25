@@ -391,6 +391,7 @@ export class Game {
     const st = this.progress.stats();
     this.player.maxHp = st.maxHp;
     this.player.maxMp = st.maxMp;
+    this.applyAura();
     // 게임을 막 불러왔으면 저장된 HP, 아니면 직전 장면의 HP를 이어받는다
     const carried = prev && !this.freshLoad ? prev.hp : (this.progress.data.hp ?? st.maxHp);
     this.freshLoad = false;
@@ -1252,16 +1253,13 @@ export class Game {
             this.screens.close();
           },
           trial: () => this.startTrial(),
-          trialClaim: (g) => {
+          trialAura: (g) => {
             const t = this.trialRecord();
-            if (t.claimed.includes(g) || trialGrade(t.best) < g) return;
-            const r = TRIAL_GRADES[g];
-            t.claimed.push(g);
-            p.data.gold += r.gold;
-            for (const [id, n] of Object.entries(r.items)) p.add(id, n);
-            this.audio.play('coin');
+            if (g > t.topGrade) return;
+            p.data.aura = g;
+            this.applyAura();
             this.saveNow();
-            this.openEndgameMenu(`주간 시련 ${r.name} 보상: +${r.gold} G · ${Object.entries(r.items).map(([id, n]) => `${ITEMS[id].name} ${n}`).join(' · ')}`);
+            this.openEndgameMenu(g < 0 ? '오라를 껐습니다' : `발밑 오라: ${TRIAL_GRADES[g].aura}`);
           },
           rift: (tier, level) => {
             if (level > e.riftBest + 1 || tier > p.maxTier) return;
@@ -1299,6 +1297,14 @@ export class Game {
     this.applyStats();
   }
 
+  /** 발밑 오라 (주간 시련에서 달성한 등급) */
+  private applyAura(): void {
+    const g = this.progress.data.aura ?? -1;
+    const top = this.progress.data.end?.trial?.topGrade ?? -1;
+    if (!this.player) return;
+    this.player.setAura(g >= 0 && g <= top ? g : -1, g >= 0 ? TRIAL_GRADES[g].color : 0);
+  }
+
   /** 이번 주 시련 기록 (주가 바뀌었으면 지난 기록을 넘긴다) */
   private trialRecord(): TrialRecord {
     const e = this.progress.data.end!;
@@ -1330,8 +1336,13 @@ export class Game {
       t.time = Math.round(run.time);
       t.hits = end.hits;
       t.cls = this.progress.data.currentClass;
-      t.topGrade = Math.max(t.topGrade, grade);
       best = ' · 이번 주 최고 기록!';
+    }
+    // 처음 오른 등급이면 그 오라를 얻고 바로 두른다
+    if (grade > t.topGrade) {
+      t.topGrade = grade;
+      this.progress.data.aura = grade;
+      window.setTimeout(() => this.hud.toast(`:sparkle: 새 발밑 오라: ${TRIAL_GRADES[grade].aura} (차원의 끝 → 주간 시련에서 바꿀 수 있음)`, 4500), 2500);
     }
     run.pouch = [];
     this.progress.trial = false;
