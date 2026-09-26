@@ -9,6 +9,7 @@ import {
   RUSH_DIFFS,
   TRIAL_GRADES,
   TRIAL_TIME,
+  TRIAL_HP,
   riftReward,
   rushReward,
   towerFirstClear,
@@ -348,7 +349,7 @@ function endgame(): string {
   ${card('🗼 무한의 탑', `<p>둥근 단에서 웨이브 3번을 버티면 한 층을 오른다. 5층마다 파수꾼, 10층마다 수호자. 1~10층은 층마다 +5%, 11층부터는 10층마다 한 번에 +15% 강해진다.</p><p>처음 깬 층 보상 (예: 10층 ${towerFirstClear(10).gold} G + ${it('dim_dust', towerFirstClear(10).dust)}). 하루 한 번 최고 층 기준 소탕 보상.</p>`)}
   ${card('💀 보스 러시', `${table(['난이도', '내용', 'S등급 보상'], RUSH_DIFFS.map((d, i) => [d.name, d.desc, `${rushReward(i as 0 | 1 | 2, 'S').gold.toLocaleString()} G + ${it('dim_dust', rushReward(i as 0 | 1 | 2, 'S').dust)}`]))}<p>걸린 시간으로 S(10분)·A(15분)·B(20분)·C 등급. 하루 ${RUSH_DAILY}번 무료, 그 뒤는 ${it('dim_alloy', 2)}. 지옥은 매번 ${it('dim_alloy2', 1)}.</p>`)}
   ${card('🌀 심연 균열', `<p>${Math.round(RIFT_TIME / 60)}분 안에 깨면 다음 단계가 열린다. 단계마다 몬스터 +12%, 변이가 붙는다(그날은 같은 변이). 입장: 1~10단계 ${it('dim_alloy', 1)}, 11단계부터 ${it('dim_alloy2', 1)}. 보상 예) 5단계 ${riftReward(5, true).gold.toLocaleString()} G + ${it('dim_dust', riftReward(5, true).dust)}, 좋은 장비 확률 증가.</p>${table(['변이', '효과'], AFFIX_IDS.map((a) => [`<span style="color:${hex(AFFIXES[a].color)}">${AFFIXES[a].name}</span>`, AFFIXES[a].text]))}`)}
-  ${card('🏆 주간 차원 시련', `<p>매주 모두에게 같은 맵·변이. 장비와 상관없이 <b>고정 능력치</b>로 실력을 겨룬다 (${TRIAL_TIME / 60}분). 점수 = 클리어 10000 + 남은 시간×10 + 최고 연속 처치×25 − 피격×40 − 물약×400.</p>${table(['등급', '점수', '보상 (발밑 오라)'], TRIAL_GRADES.map((g) => [`<span style="color:${hex(g.color)}">${g.name}</span>`, g.min.toLocaleString(), g.aura]))}`)}
+  ${card('🏆 주간 차원 시련', `<p>매주 무작위 수호자 한 마리와 <b>${TRIAL_TIME / 60}분</b> 동안 싸운다. 내 장비·능력치 그대로. 체력이 7-10 수호자의 ${TRIAL_HP}배라 <b>깎은 체력 비율</b>이 기록이고, 쓰러뜨리면 <b>걸린 시간</b>이 기록. 체력 10%마다 격노 단계가 올라 공격·속도가 오르고 패턴이 강해진다.</p>${table(['등급', '기준', '보상 (발밑 오라)'], TRIAL_GRADES.map((g) => [`<span style="color:${hex(g.color)}">${g.name}</span>`, g.min >= 10000 ? '처치' : `체력 ${g.min / 100}%`, g.aura]))}`)}
   <h3>차원 재료</h3>
   ${flow([it('dim_dust'), `차원 응축기 (가루 8 + ${it('essence_high')} + ${it('titanium_plate')}) → ${it('dim_shard')}`])}
   ${flow([it('dim_dust'), `차원 응축기 (가루 4 + ${it('essence_supreme')} + ${it('orichalcum_ingot')}) → ${it('essence_dim')}`])}

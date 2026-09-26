@@ -3219,3 +3219,7 @@ h3.sub { margin: 10px 0 6px; font-size: 14px; display: flex; align-items: center
 .spo { color: #ffb86a; }
 .sp-lock { margin-left: auto; padding: 2px 8px; border-radius: 8px; font-size: 11px; font-weight: 800; border: 1px solid var(--panel-line); background: rgba(255, 255, 255, 0.06); }
 .sp-lock.on { background: rgba(255, 184, 106, 0.3); border-color: #ffb86a; color: #ffe2bf; }
+/* 주간 시련: 이번 주 수호자 */
+.trial-boss { display: flex; align-items: center; gap: 10px; padding: 6px 10px; margin: 6px 0; border-radius: 10px; background: rgba(182, 124, 255, 0.12); border: 1px solid rgba(182, 124, 255, 0.4); }
+.trial-boss img { width: 56px; height: 56px; object-fit: contain; }
+.trial-boss div { display: flex; flex-direction: column; gap: 2px; }

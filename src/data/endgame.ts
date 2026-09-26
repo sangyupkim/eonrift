@@ -195,7 +195,7 @@ export type EndRun =
   | { kind: 'tower'; floor: number }
   | { kind: 'rush'; diff: RushDiff; index: number }
   | { kind: 'rift'; tier: number; level: number; affixes: AffixId[]; timeLeft: number }
-  | { kind: 'trial'; week: string; hits: number; potions: number; kills: number; combo: number; chain: number; lastKill: number };
+  | { kind: 'trial'; week: string; hits: number; potions: number };
 
 /** 초 → "m:ss" */
 export function formatClock(seconds: number): string {
@@ -206,10 +206,13 @@ export function formatClock(seconds: number): string {
 // ---------------- 주간 차원 시련 (기록형) ----------------
 
 /**
- * 일주일마다 모두에게 같은 맵·몬스터·변이가 주어지고, 능력치는 고정 스펙으로 바뀐다 (장비·각인·초월 무시).
- * 실력으로 점수를 겨루고, 그 주의 최고 점수 등급에 따라 보상을 받는다.
+ * 주마다 무작위로 정해지는 수호자 한 마리와 정해진 시간 동안 싸운다. 내 장비·능력치 그대로.
+ * 체력이 엄청나게 많아서 깎은 비율로 순위를 매기고, 쓰러뜨렸다면 걸린 시간으로 겨룬다.
+ * 체력이 10% 깎일 때마다 격노 단계가 올라 패턴이 강해진다.
  */
-export const TRIAL_TIME = 900;
+export const TRIAL_TIME = 180;
+/** 시련 수호자 체력: 7-10 수호자의 몇 배 */
+export const TRIAL_HP = 12;
 
 /** 월요일 기준 주 번호 ("2026-W39") */
 export function weekKey(d = new Date()): string {
@@ -227,42 +230,37 @@ function hashStr(s: string): number {
   return h >>> 0;
 }
 
-/** 이번 주 시련: 맵 시드, 테마(단계), 변이 2개 */
-export function trialSpec(week: string): { seed: number; tier: number; affixes: AffixId[] } {
+/** 이번 주 시련: 수호자(단계 1~7 중 하나)와 맵 시드 */
+export function trialSpec(week: string): { seed: number; tier: number } {
   const seed = hashStr(`trial:${week}`);
-  const ids = AFFIX_IDS.filter((a) => a !== 'swarm');
-  const a = ids[seed % ids.length];
-  const rest = ids.filter((x) => x !== a);
-  const b = rest[Math.floor(seed / 7) % rest.length];
-  return { seed, tier: (seed % 7) + 1, affixes: [a, b] };
-}
-
-export interface TrialScore {
-  total: number;
-  base: number;
-  timeBonus: number;
-  hitPenalty: number;
-  potionPenalty: number;
-  comboBonus: number;
-}
-
-/** 점수: 클리어 10000 + 남은 시간×10 + 최고 연속 처치×25 − 피격×40 − 물약×400. 실패하면 처치 수×20 */
-export function trialScore(cleared: boolean, seconds: number, hits: number, potions: number, combo: number, kills: number): TrialScore {
-  if (!cleared) return { total: kills * 20, base: kills * 20, timeBonus: 0, hitPenalty: 0, potionPenalty: 0, comboBonus: 0 };
-  const s = { base: 10000, timeBonus: Math.max(0, Math.round(TRIAL_TIME - seconds)) * 10, hitPenalty: hits * 40, potionPenalty: potions * 400, comboBonus: combo * 25 };
-  return { ...s, total: Math.max(0, s.base + s.timeBonus + s.comboBonus - s.hitPenalty - s.potionPenalty) };
+  return { seed, tier: (seed % 7) + 1 };
 }
 
 /**
- * 등급. 보상은 물건이 아니라 발밑 오라: 한 번 달성한 등급의 오라는 영원히 쓸 수 있다
+ * 점수 (클수록 좋다): 깎은 체력 비율을 만분율로 (0~10000).
+ * 쓰러뜨렸다면 10000 + 남은 시간(초)×10 → 빨리 잡을수록 높다.
+ */
+export function trialScore(ratio: number, killed: boolean, seconds: number): number {
+  if (killed) return 10000 + Math.max(0, Math.round((TRIAL_TIME - seconds) * 10));
+  return Math.max(0, Math.min(9999, Math.floor(ratio * 10000)));
+}
+
+/** 점수를 사람이 읽는 글로: "37.52%" 또는 "처치 1:23" */
+export function trialScoreText(score: number): string {
+  if (score >= 10000) return `처치 ${formatClock(TRIAL_TIME - (score - 10000) / 10)}`;
+  return `${(score / 100).toFixed(2)}%`;
+}
+
+/**
+ * 등급 (깎은 체력 기준). 보상은 물건이 아니라 발밑 오라: 한 번 달성한 등급의 오라는 영원히 쓸 수 있다
  * (등급이 높을수록 고리·문양·빛기둥·떠오르는 빛이 더해진다)
  */
 export const TRIAL_GRADES: { name: string; min: number; color: number; aura: string }[] = [
-  { name: '브론즈', min: 6000, color: 0xc98a50, aura: '구릿빛 고리' },
-  { name: '실버', min: 10000, color: 0xdfe8f4, aura: '은빛 이중 고리' },
-  { name: '골드', min: 13000, color: 0xffd23a, aura: '황금 문양' },
-  { name: '플래티넘', min: 15500, color: 0x7ff4ff, aura: '백금 빛기둥' },
-  { name: '차원', min: 17500, color: 0xb67cff, aura: '차원의 소용돌이' },
+  { name: '브론즈', min: 1000, color: 0xc98a50, aura: '구릿빛 고리' },
+  { name: '실버', min: 2500, color: 0xdfe8f4, aura: '은빛 이중 고리' },
+  { name: '골드', min: 5000, color: 0xffd23a, aura: '황금 문양' },
+  { name: '플래티넘', min: 8000, color: 0x7ff4ff, aura: '백금 빛기둥' },
+  { name: '차원', min: 10000, color: 0xb67cff, aura: '차원의 소용돌이' },
 ];
 
 /** 점수의 등급 번호 (-1 = 등급 없음) */
@@ -275,6 +273,8 @@ export function trialGrade(score: number): number {
 }
 
 export interface TrialRecord {
+  /** 2 = 보스 체력 깎기 방식 (예전 점수 방식 기록은 버린다) */
+  v?: number;
   week: string;
   best: number;
   time: number;
@@ -290,11 +290,13 @@ export interface TrialRecord {
 }
 
 export function newTrial(week: string): TrialRecord {
-  return { week, best: 0, time: 0, hits: 0, cls: '', claimed: [], weeks: 0, topGrade: -1, history: [] };
+  return { v: 2, week, best: 0, time: 0, hits: 0, cls: '', claimed: [], weeks: 0, topGrade: -1, history: [] };
 }
 
 /** 주가 바뀌었으면 지난 주 기록을 역사로 옮기고 새로 시작 */
 export function rollTrialWeek(t: TrialRecord, week: string): TrialRecord {
+  // 예전 방식(점수제) 기록: 얻은 오라·참여 주 수는 남기고 점수는 지운다
+  if (t.v !== 2) t = { ...t, v: 2, best: 0, time: 0, hits: 0, cls: '', history: [] };
   if (t.week === week) return t;
   if (t.best > 0) t.history = [{ week: t.week, best: t.best, grade: trialGrade(t.best), cls: t.cls }, ...t.history].slice(0, 10);
   return { ...t, week, best: 0, time: 0, hits: 0, cls: '', claimed: [] };

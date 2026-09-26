@@ -3,7 +3,7 @@ import { decodeSave, encodeSave } from './saveCode';
 import { makeTestSave } from './testSave';
 import { gearLook } from '../models/items';
 import { BOSS_RESPAWN_MS, BOSS_TIME_LIMIT, FARM_COOLDOWN_MS, FARM_NAMES, goldScale, lowStageExpMult, playerDefK } from '../data/monsters';
-import { DEBUFF_INFO, type DebuffId, type DebuffSpec } from '../data/species';
+import { BOSS_SPECIES, DEBUFF_INFO, type DebuffId, type DebuffSpec } from '../data/species';
 import { newTool, TOOL_KIND_NAMES, TOOL_TIER_NAMES, toolBonusChance, toolName, toolSpeed, toolWear, type ToolKind } from '../data/tools';
 import { MeshLambertMaterial, OrthographicCamera, PCFShadowMap, Plane, Raycaster, Vector2, Vector3, WebGLRenderer } from 'three';
 import { CAMERA_OFFSET, GAME_VERSION, PLAYER, SCREEN_UP, TILE, VIEW_HEIGHT } from '../config';
@@ -36,7 +36,7 @@ import { objectiveNeed, objectiveProgress, Quests } from './Quests';
 import { bonusText, FOOD_MINUTES, FOODS, TITLES, type BonusKey } from '../data/bonus';
 import { hasStory, objective, questLines, scriptFor } from './Story';
 import { todayKey } from './Quests';
-import { END_NAMES, endLock, type EndContent, rushEntry, riftEntry, AFFIXES, riftAffixes, riftLuck, riftMult, riftReward, RIFT_NODE_MULT, RIFT_TIME, rushFights, rushFightName, rushGrade, rushReward, RUSH_DIFFS, DUST, formatClock, newTrial, rollTrialWeek, trialGrade, TRIAL_GRADES, trialScore, trialSpec, TRIAL_TIME, weekKey, type TrialRecord, towerBoss, towerDaily, towerFirstClear, towerMult, towerTheme, type EndRun } from '../data/endgame';
+import { END_NAMES, endLock, type EndContent, rushEntry, riftEntry, AFFIXES, riftAffixes, riftLuck, riftMult, riftReward, RIFT_NODE_MULT, RIFT_TIME, rushFights, rushFightName, rushGrade, rushReward, RUSH_DIFFS, DUST, formatClock, newTrial, rollTrialWeek, trialGrade, TRIAL_GRADES, TRIAL_HP, trialScore, trialScoreText, trialSpec, TRIAL_TIME, weekKey, type TrialRecord, towerBoss, towerDaily, towerFirstClear, towerMult, towerTheme, type EndRun } from '../data/endgame';
 import { DungeonScene, type DungeonMods, type NodeInstance, type WaveSpec } from './scenes/DungeonScene';
 import { HomeScene } from './scenes/HomeScene';
 import type { Interactable, Level } from './scenes/Level';
@@ -1278,15 +1278,14 @@ export class Game {
   private endLayout(end: EndRun): { tier: number; stage: number; gen: GenOptions; mods: DungeonMods; seed?: number; extraBosses?: { tier: number; kind: 'midboss' | 'boss' }[]; waves?: WaveSpec[] } {
     switch (end.kind) {
       case 'trial': {
-        // 주간 시련: 이번 주 모두 같은 맵·변이. 몬스터는 7단계 기준 고정
+        // 주간 시련: 이번 주의 수호자 한 마리 (시작 방 + 보스 방). 체력이 아주 많고, 깎일수록 격노한다
         const t = trialSpec(end.week);
-        const a = t.affixes;
         return {
           tier: t.tier,
           stage: 10,
           seed: t.seed,
-          gen: { boss: 'present', rooms: [6, 7], eliteChance: a.includes('elite') ? 0.15 : 0 },
-          mods: { statTier: 7, statStage: 10, hp: 1.4 * (a.includes('fortified') ? 1.3 : 1), atk: 2.2 * (a.includes('enraged') ? 1.25 : 1), speed: a.includes('haste') ? 1.2 : 1, affixes: a },
+          gen: { boss: 'present', rooms: [2, 2] },
+          mods: { statTier: 7, statStage: 10, hp: TRIAL_HP, trial: true },
         };
       }
       case 'tower': {
@@ -1332,7 +1331,7 @@ export class Game {
   }
 
   private endLabel(end: EndRun, theme: string): string {
-    if (end.kind === 'trial') return `주간 차원 시련 · ${theme} · :hourglass: ${formatClock(Math.max(0, TRIAL_TIME - (this.run?.time ?? 0)))} · 피격 ${end.hits}`;
+    if (end.kind === 'trial') return `주간 차원 시련 · ${BOSS_SPECIES[trialSpec(end.week).tier - 1].name} · :hourglass: ${formatClock(Math.max(0, TRIAL_TIME - this.bossTime))}`;
     if (end.kind === 'tower') return `무한의 탑 ${end.floor}층 · ${theme}`;
     if (end.kind === 'rush') return `보스 러시 ${RUSH_DIFFS[end.diff].name} ${end.index + 1}/${rushFights(end.diff).length}`;
     const t = Math.max(0, Math.ceil(end.timeLeft));
@@ -1341,7 +1340,7 @@ export class Game {
 
   private endIntro(end: EndRun): string {
     if (end.kind === 'trial')
-      return `주간 차원 시련 (${end.week}) — 고정 스펙으로 ${formatClock(TRIAL_TIME)} 안에 모두 쓰러뜨리자 · 변이: ${trialSpec(end.week).affixes.map((a) => AFFIXES[a].name).join(' · ')} · 피격·물약은 감점`;
+      return `주간 차원 시련 (${end.week}) — ${BOSS_SPECIES[trialSpec(end.week).tier - 1].name}에게 ${formatClock(TRIAL_TIME)} 동안 최대한 피해를 주자 · 체력 10%마다 격노 단계가 오른다`;
     if (end.kind === 'tower') {
       const b = towerBoss(end.floor);
       return `무한의 탑 ${end.floor}층 — 몬스터 ×${towerMult(end.floor).toFixed(2)}${b ? ` · ${b.kind === 'boss' ? '수호자' : '파수꾼'}가 기다립니다` : ''}${end.floor > 10 && end.floor % 10 === 1 ? ' · :warning: 새 구간: 몬스터가 한꺼번에 강해졌다' : ''}`;
@@ -1464,27 +1463,30 @@ export class Game {
     return e.trial;
   }
 
-  /** 주간 시련 시작: 능력치를 고정 스펙으로 바꾸고 이번 주 맵으로 */
+  /** 주간 시련 시작: 내 능력치 그대로 이번 주 수호자에게 */
   private startTrial(): void {
-    this.progress.trial = true;
-    this.afterMenu = () => this.enterDungeon(1, 1, false, undefined, { kind: 'trial', week: weekKey(), hits: 0, potions: 0, kills: 0, combo: 0, chain: 0, lastKill: -99 });
+    this.afterMenu = () => this.enterDungeon(1, 1, false, undefined, { kind: 'trial', week: weekKey(), hits: 0, potions: 0 });
     this.screens.close();
   }
 
-  /** 주간 시련 끝: 점수를 매기고 기록한 뒤 마을로 (쓰러져도 짐은 그대로) */
-  private finishTrial(cleared: boolean): void {
+  /** 주간 시련 끝: 깎은 체력(또는 처치 시간)으로 기록한 뒤 마을로 (쓰러져도 짐은 그대로) */
+  private finishTrial(killed: boolean): void {
     const run = this.run;
     if (!run || run.end?.kind !== 'trial') return;
     const end = run.end;
     const t = this.trialRecord();
-    const sc = trialScore(cleared, run.time, end.hits, end.potions, end.combo, end.kills);
-    const grade = trialGrade(sc.total);
+    const lv = this.level;
+    const boss = lv instanceof DungeonScene ? (lv.monsters.find((m) => m.isBoss) ?? lv.boss) : null;
+    const ratio = boss ? 1 - Math.max(0, boss.hp) / boss.maxHp : 0;
+    const secs = Math.min(TRIAL_TIME, this.bossTime);
+    const score = trialScore(ratio, killed, secs);
+    const grade = trialGrade(score);
     let best = '';
     // 다른 주에 시작한 도전은 기록하지 않는다
-    if (end.week === t.week && sc.total > t.best) {
+    if (end.week === t.week && score > t.best) {
       if (t.best === 0) t.weeks++;
-      t.best = sc.total;
-      t.time = Math.round(run.time);
+      t.best = score;
+      t.time = Math.round(secs);
       t.hits = end.hits;
       t.cls = this.progress.data.currentClass;
       best = ' · 이번 주 최고 기록!';
@@ -1496,15 +1498,14 @@ export class Game {
       window.setTimeout(() => this.hud.toast(`:sparkle: 새 발밑 오라: ${TRIAL_GRADES[grade].aura} (차원의 끝 → 주간 시련에서 바꿀 수 있음)`, 4500), 2500);
     }
     run.pouch = [];
-    this.progress.trial = false;
     this.mode = 'play';
     this.player.hp = Math.max(1, this.player.hp);
-    // 고정 스펙에서 원래 능력치로 (체력은 비율로 옮긴다)
-    this.applyStats();
+    this.hud.setBoss(null);
     this.checkTitles();
     const gname = grade >= 0 ? TRIAL_GRADES[grade].name : '등급 없음';
-    this.hud.toast(`주간 시련 ${cleared ? '완료' : '실패'}: ${sc.total}점 (${gname})${best}`, 5000);
-    this.finishRun(`주간 시련 ${cleared ? '완료' : '실패'} · ${sc.total}점 · ${gname}`);
+    const txt = `주간 시련 ${killed ? '처치!' : '종료'}: ${trialScoreText(score)} (${gname})`;
+    this.hud.toast(`${txt}${best}`, 5000);
+    this.finishRun(txt);
   }
 
   /** 엔드 콘텐츠의 방을 다 정리했을 때: 기록과 보상 */
@@ -1809,17 +1810,8 @@ export class Game {
       this.hud.toast(this.quests.isDone('m_research') ? `도감에 새 몬스터 등록: ${name} — 연구자 노아에게 보상을 받자` : `새 몬스터 발견: ${name}`, 2600);
     }
 
-    // 주간 시련: 전리품·경험치 없이 연속 처치만 센다 (3초 안에 다음 처치)
+    // 주간 시련: 전리품·경험치 없음 (수호자를 쓰러뜨리면 방 정리로 기록)
     if (run.end?.kind === 'trial') {
-      const e = run.end;
-      e.kills++;
-      e.chain = run.time - e.lastKill <= 3 ? e.chain + 1 : 1;
-      e.lastKill = run.time;
-      e.combo = Math.max(e.combo, e.chain);
-      if (e.chain >= 5 && e.chain % 5 === 0) {
-        const s = this.toScreen(m.x, 2.2, m.z);
-        this.hud.floatText(s.x, s.y, `${e.chain} 연속!`, '#b67cff', 'crit');
-      }
       if (m.isBoss) {
         this.hud.setBoss(null);
         this.audio.playMusic('dungeon');
@@ -2803,22 +2795,23 @@ export class Game {
       if (boss && boss.alive && boss.aggro) {
         // 보스 제한 시간: 싸움이 시작되면 흐른다
         this.bossTime += dt;
-        const left = Math.max(0, BOSS_TIME_LIMIT - this.bossTime);
-        if (left <= 0 && !boss.dooming && !this.timeOver) {
+        const trialRun = this.run.end?.kind === 'trial';
+        const left = Math.max(0, (trialRun ? TRIAL_TIME : BOSS_TIME_LIMIT) - this.bossTime);
+        if (left <= 0 && !boss.dooming && !this.timeOver && this.run.end?.kind !== 'trial') {
           // 시간이 다 되면 보스가 방 전체 즉사기를 시전한다 (막을 수도 피할 수도 없다)
           this.timeOver = true;
           level.startBossDoom();
           this.audio.play('stone');
         }
         const clock = `:hourglass: ${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, '0')}`;
-        const tag = boss.dooming ? ' · :skull: 틈새 붕괴' : boss.shielded ? ` · 보호막 (수호병 ${boss.guardsLeft})` : boss.exposed ? ' · 빈틈!' : boss.phase2 ? ' · 격노' : '';
+        const tag = boss.trialBoss ? (boss.rage ? ` · 격노 ${boss.rage}단계 · ${((1 - boss.hp / boss.maxHp) * 100).toFixed(1)}%` : ` · ${((1 - boss.hp / boss.maxHp) * 100).toFixed(1)}%`) : boss.dooming ? ' · :skull: 틈새 붕괴' : boss.shielded ? ` · 보호막 (수호병 ${boss.guardsLeft})` : boss.exposed ? ' · 빈틈!' : boss.phase2 ? ' · 격노' : '';
         this.hud.setBoss(`${boss.name}${tag}  ${clock}`, boss.hp / boss.maxHp, boss.bars, boss.shielded, left < 60);
         this.audio.playMusic('boss');
       }
       const end = this.run.end;
       if (end?.kind === 'trial' && !this.run.roomCleared) {
         if (Math.floor(this.run.time) !== Math.floor(this.run.time - dt)) this.hud.setLocation(this.endLabel(end, level.theme.name), level.theme.portalColor);
-        if (this.run.time >= TRIAL_TIME) return this.finishTrial(false);
+        if (this.bossTime >= TRIAL_TIME) return this.finishTrial(false);
       }
       if (end?.kind === 'rift' && !this.run.roomCleared) {
         const before = Math.ceil(end.timeLeft);

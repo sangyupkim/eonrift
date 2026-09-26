@@ -24,11 +24,11 @@ import { gearLook } from '../models/items';
 import { equipIconUrl, heroPortraitUrl, itemIconUrl, monsterIconUrl, skillIconUrl, toolIconUrl } from './itemIcons';
 import { rollSpecials, specialRange, specialRerollCost, specialText } from '../data/special';
 import { BESTIARY, BESTIARY_BY_ID, COLLECTION_MILESTONES, isStageMaster, killMilestones, MASTER_ALL_GAIN, milestoneReward, RESEARCH_BONUS, SPECIES_STAT_KILLS, statMilestone, type BestiaryReward } from '../data/bestiary';
-import { DEBUFF_INFO, TRAIT_TEXT, type Faction } from '../data/species';
-import { endLock, AFFIXES, ALLOY, ALLOY2, RIFT_ALLOY2_FROM, riftEntry, rushEntry, formatClock, riftAffixes, riftMult, riftReward, RIFT_ALLOY, RIFT_TIME, rushReward, RUSH_DAILY, RUSH_DIFFS, RUSH_EXTRA_ALLOY, SHARD, DUST, DUST_PER_SHARD, END_NAMES, type EndContent, readTrialCode, trialCode, trialGrade, TRIAL_GRADES, trialSpec, TRIAL_TIME, weekKey, towerBoss, towerDaily, towerFirstClear, towerMult, rushFights, type RushDiff } from '../data/endgame';
+import { BOSS_SPECIES, DEBUFF_INFO, TRAIT_TEXT, type Faction } from '../data/species';
+import { endLock, AFFIXES, ALLOY, ALLOY2, RIFT_ALLOY2_FROM, riftEntry, rushEntry, formatClock, riftAffixes, riftMult, riftReward, RIFT_ALLOY, RIFT_TIME, rushReward, RUSH_DAILY, RUSH_DIFFS, RUSH_EXTRA_ALLOY, SHARD, DUST, DUST_PER_SHARD, END_NAMES, type EndContent, readTrialCode, trialCode, trialGrade, TRIAL_GRADES, TRIAL_HP, trialScoreText, trialSpec, TRIAL_TIME, weekKey, towerBoss, towerDaily, towerFirstClear, towerMult, rushFights, type RushDiff } from '../data/endgame';
 import { BONUS_NAMES, bonusText, TRANSCEND_STATS, transcendCost, transcendExp, engraveCost, engraveRange, ENGRAVE_STAGES, ENGRAVE_STAGE_NAMES, rollEngrave, TITLES, type BonusKey } from '../data/bonus';
 import { Rng } from '../core/rng';
-import type { Archetype } from '../data/monsters';
+import { TRIAL_RAGE, type Archetype } from '../data/monsters';
 
 const FACTION_NAME: Record<Faction, string> = { beast: '야수', undead: '언데드', orc: '오크족', elf: '다크엘프', construct: '구조물', elemental: '정령', void: '공허', demon: '악마' };
 const ARCH_NAME: Record<Archetype, string> = {
@@ -419,9 +419,10 @@ export class Screens {
       const g = tr ? trialGrade(tr.best) : -1;
       const topG = tr?.topGrade ?? -1;
       const worn = p.data.aura ?? -1;
-      main = `<div class="end-summary"><span>${weekKey()} · ${THEMES[spec.tier - 1].name}</span>
-          <span>이번 주 <b>${tr?.best ?? 0}점</b> ${g >= 0 ? `<b style="color:${hex(TRIAL_GRADES[g].color)}">${TRIAL_GRADES[g].name}</b>` : ''}</span></div>
-        <div class="chips">${spec.affixes.map((a) => `<span class="chip" style="--c:${hex(AFFIXES[a].color)}">${AFFIXES[a].name}</span>`).join('')}</div>
+      const tb = BOSS_SPECIES[spec.tier - 1];
+      main = `<div class="end-summary"><span>${weekKey()} · 이번 주 수호자</span>
+          <span>이번 주 <b>${tr?.best ? trialScoreText(tr.best) : '기록 없음'}</b> ${g >= 0 ? `<b style="color:${hex(TRIAL_GRADES[g].color)}">${TRIAL_GRADES[g].name}</b>` : ''}</span></div>
+        <div class="trial-boss"><img src="${monsterIconUrl(tb, spec.tier, true)}" alt=""><div><b>${tb.name}</b><small class="dim">${THEMES[spec.tier - 1].name} · 체력 7-10 수호자의 ${TRIAL_HP}배 · ${formatClock(TRIAL_TIME)}</small></div></div>
         <div class="menu row"><button class="primary" data-trial>도전하기</button></div>
         <h3 class="sub">발밑 오라 ${worn >= 0 ? '<button class="chip" data-taura="-1">끄기</button>' : ''}</h3>
         <div class="rush-row trial-row">${TRIAL_GRADES.map((t, i) => {
@@ -453,13 +454,14 @@ export class Screens {
           <li>오늘의 변이: ${riftAffixes(cur.level, today).map((a) => `<b style="color:${hex(AFFIXES[a].color)}">${AFFIXES[a].name}</b> ${AFFIXES[a].text}`).join(' · ') || '없음'}</li>
         </ul>`,
       trial: `<ul class="info-list">
-          <li>일주일 동안 모두 같은 맵·몬스터·변이. 능력치는 고정 스펙(99레벨·7단계 유니크 +5, 배운 스킬 최고 레벨, 궁극기 Lv.1, 각인·초월·칭호·음식 무시).</li>
-          <li>중급 물약 3개 지급, ${formatClock(TRIAL_TIME)} 제한, 쓰러져도 짐을 잃지 않음. 몇 번이든 도전 가능.</li>
-          <li>점수: 클리어 10000 + 남은 시간×10 + 최고 연속 처치×25 − 피격×40 − 물약×400.</li>
-          <li>등급(${TRIAL_GRADES.map((t) => `${t.name} ${t.min}`).join(' · ')})을 처음 달성하면 그 등급의 발밑 오라를 얻습니다.</li>
+          <li>매주 무작위로 정해지는 수호자 한 마리와 ${formatClock(TRIAL_TIME)} 동안 싸웁니다. 내 장비·능력치 그대로 (강해질수록 기록이 오릅니다).</li>
+          <li>체력이 7-10 수호자의 ${TRIAL_HP}배라 시간 안에 깎은 체력 비율이 기록입니다. 쓰러뜨리면 걸린 시간이 기록 (빠를수록 위).</li>
+          <li>체력이 10% 깎일 때마다 <b>격노 단계</b>가 올라 공격 +${Math.round(TRIAL_RAGE.atk * 100)}% · 이동 +${Math.round(TRIAL_RAGE.speed * 100)}% · 패턴 사이 쉬는 시간이 줄고, 2단계부터 강화 패턴을 씁니다.</li>
+          <li>중급 물약 3개 지급, 쓰러져도 짐을 잃지 않음. 몇 번이든 도전 가능. 시간은 수호자와 싸움이 시작되면 흐릅니다.</li>
+          <li>등급(${TRIAL_GRADES.map((t) => `${t.name} ${t.min >= 10000 ? '처치' : `${t.min / 100}%`}`).join(' · ')})을 처음 달성하면 그 등급의 발밑 오라를 얻습니다.</li>
           ${tr && tr.best ? `<li>내 기록 코드: <input class="code-box" readonly value="${trialCode(tr.week, tr.cls, tr.best, tr.time, tr.hits)}"></li>` : ''}
           <li>친구 코드 확인: <input class="code-box" data-tcode placeholder="DT-..."> <span data-tcode-out></span></li>
-          <li>지난 기록: ${tr?.history.length ? tr.history.slice(0, 5).map((x) => `${x.week} ${x.best}점 ${x.grade >= 0 ? TRIAL_GRADES[x.grade].name : '-'}`).join(' · ') : '없음'}</li>
+          <li>지난 기록: ${tr?.history.length ? tr.history.slice(0, 5).map((x) => `${x.week} ${trialScoreText(x.best)} ${x.grade >= 0 ? TRIAL_GRADES[x.grade].name : '-'}`).join(' · ') : '없음'}</li>
         </ul>`,
     };
     const common = `<p class="dim">보상은 ${inlineGem(DUST)}차원 가루로 받습니다. 차원집의 차원 응축기에서 가루 ${DUST_PER_SHARD} + 상급 정수 + 티타늄판 → ${inlineGem(SHARD)}차원 파편(궁극기 강화·각인·초월).</p>`;
@@ -503,7 +505,7 @@ export class Screens {
     const out = s.querySelector<HTMLElement>('[data-tcode-out]');
     input?.addEventListener('input', () => {
       const r = readTrialCode(input.value);
-      if (out) out.innerHTML = !input.value.trim() ? '' : r ? `<b>${r.week}</b> ${CLASSES[r.cls as ClassId]?.name ?? r.cls} · <b>${r.score}점</b> ${trialGrade(r.score) >= 0 ? TRIAL_GRADES[trialGrade(r.score)].name : ''} · ${formatClock(r.seconds)} · 피격 ${r.hits}` : '<span class="bad">올바르지 않은 코드</span>';
+      if (out) out.innerHTML = !input.value.trim() ? '' : r ? `<b>${r.week}</b> ${CLASSES[r.cls as ClassId]?.name ?? r.cls} · <b>${trialScoreText(r.score)}</b> ${trialGrade(r.score) >= 0 ? TRIAL_GRADES[trialGrade(r.score)].name : ''} · 피격 ${r.hits}` : '<span class="bad">올바르지 않은 코드</span>';
     });
   }
 

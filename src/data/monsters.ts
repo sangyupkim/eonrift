@@ -140,7 +140,12 @@ export interface MonsterMods {
   hp?: number;
   atk?: number;
   speed?: number;
+  /** 주간 시련 보스: 보호막 기믹 없이 체력 10줄, 한 줄(10%) 깎일 때마다 격노 단계가 올라 패턴이 강해진다 */
+  trial?: boolean;
 }
+
+/** 주간 시련 격노 한 단계당: 공격 +12% · 이동 +3% · 패턴 사이 쉬는 시간 -6% */
+export const TRIAL_RAGE = { atk: 0.12, speed: 0.03, rest: 0.06 };
 
 /** 보스 제한 시간 (초) */
 export const BOSS_TIME_LIMIT = 300;

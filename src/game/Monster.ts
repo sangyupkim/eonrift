@@ -16,7 +16,7 @@ import {
   Quaternion,
   Scene,
 } from 'three';
-import { ARCHETYPES, expScale, monsterAtkMult, tierScale, type Archetype, type ArchetypeDef, type MonsterMods } from '../data/monsters';
+import { ARCHETYPES, expScale, monsterAtkMult, tierScale, TRIAL_RAGE, type Archetype, type ArchetypeDef, type MonsterMods } from '../data/monsters';
 import { BOSS_SPECIES, MIDBOSS_SPECIES, type DebuffSpec, type SpeciesDef } from '../data/species';
 import { moveWithCollision, type CircleObstacle } from '../dungeon/collision';
 import { TILE } from '../config';
@@ -240,6 +240,11 @@ export class Monster {
   private summoned: Monster[] = [];
   /** 격노 (광전사: 체력이 절반 아래) */
   private enraged = false;
+  /** 주간 시련 보스와 격노 단계 (체력 10%마다 +1, 최대 9) */
+  trialBoss = false;
+  rage = 0;
+  private baseAtk = 0;
+  private baseSpeed = 0;
   /** 방패로 막았을 때 불꽃 */
   private blockFx = 0;
   /** 해골: 이미 한 번 되살아났는지 */
@@ -275,9 +280,16 @@ export class Monster {
     // 중간보스 5줄 (3줄을 깎으면 보호막), 수호자 7줄 (3줄·5줄에서 보호막)
     this.bars = kind === 'boss' ? 7 : kind === 'midboss' ? 5 : 1;
     this.gimmickAt = kind === 'boss' ? [4, 2] : kind === 'midboss' ? [2] : [];
+    if (mods.trial && boss) {
+      this.trialBoss = true;
+      this.bars = 10;
+      this.gimmickAt = [];
+    }
     this.atk = this.def.atk * scale.atk * mult.atk * (mods.atk ?? 1) * monsterAtkMult(mods.statTier ?? tier, mods.statStage ?? stage);
     this.defense = (boss ? 6 : this.def.def) * scale.def;
     this.speed = this.def.speed * (boss ? 0.95 : 1) * (mods.speed ?? 1);
+    this.baseAtk = this.atk;
+    this.baseSpeed = this.speed;
     this.radius = this.def.radius * mult.size;
     this.x = x;
     this.z = z;
@@ -323,7 +335,17 @@ export class Monster {
   }
 
   get phase2(): boolean {
-    return this.isBoss && this.hp < this.maxHp * 0.5;
+    return this.isBoss && (this.hp < this.maxHp * 0.5 || this.rage >= 2);
+  }
+
+  /** 주간 시련: 깎인 체력에 맞춰 격노 단계를 올린다 */
+  private updateRage(world: MonsterWorld): void {
+    const r = Math.min(9, Math.floor((1 - this.hp / this.maxHp) * 10));
+    if (r <= this.rage) return;
+    this.rage = r;
+    this.atk = this.baseAtk * (1 + TRIAL_RAGE.atk * r);
+    this.speed = this.baseSpeed * (1 + TRIAL_RAGE.speed * r);
+    world.announce(`${this.name}: 격노 ${r}단계 — 공격 +${Math.round(TRIAL_RAGE.atk * r * 100)}%`);
   }
 
   addTo(scene: Scene): void {
@@ -684,6 +706,7 @@ export class Monster {
 
   update(dt: number, world: MonsterWorld, cameraQuat: Quaternion): void {
     this.t += dt;
+    if (this.trialBoss && this.alive) this.updateRage(world);
     this.hpBar.quaternion.copy(cameraQuat);
 
     // 레이드 기믹: 보호막 + 수호병 소환. 수호병을 모두 쓰러뜨리면 보호막이 깨진다
@@ -869,7 +892,7 @@ export class Monster {
             }
             break;
           }
-          if (this.t > (this.phase2 ? 0.5 : 0.9)) this.beginBossPattern(world, dist, toPlayer);
+          if (this.t > (this.phase2 ? 0.5 : 0.9) * (1 - TRIAL_RAGE.rest * this.rage)) this.beginBossPattern(world, dist, toPlayer);
           else if (dist > 3) {
             move(Math.sin(this.facing) * this.speed * speedMul * dt, Math.cos(this.facing) * this.speed * speedMul * dt);
             moving = true;
@@ -1338,7 +1361,7 @@ export class Monster {
     if (sig) world.announce(`${this.name}: ${sig}`);
     this.lastBasic = false;
     // 패턴 뒤 숨 고르기: 고유 패턴은 길게 (이때가 공격할 틈)
-    this.tired = sig ? (this.phase2 ? 1.3 : 1.8) : this.phase2 ? 0.5 : 0.8;
+    this.tired = (sig ? (this.phase2 ? 1.3 : 1.8) : this.phase2 ? 0.5 : 0.8) * (1 - TRIAL_RAGE.rest * this.rage);
     if (this.signature(world, pattern, toPlayer, speed)) return;
     switch (pattern) {
       case 'slam':

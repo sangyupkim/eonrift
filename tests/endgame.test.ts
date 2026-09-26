@@ -185,27 +185,28 @@ describe('주간 차원 시련', () => {
     expect(weekKey(new Date(2026, 8, 27))).not.toBe(weekKey(new Date(2026, 8, 28)));
     const a = trialSpec('2026-W39');
     expect(trialSpec('2026-W39')).toEqual(a);
-    expect(a.affixes).toHaveLength(2);
     expect(a.tier).toBeGreaterThanOrEqual(1);
   });
-  it('점수와 등급', async () => {
-    const { trialScore, trialGrade } = await import('../src/data/endgame');
-    const fast = trialScore(true, 300, 5, 0, 20, 80);
-    expect(fast.total).toBe(10000 + 600 * 10 + 20 * 25 - 5 * 40);
-    expect(trialScore(true, 300, 30, 2, 5, 80).total).toBeLessThan(fast.total);
-    expect(trialScore(false, 900, 0, 0, 0, 50).total).toBe(1000);
-    expect(trialGrade(5000)).toBe(-1);
-    expect(trialGrade(fast.total)).toBe(3);
+  it('점수와 등급: 깎은 체력 비율, 처치하면 걸린 시간', async () => {
+    const { trialScore, trialGrade, trialScoreText, TRIAL_TIME } = await import('../src/data/endgame');
+    expect(trialScore(0.3752, false, TRIAL_TIME)).toBe(3752);
+    expect(trialScoreText(3752)).toBe('37.52%');
+    expect(trialScore(1, false, 100)).toBe(9999);
+    const fast = trialScore(1, true, 60);
+    const slow = trialScore(1, true, 150);
+    expect(fast).toBeGreaterThan(slow);
+    expect(slow).toBeGreaterThan(9999);
+    expect(trialScoreText(fast)).toBe('처치 1:00');
+    expect(trialGrade(999)).toBe(-1);
+    expect(trialGrade(3752)).toBe(1);
+    expect(trialGrade(slow)).toBe(4);
   });
-  it('시련 중에는 장비·각인과 관계없이 모두 같은 능력치', () => {
-    const a = new Progress(newSave());
-    const b = new Progress(newSave());
-    b.cls.equipment.weapon!.eng = [{ k: 'atk', v: 0.5 }];
-    b.data.research = 10;
-    a.trial = b.trial = true;
-    expect(a.stats()).toEqual(b.stats());
-    expect(a.stats().atk).toBeGreaterThan(new Progress(newSave()).stats().atk * 10);
-    expect(a.ultLevel(0)).toBe(1);
+  it('예전 점수제 기록은 지우고 얻은 오라는 남긴다', async () => {
+    const { rollTrialWeek, newTrial } = await import('../src/data/endgame');
+    const old = { ...newTrial('2026-W39'), v: undefined, best: 17000, topGrade: 3 };
+    const t = rollTrialWeek(old, '2026-W39');
+    expect(t.best).toBe(0);
+    expect(t.topGrade).toBe(3);
   });
   it('주가 바뀌면 기록이 지난 기록으로 넘어가고, 기록 코드는 되읽힌다', async () => {
     const { newTrial, rollTrialWeek, trialCode, readTrialCode } = await import('../src/data/endgame');
