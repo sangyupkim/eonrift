@@ -2,6 +2,7 @@ import type { Rng } from '../core/rng';
 import { TIER_MANA_PLATE, TIER_PLATE } from './items';
 import { CLASS_ORDER, CLASSES, type ClassId } from './classes';
 import type { BonusKey, EngraveLine } from './bonus';
+import { rollSpecials, type SpecialLine } from './special';
 
 export type EquipSlot = 'weapon' | 'helmet' | 'armor' | 'pants' | 'boots' | 'ring' | 'necklace';
 
@@ -30,6 +31,8 @@ export interface Equip {
   eng?: EngraveLine[];
   /** 방어구·장신구 계열 (수호·비전·사냥): 직업에 어울리는 추가 옵션. 어느 직업이나 낄 수 있다 */
   series?: SeriesId;
+  /** 특수 옵션 (유니크 1줄 · 전설 2줄 · 차원 3줄) */
+  sp?: SpecialLine[];
 }
 
 export type SeriesId = 'guard' | 'arcane' | 'hunter';
@@ -161,7 +164,14 @@ export function rollEquip(rng: Rng, tier: number, _cls: ClassId, bonus: number, 
   const grade = rollGrade(rng.next(), bonus, dimChance);
   const slot = rng.next() < 0.3 ? 'weapon' : rng.pick(EQUIP_SLOTS.slice(1));
   const cls = slot === 'weapon' ? rng.pick(CLASS_ORDER) : undefined;
-  return { uid: newUid(), slot, cls, tier, grade, plus: 0, series: rollSeries(slot, rng.next()) };
+  const e: Equip = { uid: newUid(), slot, cls, tier, grade, plus: 0, series: rollSeries(slot, rng.next()) };
+  return withSpecials(e, () => rng.next());
+}
+
+/** 유니크 이상 장비에 특수 옵션이 없으면 붙인다 (드롭·제작·예전 저장) */
+export function withSpecials(e: Equip, rand: () => number = Math.random): Equip {
+  if (e.grade >= GRADE.unique && (e.sp?.length ?? 0) < e.grade - 3) e.sp = rollSpecials({ ...e, sp: undefined }, { next: rand });
+  return e;
 }
 
 export function equipValue(e: Equip): number {

@@ -13,6 +13,7 @@ import {
   rushReward,
   towerFirstClear,
 } from '../data/endgame';
+import { specialPool, specialRange, specialRerollCost, SPECIALS, type SpecialKey } from '../data/special';
 import { enhanceCost, EQUIP_MAX_DUR, EQUIP_SLOTS, GRADES, repairMaterial, SERIES, SERIES_IDS, slotName, type Equip } from '../data/equipment';
 import { PRODUCER_CAP, PRODUCER_LIMIT, PRODUCER_MAX_LEVEL, producerTime } from '../data/factory';
 import { BUILD_ORDER, BUILDINGS, ESSENCE_BOOST, ESSENCE_BURN, FACTORY_SIZES, MAX_BUILDING_LEVEL, OFFLINE_CAP_HOURS, RECIPES, generatorPower, type BuildingType } from '../data/factory';
@@ -78,7 +79,7 @@ const SIGNATURE_TEXT: Record<string, string> = {
 const NPC_ROLE: Record<string, string> = {
   chief: '이야기의 중심. 매일 의뢰 3개(수락한 것만 진행)와 납품 의뢰를 준다.',
   guide: '처음 온 사람을 돕는 안내인. 튜토리얼·메인 퀘스트를 준다.',
-  smith: '대장간: 장비·도구 강화, 수리, 각인(엔딩 뒤).',
+  smith: '대장간: 장비·도구 강화, 수리, 각인·특수 옵션 다시 굴리기(엔딩 뒤).',
   engineer: '마공학자: 공장 건물 도면·강화 도면, 차원집 확장.',
   merchant: '상점: 물약을 사고, 필요 없는 재료·장비를 판다.',
   trainer: '교관: 스킬 배우기·강화, 궁극기 강화(차원 파편).',
@@ -145,6 +146,20 @@ function equipment(): string {
     const c = enhanceCost({ uid: '', slot: 'armor', tier: 1, grade: 0, plus: p })!;
     return [`+${p} → +${p + 1}`, pct(c.rate), `${p >= 5 ? '마력판' : '판'} ×${c.count}`];
   });
+  const spTxt = (k: SpecialKey) => {
+    const [lo, hi] = specialRange(k, 4, 1);
+    const f = (v: number) => (SPECIALS[k].int ? String(Math.round(v)) : String(Math.round(v * 10) / 10));
+    return SPECIALS[k].text(12345.6).replace('12345.6', `${f(lo)}~${f(hi)}`) + (SPECIALS[k].tierScaled ? ' <small class="dim">(단계가 높을수록 큼)</small>' : '');
+  };
+  const spRows: string[][] = [
+    ['검', specialPool('weapon', 'sword').map(spTxt).join('<br>')],
+    ['지팡이', specialPool('weapon', 'mage').map(spTxt).join('<br>')],
+    ['활', specialPool('weapon', 'archer').map(spTxt).join('<br>')],
+    ['방어구 공통', specialPool('helmet').slice(0, 4).map(spTxt).join('<br>')],
+    ...(['helmet', 'armor', 'pants', 'boots'] as const).map((sl) => [`+ ${slotName(sl)}`, specialPool(sl).slice(4).map(spTxt).join('<br>')]),
+    ['장신구 공통', specialPool('ring').slice(0, 4).map(spTxt).join('<br>')],
+    ...(['ring', 'necklace'] as const).map((sl) => [`+ ${slotName(sl)}`, specialPool(sl).slice(4).map(spTxt).join('<br>')]),
+  ];
   return `
   <h3>부위</h3>
   <div class="enc-row">${EQUIP_SLOTS.map((s) => `<span class="enc-slot">${eq({ slot: s, tier: 2, grade: 1, cls: 'sword' })}${slotName(s, 'sword')}</span>`).join('')}</div>
@@ -166,6 +181,10 @@ function equipment(): string {
       `${eq({ slot: 'helmet', tier: 3, grade: 2, series: id })}${eq({ slot: 'armor', tier: 3, grade: 2, series: id })}`,
     );
   }).join('')}
+  <h3>특수 옵션 (유니크 이상)</h3>
+  <p>유니크는 <b>1줄</b>, 전설은 <b>2줄</b>, 차원은 <b>3줄</b>의 특수 옵션이 드롭·제작 때 저절로 붙는다. 한 장비에 같은 옵션은 한 번만. 값은 전설 ×1.2, 차원 ×1.4.</p>
+  ${table(['부위', '붙을 수 있는 옵션 (유니크 기준 범위)'], spRows)}
+  ${tip('엔딩 뒤 대장간에서 특수 옵션을 다시 굴리고, 마음에 드는 줄을 고정할 수 있다 (차원의 끝 항목).')}
   <h3>강화 (대장장이 고른)</h3>
   ${table(['단계', '성공 확률', '재료 (장비 재질)'], enh)}
   <p>+1~+5는 <b>판</b>, +6~+10은 <b>마력판</b>을 쓴다. 실패해도 강화 단계는 떨어지지 않고 재료만 사라진다. 차원 등급은 재료·골드가 세 배.</p>
@@ -337,6 +356,10 @@ function endgame(): string {
   <h3>각인 (대장장이 고른)</h3>
   <p>장비 하나에 1단부터 5단까지 차례로 새긴다. 옵션은 무작위 (${ENGRAVE_OPTS.map((o) => BONUS_NAMES[o.key]).join('·')}), 단계가 높을수록 값이 크다(1단 ×1 → 5단 ×4). 원하는 옵션이 나올 때까지 다시 굴릴 수 있다.</p>
   ${table(['단', '골드', '재료 (새기기·다시 굴리기 같음)'], engRows)}
+  <h3>특수 옵션 다시 굴리기 (대장장이 고른)</h3>
+  <p>유니크 이상 장비의 특수 옵션을 새로 뽑는다. 전설·차원은 마음에 드는 줄에 <b>🔒 고정</b>을 걸면 그 줄은 그대로 두고 나머지만 바뀐다 (적어도 한 줄은 풀어 둬야 함). 고정한 줄마다 골드 ×2.5 · 재료 ×2, ${it('dim_dust')}과 그 단계 마력 금속이 더 든다.</p>
+  ${table(['장비', '고정 없음', '1줄 고정', '2줄 고정'], [4, 5, 6].map((g) => [`${GRADES[g].name} 7단계`, ...[0, 1, 2].map((l) => (l <= g - 4 ? `${specialRerollCost(g, 7, l).gold.toLocaleString()} G<br>${items(specialRerollCost(g, 7, l).items)}` : '-'))]))}
+  ${tip('비용은 장비 단계가 낮을수록 싸다 (골드 단계마다 -20%, 재료는 그 단계 판·판자와 아래 단계 주괴·판자).')}
   <h3>초월 (99레벨 뒤)</h3>
   <p>99레벨이 되면 경험치가 <b>초월 레벨</b>로 쌓이고, 레벨마다 초월 포인트 1점. 포인트를 찍을 때 ${it('dim_shard')}가 든다 (찍은 수가 많을수록 비싸짐: 1~5번째 ${transcendPointCost(0)}개, 6~10번째 ${transcendPointCost(5)}개 …).</p>
   ${table(['능력치', '1점당'], TRANSCEND_STATS.map((t) => [BONUS_NAMES[t.key], bonusText(t.key, t.per)]))}

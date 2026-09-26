@@ -22,6 +22,7 @@ import { ICONS, mico, richText } from './icons';
 import { buildingThumb } from './thumbs';
 import { gearLook } from '../models/items';
 import { equipIconUrl, heroPortraitUrl, itemIconUrl, monsterIconUrl, skillIconUrl, toolIconUrl } from './itemIcons';
+import { rollSpecials, specialRange, specialRerollCost, specialText } from '../data/special';
 import { BESTIARY, BESTIARY_BY_ID, COLLECTION_MILESTONES, isStageMaster, killMilestones, MASTER_ALL_GAIN, milestoneReward, RESEARCH_BONUS, SPECIES_STAT_KILLS, statMilestone, type BestiaryReward } from '../data/bestiary';
 import { DEBUFF_INFO, TRAIT_TEXT, type Faction } from '../data/species';
 import { endLock, AFFIXES, ALLOY, ALLOY2, RIFT_ALLOY2_FROM, riftEntry, rushEntry, formatClock, riftAffixes, riftMult, riftReward, RIFT_ALLOY, RIFT_TIME, rushReward, RUSH_DAILY, RUSH_DIFFS, RUSH_EXTRA_ALLOY, SHARD, DUST, DUST_PER_SHARD, END_NAMES, type EndContent, readTrialCode, trialCode, trialGrade, TRIAL_GRADES, trialSpec, TRIAL_TIME, weekKey, towerBoss, towerDaily, towerFirstClear, towerMult, rushFights, type RushDiff } from '../data/endgame';
@@ -138,6 +139,8 @@ export function equipLine(e: Equip): string {
   }
   // 각인 (망가진 장비는 빈 문자열 그대로 두어 '망가짐'으로 보이게)
   if (parts.length && e.eng?.length) parts.push(`<span class="eng">각인 ${e.eng.map((l) => bonusText(l.k, l.v)).join(', ')}</span>`);
+  // 특수 옵션 (유니크 이상)
+  if (parts.length && e.sp?.length) parts.push(`<span class="spo">${e.sp.map((l) => `◆ ${specialText(l)}`).join(' ')}</span>`);
   return parts.join(' · ');
 }
 
@@ -1944,6 +1947,7 @@ export class Screens {
           <div class="menu"><button class="primary" data-enh ${ok ? '' : 'disabled'}>강화하기</button></div>`;
       }
       detail += this.engraveBlock(p, sel);
+      detail += this.specialBlock(p, sel);
     }
     const s = this.open(
       'forge',
@@ -2004,6 +2008,26 @@ export class Screens {
       onChange();
       again(sel.uid, `<b class="ok">${ENGRAVE_STAGE_NAMES[stage - 1]} 각인: ${bonusText(line.k, line.v)}</b>${old ? ` <span class="dim">(이전: ${bonusText(old.k, old.v)})</span>` : ''}`);
     });
+    this.on(s, '[data-splock]', (b) => {
+      if (!sel) return;
+      const i = Number(b.dataset.splock);
+      const set = this.spLocks.get(sel.uid) ?? new Set<number>();
+      if (set.has(i)) set.delete(i);
+      else if (set.size < (sel.sp?.length ?? 0) - 1) set.add(i);
+      this.spLocks.set(sel.uid, set);
+      again(sel.uid);
+    });
+    this.on(s, '[data-spre]', () => {
+      if (!sel?.sp?.length || !p.flag('endgame')) return;
+      const locked = [...(this.spLocks.get(sel.uid) ?? [])];
+      const cost = specialRerollCost(sel.grade, sel.tier, locked.length);
+      if (p.data.gold < cost.gold || !p.hasAll(cost.items)) return;
+      p.data.gold -= cost.gold;
+      p.takeAll(cost.items);
+      sel.sp = rollSpecials(sel, new Rng((Math.random() * 2 ** 32) >>> 0), locked);
+      onChange();
+      again(sel.uid, `<b class="ok">특수 옵션: ${sel.sp.map((l, i) => (locked.includes(i) ? `<span class="dim">${specialText(l)}</span>` : specialText(l))).join(' / ')}</b>`);
+    });
     this.on(s, '[data-enh]', () => {
       if (!sel) return;
       const cost = enhanceCost(sel)!;
@@ -2015,6 +2039,34 @@ export class Screens {
       onChange();
       again(sel.uid, success ? `<b class="ok">강화 성공! +${sel.plus}</b>` : '<b class="bad">강화 실패…</b>');
     });
+  }
+
+  /** 대장간 특수 옵션 고정 (장비 uid → 고정한 줄 번호) */
+  private spLocks = new Map<string, Set<number>>();
+
+  /** 대장간: 특수 옵션 보기와 다시 굴리기 (다시 굴리기는 엔딩 뒤). 줄을 고정하면 비용이 크게 오른다 */
+  private specialBlock(p: Progress, e: Equip): string {
+    if (!e.sp?.length) return '';
+    const locks = this.spLocks.get(e.uid) ?? new Set<number>();
+    const canLock = e.sp.length > 1;
+    const rows = e.sp
+      .map((l, i) => {
+        const [lo, hi] = specialRange(l.k, e.grade, e.tier);
+        const pctIn = hi > lo ? Math.round(((l.v - lo) / (hi - lo)) * 100) : 100;
+        const on = locks.has(i);
+        const lockBtn = canLock && p.flag('endgame') ? `<button class="sp-lock ${on ? 'on' : ''}" data-splock="${i}" ${!on && locks.size >= e.sp!.length - 1 ? 'disabled' : ''}>${on ? '🔒 고정' : '🔓'}</button>` : '';
+        return `<div class="eng-line"><span class="stage">◆</span><b>${specialText(l)}</b><small class="dim">(범위 안 ${Math.max(0, Math.min(100, pctIn))}%)</small>${lockBtn}</div>`;
+      })
+      .join('');
+    let reroll = '';
+    if (p.flag('endgame')) {
+      const c = specialRerollCost(e.grade, e.tier, locks.size);
+      const ok = p.data.gold >= c.gold && p.hasAll(c.items);
+      const items = Object.entries(c.items).map(([id, n]) => `<span class="${p.count(id) >= n ? '' : 'bad'}">${inlineGem(id)}${ITEMS[id].name} ${p.count(id)}/${n}</span>`).join(' · ');
+      reroll = `<div class="eng-line"><small class="dim"><span class="${p.data.gold >= c.gold ? '' : 'bad'}">${c.gold.toLocaleString()} G</span> · ${items}</small></div>
+        <div class="menu"><button class="primary" data-spre ${ok ? '' : 'disabled'}>특수 옵션 다시 굴리기${locks.size ? ` (${locks.size}줄 고정)` : ''}</button></div>`;
+    } else reroll = '<p class="hint">특수 옵션 다시 굴리기는 이야기를 모두 끝낸 뒤 열립니다.</p>';
+    return `<h3>${SPK('anvil', '⚒')} 특수 옵션</h3>${rows}${reroll}`;
   }
 
   /** 대장간: 각인 (엔딩 뒤). 1단부터 차례로 새기고, 새긴 줄은 같은 비용으로 몇 번이든 다시 굴릴 수 있다 */

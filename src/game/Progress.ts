@@ -1,5 +1,6 @@
 import { CLASSES, CLASS_ORDER, ULTIMATES, expToNext, MAX_LEVEL, POINTS_PER_LEVEL, STAT_KEYS, type BaseStats, type ClassId, type StatKey } from '../data/classes';
-import { durability, equipStats, seriesBonus, type Equip, type EquipSlot } from '../data/equipment';
+import { durability, equipStats, seriesBonus, withSpecials, type Equip, type EquipSlot } from '../data/equipment';
+import { specialBonus, specialStats, sumSpecials, type SpecialTotals } from '../data/special';
 import { newTool, type ToolKind, type ToolState } from '../data/tools';
 import { FACTORY_SIZES, RECIPES, RECIPE_RENAMES } from '../data/factory';
 import { ITEM_RENAMES, TIER_PLANK, TIER_PLATE } from '../data/items';
@@ -339,6 +340,10 @@ function migrate(d: SaveData & { maxTier?: number }): SaveData {
   }
   d.inventory ??= Array.from({ length: BAG_SLOTS }, () => null);
   for (const s of d.inventory) if (s && !s.equip) s.itemId = re(s.itemId);
+  // 특수 옵션이 생기기 전의 유니크 이상 장비에도 붙여 준다
+  for (const c of Object.values(d.classes)) for (const e of Object.values(c.equipment)) if (e) withSpecials(e);
+  d.equips.forEach((e) => withSpecials(e));
+  for (const s of [...d.inventory, ...d.dimBag]) if (s?.equip) withSpecials(s.equip);
   return d;
 }
 
@@ -418,7 +423,9 @@ export class Progress {
     const b = zeroStats();
     // 도감 영구 능력치 (시련에서는 없음)
     const bst = this.trial ? null : this.bestiaryStats;
-    for (const k of STAT_KEYS) b[k] = def.baseStats[k] + c.alloc[k] + (bst?.[k] ?? 0);
+    // 장신구 특수 옵션의 능력치 (시련에서는 없음)
+    const sst = this.trial ? null : specialStats(this.specials(clsId));
+    for (const k of STAT_KEYS) b[k] = def.baseStats[k] + c.alloc[k] + (bst?.[k] ?? 0) + (sst?.[k] ?? 0);
     const lv = c.level - 1;
     const main = def.damage === 'physical' ? b.str : b.int;
     const s: Stats = {
@@ -457,6 +464,13 @@ export class Progress {
     return s;
   }
 
+  /** 착용한 장비의 특수 옵션 합계 (망가진 장비·시련은 없음) */
+  specials(clsId: ClassId = this.data.currentClass): SpecialTotals {
+    if (this.trial) return {};
+    const lines = Object.values(this.data.classes[clsId].equipment).flatMap((e) => (e && durability(e) > 0 ? (e.sp ?? []) : []));
+    return sumSpecials(lines);
+  }
+
   /** 각인·칭호·초월·음식 보너스 합계 (한도 적용) */
   bonuses(clsId: ClassId = this.data.currentClass): Bonus {
     const c = this.data.classes[clsId];
@@ -465,6 +479,8 @@ export class Progress {
     for (const e of Object.values(c.equipment)) if (e && durability(e) > 0) for (const l of e.eng ?? []) addBonus(b, { [l.k]: l.v });
     // 방어구·장신구 계열 옵션 (수호·비전·사냥)
     for (const e of Object.values(c.equipment)) if (e) addBonus(b, seriesBonus(e));
+    // 특수 옵션 중 % 능력치 (체력·방어·공격 속도 …)
+    addBonus(b, specialBonus(this.specials(clsId)));
     for (const t of TITLES) if (this.data.titles?.includes(t.id)) addBonus(b, t.bonus);
     for (const ts of TRANSCEND_STATS) addBonus(b, { [ts.key]: ts.per }, c.tpts?.[ts.key] ?? 0);
     const food = this.data.food;

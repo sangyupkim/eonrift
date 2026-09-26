@@ -19,7 +19,7 @@ export interface ActionSpec {
   tool?: 'pickaxe' | 'axe';
 }
 
-export type BuffId = 'ironwall' | 'block' | 'warcry' | 'manashield' | 'focus' | 'windwalk' | 'smoke' | 'hunter' | DebuffId;
+export type BuffId = 'ironwall' | 'block' | 'warcry' | 'manashield' | 'focus' | 'windwalk' | 'smoke' | 'hunter' | 'haste' | 'swift' | DebuffId;
 export interface Buff {
   id: BuffId;
   name: string;
@@ -74,6 +74,8 @@ export class Player {
   moveBonus = 0;
   /** 전투 중에도 차는 MP (초당 최대 MP 비율, 비전 장비) */
   mpRegenBonus = 0;
+  /** 특수 옵션: 초당 최대 체력의 몇 배 재생 */
+  hpRegenBonus = 0;
   private walkPhase = 0;
   private time = 0;
   private action: (ActionSpec & { t: number; done: boolean }) | null = null;
@@ -332,6 +334,7 @@ export class Player {
     this.combatT += dt;
     if (this.combatT >= MP_REGEN_DELAY) this.mp = Math.min(this.maxMp, this.mp + dt * (2 + this.maxMp * 0.02));
     else if (this.mpRegenBonus > 0) this.mp = Math.min(this.maxMp, this.mp + dt * this.maxMp * this.mpRegenBonus);
+    if (this.hpRegenBonus > 0 && this.state !== 'dead' && this.hp > 0) this.hp = Math.min(this.maxHp, this.hp + dt * this.maxHp * this.hpRegenBonus);
 
     const d = Player.worldDir(ctx.move);
     const mag = Math.min(1, Math.hypot(ctx.move.x, ctx.move.y));
@@ -376,7 +379,7 @@ export class Player {
       this.rig.body.rotation.z = Math.sin(this.time * 9) * 0.12;
     } else {
       this.rig.body.rotation.z = 0;
-      const targetSpeed = mag > 0.12 ? PLAYER.walkSpeed * (1 + this.moveBonus) * mag * (this.buff('windwalk') ? 1.4 : 1) * (this.buff('slow') ? 0.6 : 1) : 0;
+      const targetSpeed = mag > 0.12 ? PLAYER.walkSpeed * (1 + this.moveBonus) * mag * (this.buff('windwalk') ? 1.4 : 1) * (this.buff('swift') ? 1.2 : 1) * (this.buff('slow') ? 0.6 : 1) : 0;
       this.speed += (targetSpeed - this.speed) * Math.min(1, dt * 14);
       if (mag > 0.12) {
         this.facing = lerpAngle(this.facing, Math.atan2(d.x, d.z), Math.min(1, dt * 16));

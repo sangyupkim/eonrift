@@ -1,6 +1,6 @@
 import { CLASS_ORDER, MAX_LEVEL, POINTS_PER_LEVEL, CLASSES, type ClassId } from '../data/classes';
 import { newEndgame } from '../data/endgame';
-import { EQUIP_SLOTS, type Equip } from '../data/equipment';
+import { EQUIP_SLOTS, withSpecials, type Equip } from '../data/equipment';
 import { BUILDINGS, FACTORY_SIZES, MAX_BUILDING_LEVEL, UPGRADABLE } from '../data/factory';
 import { ESSENCE_TIERS, ORE_TIERS, TIER_MANA_METAL, TIER_MANA_PLANK, TIER_MANA_PLATE, TIER_PLANK, TIER_PLATE, WOOD_TIERS } from '../data/items';
 import { MAIN_QUESTS } from '../data/quests';
@@ -16,7 +16,7 @@ export function makeTestSave(): SaveData {
   let n = 0;
   const gear = (cls: ClassId): Partial<Record<Equip['slot'], Equip>> => {
     const out: Partial<Record<Equip['slot'], Equip>> = {};
-    for (const slot of EQUIP_SLOTS) out[slot] = { uid: `test-${cls}-${slot}-${n++}`, slot, cls: slot === 'weapon' ? cls : undefined, tier: 7, grade: 6, plus: 10 };
+    for (const slot of EQUIP_SLOTS) out[slot] = withSpecials({ uid: `test-${cls}-${slot}-${n++}`, slot, cls: slot === 'weapon' ? cls : undefined, tier: 7, grade: 6, plus: 10 });
     return out;
   };
   for (const id of CLASS_ORDER) {

@@ -12,7 +12,7 @@ import { Input } from '../core/input';
 import { Rng, randomSeed } from '../core/rng';
 import { CLASSES, CLASS_ORDER, expToNext, MAX_SKILL_LEVEL, SKILL_LEARN, skillUpgradeCost, ULTIMATES, type ClassId } from '../data/classes';
 import { ultUpgradeCost } from '../data/ultUpgrade';
-import { durability, equipName, GRADE, GRADES, newUid, rollEquip, rollSeries, type Equip } from '../data/equipment';
+import { durability, equipName, GRADE, GRADES, newUid, rollEquip, rollSeries, withSpecials, type Equip } from '../data/equipment';
 import { rollManaGrade } from '../data/crafting';
 import { BUILDINGS, FACTORY_SIZES, OFFLINE_CAP_HOURS, PRODUCER_LIMIT, PRODUCER_TYPES, PRODUCER_UNLOCK, type BuildingType, type ProducerType, upgradeBlueprintCost } from '../data/factory';
 import { essenceForTier, ITEMS, TIER_PLATE, ORE_TIERS, TIER_MANA_PLATE } from '../data/items';
@@ -29,6 +29,7 @@ import { formatWait, hex, Screens, workJobEquip, workJobIconUrl } from '../ui/sc
 import { Bag } from './Bag';
 import { Combat } from './Combat';
 import type { Monster } from './Monster';
+import type { SpecialTotals } from '../data/special';
 import { Player } from './Player';
 import { DIM_BAG_MAX, deleteSave, hasSave, loadSave, newSave, Progress, useTestSlot, stageIndex, stageOf, type SaveData, type Stats, type RunCheckpoint } from './Progress';
 import { objectiveNeed, objectiveProgress, Quests } from './Quests';
@@ -795,6 +796,7 @@ export class Game {
       st.crit += 30;
     }
     if (pl.buff('ironwall')) st.def = Math.round(st.def * 1.6);
+    if (pl.buff('haste')) st.speed *= 1.2;
     st.atk = Math.round(st.atk * atk);
     return st;
   }
@@ -811,6 +813,7 @@ export class Game {
     // 장비 모습이 바뀌면 플레이어를 새로 만들므로 그 뒤에 넣는다
     this.player.moveBonus = this.progress.bonus('move');
     this.player.mpRegenBonus = this.progress.bonus('mpRegen');
+    this.player.hpRegenBonus = (this.progress.specials().regen ?? 0) / 100;
   }
 
   private gearKey = '';
@@ -1575,15 +1578,46 @@ export class Game {
       return;
     }
     const st = this.buffedStats();
+    const sp = this.progress.specials();
     const crit = Math.random() * 100 < st.crit;
-    const raw = st.atk * mult * (0.9 + Math.random() * 0.2) * (crit ? 1.6 : 1);
+    // 특수 옵션: 치명타 피해 · 보스 피해 · 마무리(체력 30% 이하)
+    let spMult = 1;
+    if (sp.bossDmg && (m.kind === 'boss' || m.kind === 'midboss')) spMult *= 1 + sp.bossDmg / 100;
+    if (sp.execute && m.hp < m.maxHp * 0.3) spMult *= 1 + sp.execute / 100;
+    const raw = st.atk * mult * spMult * (0.9 + Math.random() * 0.2) * (crit ? 1.6 + (sp.critDmg ?? 0) / 100 : 1);
     const dmg = Math.max(1, Math.round(raw * (40 / (40 + m.defense))));
-    const killed = m.damage(dmg, fx, fz, knock);
+    let killed = m.damage(dmg, fx, fz, knock);
     const s = this.toScreen(m.x, m.rig.height * m.rig.root.scale.y + 0.3, m.z);
     this.hud.floatText(s.x, s.y, String(dmg), crit ? '#ffd23a' : '#ffffff', crit ? 'crit' : 'normal');
     this.level.particles.burst(m.x, 0.8, m.z, 0xffffff, crit ? 8 : 4, 0.8);
     this.audio.play(crit ? 'crit' : 'hit');
+    if (!this.progress.trial) killed = this.onHitSpecials(m, dmg, sp, s, killed, fx, fz);
     if (killed) this.monsterKilled(m);
+  }
+
+  /** 특수 옵션: 적중 시 효과. 추가 타격으로 쓰러뜨리면 true */
+  private onHitSpecials(m: Monster, dmg: number, sp: SpecialTotals, s: { x: number; y: number }, killed: boolean, fx: number, fz: number): boolean {
+    const pl = this.player;
+    const chance = (v?: number) => !!v && Math.random() * 100 < v;
+    if (sp.lifesteal && pl.hp < pl.maxHp) pl.hp = Math.min(pl.maxHp, pl.hp + Math.min(dmg * sp.lifesteal / 100, pl.maxHp * 0.03));
+    if (sp.mpOnHit) pl.mp = Math.min(pl.maxMp, pl.mp + pl.maxMp * sp.mpOnHit / 100);
+    if (chance(sp.cdOnHit)) {
+      const cds = this.combat.cooldowns;
+      for (let i = 0; i < cds.length; i++) cds[i] = Math.max(0, cds[i] - 0.6);
+    }
+    if (chance(sp.hasteOnHit) && !pl.buff('haste')) pl.addBuff('haste', '신속', 4);
+    if (chance(sp.swiftOnHit) && !pl.buff('swift')) pl.addBuff('swift', '질풍', 3);
+    if (!killed && m.alive && chance(sp.double)) {
+      killed = m.damage(dmg, fx, fz, 0);
+      this.hud.floatText(s.x + 18, s.y - 14, `연타 ${dmg}`, '#ffe9a0', 'small');
+    }
+    if (!killed && m.alive && chance(sp.arcBurst)) {
+      const extra = Math.max(1, Math.round(dmg * 0.6));
+      killed = m.damage(extra, fx, fz, 0);
+      this.hud.floatText(s.x - 18, s.y - 14, `폭발 ${extra}`, '#c89aff', 'small');
+      this.level.effects.ring(m.x, m.z, 1.2, 0xc89aff, 0.3);
+    }
+    return killed;
   }
 
   /** 플레이어가 맞는다. 실제로 들어간 피해를 돌려준다. dot: 독 웅덩이처럼 무적 시간 없이 조금씩 */
@@ -1630,7 +1664,16 @@ export class Game {
       this.hud.floatText(head.x, head.y, '회피', '#c8ffb0', 'small');
       return 0;
     }
+    // 특수 옵션: 흘려 피하기 · 받는 피해 감소 · 위기 때 피해 감소
+    const hsp = this.progress.specials();
+    if (hsp.dodge && Math.random() * 100 < hsp.dodge) {
+      pl.invulnFor(0.2);
+      this.hud.floatText(head.x, head.y, '회피', '#c8ffb0', 'small');
+      return 0;
+    }
     let final = Math.max(1, Math.round(dmg * (0.9 + Math.random() * 0.2) * (this.defK() / (this.defK() + st.def))));
+    if (hsp.dmgReduce) final = Math.max(1, Math.round(final * (1 - hsp.dmgReduce / 100)));
+    if (hsp.lowGuard && pl.hp < pl.maxHp * 0.35) final = Math.max(1, Math.round(final * (1 - hsp.lowGuard / 100)));
     if (pl.buff('ironwall')) final = Math.max(1, Math.round(final * 0.6));
     if (pl.buff('smoke')) final = Math.max(1, Math.round(final * 0.5));
     // 마나 실드: 피해의 60%를 MP로 받는다 (MP가 모자라면 남은 만큼만)
@@ -1646,6 +1689,10 @@ export class Game {
     }
     pl.hurt(final);
     this.gathering = null;
+    if (hsp.hitHeal && pl.hp > 0 && Math.random() * 100 < hsp.hitHeal) {
+      pl.hp = Math.min(pl.maxHp, pl.hp + pl.maxHp * 0.04);
+      this.hud.floatText(head.x - 24, head.y, '회복', '#8aff9a', 'small');
+    }
     // 맞을 때마다 가끔 방어구 하나가 닳는다
     if (Math.random() < 0.25) {
       const armor = (['helmet', 'armor', 'pants', 'boots'] as const).map((k) => this.progress.cls.equipment[k]).filter((e): e is Equip => !!e && durability(e) > 0);
@@ -1744,6 +1791,10 @@ export class Game {
   }
 
   private monsterKilled(m: Monster): void {
+    // 특수 옵션: 처치 시 회복
+    const ksp = this.progress.specials();
+    if (ksp.killHeal) this.player.hp = Math.min(this.player.maxHp, this.player.hp + this.player.maxHp * ksp.killHeal / 100);
+    if (ksp.killMp) this.player.mp = Math.min(this.player.maxMp, this.player.mp + this.player.maxMp * ksp.killMp / 100);
     const run = this.run;
     if (!run || !(this.level instanceof DungeonScene)) return;
     // 엔드 콘텐츠는 7단계 전리품 (균열은 맵의 자원만 그 단계)
@@ -2239,6 +2290,7 @@ export class Game {
         } else if (j.kind === 'equip') {
           const e: Equip = { ...workJobEquip(j), uid: newUid(), grade: j.mana ? rollManaGrade(Math.random()) : 0 };
           e.series = rollSeries(e.slot, Math.random());
+          withSpecials(e);
           p.data.equips.push(e);
           this.hud.toast(`제작대: ${j.mana ? `:sparkle: [${GRADES[e.grade].name}] ` : ''}${equipName(e)} 완성! (창고)`);
         }
