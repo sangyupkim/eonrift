@@ -98,6 +98,17 @@ export function expScale(tier: number, stage: number): number {
   return g < 10 ? 1 + (g - 1) * 0.15 : 2.35 * Math.pow(g / 10, 1.6);
 }
 
+/**
+ * 레벨에 비해 낮은 단계에서 사냥할 때 경험치 배율 (10레벨 단위).
+ * 단계 T의 적정 레벨은 ~10T+9. 그보다 10레벨 위부터 50% → 25% → 10%. 7단계(마지막 단계)는 줄지 않는다
+ */
+export const LOW_STAGE_EXP = [1, 0.5, 0.25, 0.1];
+export function lowStageExpMult(level: number, tier: number): number {
+  if (tier >= 7) return 1;
+  const gap = Math.floor((level - 10 * tier) / 10);
+  return LOW_STAGE_EXP[Math.min(LOW_STAGE_EXP.length - 1, Math.max(0, gap))];
+}
+
 /** 골드 배율 (진행도 기준) */
 export function goldScale(tier: number, stage: number): number {
   const g = progressIndex(tier, stage);

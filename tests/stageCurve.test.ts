@@ -17,3 +17,16 @@ describe('stage progression', () => {
     expect(expScale(3, 1)).toBeGreaterThan(expScale(1, 9) * 3);
   });
 });
+
+describe('low-stage exp penalty', () => {
+  it('drops in 10-level steps above the stage band, never at tier 7', async () => {
+    const { lowStageExpMult } = await import('../src/data/monsters');
+    expect(lowStageExpMult(12, 1)).toBe(1);
+    expect(lowStageExpMult(19, 1)).toBe(1);
+    expect(lowStageExpMult(20, 1)).toBe(0.5);
+    expect(lowStageExpMult(30, 1)).toBe(0.25);
+    expect(lowStageExpMult(60, 1)).toBe(0.1);
+    expect(lowStageExpMult(23, 3)).toBe(1);
+    expect(lowStageExpMult(99, 7)).toBe(1);
+  });
+});

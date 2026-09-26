@@ -2,7 +2,7 @@ import { bustUrl, itemIconUrl, skillIconUrl } from '../ui/itemIcons';
 import { decodeSave, encodeSave } from './saveCode';
 import { makeTestSave } from './testSave';
 import { gearLook } from '../models/items';
-import { BOSS_RESPAWN_MS, BOSS_TIME_LIMIT, FARM_COOLDOWN_MS, FARM_NAMES, goldScale, playerDefK } from '../data/monsters';
+import { BOSS_RESPAWN_MS, BOSS_TIME_LIMIT, FARM_COOLDOWN_MS, FARM_NAMES, goldScale, lowStageExpMult, playerDefK } from '../data/monsters';
 import { DEBUFF_INFO, type DebuffId, type DebuffSpec } from '../data/species';
 import { newTool, TOOL_KIND_NAMES, TOOL_TIER_NAMES, toolBonusChance, toolName, toolSpeed, toolWear, type ToolKind } from '../data/tools';
 import { MeshLambertMaterial, OrthographicCamera, PCFShadowMap, Plane, Raycaster, Vector2, Vector3, WebGLRenderer } from 'three';
@@ -1780,7 +1780,8 @@ export class Game {
     const weapon = this.progress.cls.equipment.weapon;
     if (weapon && durability(weapon) > 0 && Math.random() < 0.12) this.wearEquip(weapon);
 
-    const exp = Math.round(m.exp);
+    // 레벨에 비해 낮은 단계에서는 경험치가 줄어든다 (엔드 콘텐츠는 그대로)
+    const exp = Math.max(1, Math.round(m.exp * (run.end ? 1 : lowStageExpMult(this.progress.cls.level, run.tier))));
     run.exp += exp;
     this.gainExp(exp);
 
