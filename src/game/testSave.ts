@@ -53,10 +53,7 @@ export function makeTestSave(): SaveData {
     // v10
     eon_mark: 500,
     relic_shard: 60,
-    set_breaker: 20,
-    set_guard: 20,
-    set_swift: 20,
-    set_pact: 20,
+    set_blueprint: 40,
   });
   d.storage = st;
   const flags = ['intro', 'returned', 'home', 'factoryBuilt', 'tool_pickaxe', 'tool_axe', 'legend', 'endgame', 'endingA', 'smith3', 'resonatorHint', 'stone1Talk', 'stoneTalk3', 'stoneTalk4', 'stoneTalk5', 'stoneTalk6', 'stoneTalk7', 'ch8'];

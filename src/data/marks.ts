@@ -17,10 +17,8 @@ export interface ExchangeOffer {
 export const EXCHANGE: ExchangeOffer[] = [
   { item: 'relic_shard', n: 1, cost: 5, note: '노아에게 5개 → 무작위 유물' },
   { item: 'relic_shard', n: 10, cost: 45, note: '10개 묶음 (10% 할인)' },
-  { item: 'set_breaker', n: 1, cost: 12, note: '「균열 파괴자」 세트 (공격)' },
-  { item: 'set_guard', n: 1, cost: 12, note: '「영겁 수호」 세트 (방어)' },
-  { item: 'set_swift', n: 1, cost: 12, note: '「차원 질주」 세트 (속도)' },
-  { item: 'set_pact', n: 1, cost: 12, note: '「계약의 서약」 세트 (소환)' },
+  { item: 'set_blueprint', n: 1, cost: 12, note: '제작대 세트 탭 → 직업·부위를 골라 세트 장비 (세트는 무작위)' },
+  { item: 'set_blueprint', n: 5, cost: 55, note: '5장 묶음' },
   { item: 'dim_shard', n: 3, cost: 4, note: '궁극기·각인·초월 재료' },
 ];
 

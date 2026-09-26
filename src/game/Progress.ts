@@ -3,7 +3,7 @@ import { durability, equipStats, seriesBonus, withSpecials, type Equip, type Equ
 import type { AwakenBranch } from '../data/awaken';
 import type { FarmKind } from '../dungeon/generator';
 import { specialBonus, specialStats, sumSpecials, type SpecialTotals } from '../data/special';
-import { setCounts, setLines } from '../data/sets';
+import { OLD_SET_TOKENS, SET_TOKEN, SETS, setCounts, setLines } from '../data/sets';
 import type { Relic } from '../data/relics';
 import { newAch, type AchCounter, type AchState } from '../data/achievements';
 import { newTool, type ToolKind, type ToolState } from '../data/tools';
@@ -240,6 +240,32 @@ const slotsOf = (r: Record<string, number>) => Object.values(r).reduce((a, n) =>
 /** 예전 저장 파일을 지금 구조로 바꾼다 */
 function migrate(d: SaveData & { maxTier?: number }): SaveData {
   // v10: 차원 소환사 칸이 없던 저장
+  // v10.1: 예전 공용 세트(문장 4종·세트 4종)를 직업별 세트로 바꿨다 → 문장은 설계도로, 예전 세트 장비는 설계도로 돌려준다
+  const reToken = (r: Record<string, number> | undefined) => {
+    if (!r) return;
+    for (const id of OLD_SET_TOKENS)
+      if (r[id]) {
+        r[SET_TOKEN] = (r[SET_TOKEN] ?? 0) + r[id];
+        delete r[id];
+      }
+  };
+  reToken(d.storage);
+  reToken(d.homeStorage);
+  for (const s of [...(d.inventory ?? []), ...(d.dimBag ?? [])]) if (s && !s.equip && OLD_SET_TOKENS.includes(s.itemId)) s.itemId = SET_TOKEN;
+  const oldSet = (e?: Equip) => !!e?.set && !SETS[e.set];
+  let refund = 0;
+  d.equips = d.equips.filter((e) => (oldSet(e) ? (refund++, false) : true));
+  for (const c of Object.values(d.classes)) for (const [k, e] of Object.entries(c.equipment)) if (oldSet(e)) {
+    refund++;
+    delete (c.equipment as Record<string, Equip | undefined>)[k];
+  }
+  for (const bag of [d.inventory ?? [], d.dimBag ?? []]) bag.forEach((s, i) => {
+    if (s?.equip && oldSet(s.equip)) {
+      refund++;
+      bag[i] = null;
+    }
+  });
+  if (refund) d.storage[SET_TOKEN] = (d.storage[SET_TOKEN] ?? 0) + refund * 3;
   d.classes.summoner ??= { level: 1, exp: 0, equipment: { weapon: starterWeapon('summoner') }, alloc: zeroStats(), points: 0, skills: [1, 0, 0, 0, 0, 0], quick: [0, -1, -1] };
   const fixSlot = (e: Equip) => {
     if ((e.slot as string) === 'accessory') e.slot = 'ring';
@@ -840,6 +866,8 @@ export class Progress {
 
   /** 지금 직업이 낄 수 있는 장비인지 */
   canEquip(e: Equip): boolean {
+    // 세트 장비는 그 직업만 (방어구·장신구도)
+    if (e.set && SETS[e.set]) return SETS[e.set].cls === this.data.currentClass && (e.slot !== 'weapon' || e.cls === this.data.currentClass);
     return e.slot !== 'weapon' || e.cls === this.data.currentClass;
   }
 

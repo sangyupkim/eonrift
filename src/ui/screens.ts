@@ -37,7 +37,7 @@ import { mathRng, Rng } from '../core/rng';
 import { EXCHANGE, MARK } from '../data/marks';
 import { ACHIEVEMENTS, type AchCtx } from '../data/achievements';
 import { RELIC_BY_ID, RELIC_CRAFT_GOLD, RELIC_CRAFT_SHARDS, RELIC_GRADES, RELIC_MAX, RELIC_SLOTS, relicName, relicRange, rollRelic, type Relic } from '../data/relics';
-import { rollSetGrade, SET_IDS, SETS, setCounts, setCraftCost, synthCost, SYNTH_COUNT, SYNTH_MIN_GRADE, type SetId } from '../data/sets';
+import { rollClassSet, rollSetGrade, SET_PIECES, SET_TYPE_NAMES, SETS, setCraftCost, setsOf, type SetId } from '../data/sets';
 import { newUid, withSpecials } from '../data/equipment';
 import { TRIAL_RAGE, vaultPileGold, type Archetype } from '../data/monsters';
 
@@ -152,7 +152,7 @@ export function equipLine(e: Equip): string {
   const base = equipBase(e);
   if (!base) return '';
   const tags = [base];
-  if (e.set) tags.push(`<span class="ser" style="color:${hex(SETS[e.set].color)}">◈${SETS[e.set].name}</span>`);
+  if (e.set && SETS[e.set]) tags.push(`<span class="ser" style="color:${hex(SETS[e.set].color)}">◈${SETS[e.set].name}</span>`);
   if (e.series) tags.push(`<span class="ser" style="color:${hex(SERIES[e.series].color)}">${SERIES[e.series].name}</span>`);
   if (e.eng?.length) tags.push(`<span class="eng">각인 ${e.eng.length}</span>`);
   if (e.sp?.length) tags.push(`<span class="spo">◆특수 ${e.sp.length}</span>`);
@@ -164,9 +164,9 @@ export function equipDetail(e: Equip): string {
   const base = equipBase(e);
   if (!base) return '<span class="bad">망가짐 — 대장간에서 수리하세요</span>';
   const lines = [`<div class="opt-base">${base}</div>`];
-  if (e.set) {
+  if (e.set && SETS[e.set]) {
     const st = SETS[e.set];
-    lines.push(`<div class="opt ser" style="color:${hex(st.color)}">◈ 세트 「${st.name}」 (${st.role}) · 능력치 ×1.4</div>`);
+    lines.push(`<div class="opt ser" style="color:${hex(st.color)}">◈ ${CLASSES[st.cls].name} ${SET_TYPE_NAMES[st.type]} 세트 「${st.name}」 · ${CLASSES[st.cls].name} 전용</div>`);
     for (const t of st.tiers) lines.push(`<div class="opt ser" style="color:${hex(st.color)};opacity:.8">&nbsp;&nbsp;${t.n}세트: ${t.lines.map(specialText).join(', ')}</div>`);
   }
   if (e.series) {
@@ -2269,14 +2269,12 @@ export class Screens {
       `<div class="panel wide tall">
          <button class="close">${ICONS.close}</button>
          <h2>대장장이 고른의 대장간 <small class="gold">${p.data.gold.toLocaleString()} G</small></h2>
-         ${p.flag('endgame') ? '<div class="tabs"><button class="on">강화·각인·특수 옵션</button><button data-forge-sets>◈ 세트 장비</button></div>' : ''}
          ${message ? `<div class="notice">${message}</div>` : ''}
          <div class="split"><ul class="list pick scroll">${toolRows}${list || '<li class="empty">장비 없음</li>'}</ul><div class="detail">${detail}</div></div>
        </div>`,
       onClose,
     );
     const again = (id?: string, msg?: string) => this.forge(p, onChange, onClose, id, msg);
-    this.on(s, '[data-forge-sets]', () => this.setForge(p, onChange, onClose));
     this.on(s, '[data-pick]', (el) => again(el.dataset.pick));
     this.on(s, '[data-repair-tool]', (b) => {
       const k = b.dataset.repairTool as 'pickaxe' | 'axe';
@@ -2355,92 +2353,6 @@ export class Screens {
       if (success) sel.plus++;
       onChange();
       again(sel.uid, success ? `<b class="ok">강화 성공! +${sel.plus}</b>` : '<b class="bad">강화 실패…</b>');
-    });
-  }
-
-  // ---------------- v10: 세트 장비 (대장간) ----------------
-  /** 세트 제작(문장) · 세트 합성(유니크 이상 3개) */
-  setForge(p: Progress, onChange: () => void, onClose: () => void, message?: string, pick: { set: SetId; slot: EquipSlot } = { set: 'breaker', slot: 'helmet' }, synthSlot: EquipSlot = 'helmet'): void {
-    const again = (msg?: string, pk = pick, ss = synthSlot) => this.setForge(p, onChange, onClose, msg, pk, ss);
-    const worn = Object.values(p.cls.equipment).filter(Boolean) as Equip[];
-    const counts = setCounts(worn);
-    const cur = SET_IDS.filter((id) => (counts[id] ?? 0) > 0)
-      .map((id) => {
-        const n = counts[id]!;
-        const st = SETS[id];
-        return `<div class="opt ser" style="color:${hex(st.color)}">◈ ${st.name} ${n}부위 — ${st.tiers.map((t) => `<span class="${n >= t.n ? 'ok' : 'dim'}">${t.n}세트 ${t.lines.map(specialText).join(', ')}</span>`).join(' · ')}</div>`;
-      })
-      .join('');
-    const setBtns = SET_IDS.map((id) => `<button class="chip ${pick.set === id ? 'on' : ''}" data-sset="${id}" style="--c:${hex(SETS[id].color)}">${SETS[id].name} <small>${SETS[id].role}</small></button>`).join('');
-    const slotBtns = EQUIP_SLOTS.map((sl) => `<button class="chip ${pick.slot === sl ? 'on' : ''}" data-sslot="${sl}">${slotName(sl, p.data.currentClass)}</button>`).join('');
-    const st = SETS[pick.set];
-    const cost = setCraftCost(pick.set, pick.slot);
-    const costTxt = (c: { gold: number; items: Record<string, number> }) =>
-      `<span class="${p.data.gold >= c.gold ? '' : 'bad'}">${c.gold.toLocaleString()} G</span> · ${Object.entries(c.items)
-        .map(([id, n]) => `<span class="${p.count(id) >= n ? '' : 'bad'}">${inlineGem(id)}${ITEMS[id].name} ${p.count(id)}/${n}</span>`)
-        .join(' · ')}`;
-    const canCraft = p.data.gold >= cost.gold && p.hasAll(cost.items);
-    // 합성 재료: 창고의 7단계 유니크 이상 (세트 아님), 같은 부위. 무기는 지금 직업의 것
-    const synthPool = (sl: EquipSlot) => p.data.equips.filter((e) => e.slot === sl && e.tier >= 7 && e.grade >= SYNTH_MIN_GRADE && !e.set && (sl !== 'weapon' || e.cls === p.data.currentClass)).sort((a, b) => a.grade - b.grade || a.plus - b.plus);
-    const pool = synthPool(synthSlot);
-    const sc = synthCost(synthSlot);
-    const canSynth = pool.length >= SYNTH_COUNT && p.data.gold >= sc.gold && p.hasAll(sc.items);
-    const synthSlots = EQUIP_SLOTS.map((sl) => `<button class="chip ${synthSlot === sl ? 'on' : ''}" data-synslot="${sl}">${slotName(sl, p.data.currentClass)} <small>${synthPool(sl).length}</small></button>`).join('');
-    const s = this.open(
-      'forge',
-      `<div class="panel wide tall">
-         <button class="close">${ICONS.close}</button>
-         <h2>대장장이 고른의 대장간 <small class="gold">${p.data.gold.toLocaleString()} G</small></h2>
-         <div class="tabs"><button data-forge-main>강화·각인·특수 옵션</button><button class="on">◈ 세트 장비</button></div>
-         ${message ? `<div class="notice">${message}</div>` : ''}
-         <div class="scroll">
-           <p class="hint">세트 장비는 7단계보다 한 단계 위 능력치(×1.4)에 세트 효과가 붙는 최상위 장비입니다. 새 재료 없이 ???에게서 바꾼 <b>문장</b>으로 만들거나, 7단계 <b>유니크 이상 장비 3개를 합성</b>하거나, 8장·레이드 보스에게서 얻습니다. 강화·각인·특수 옵션은 보통 장비와 같습니다.</p>
-           ${cur ? `<h3>지금 입은 세트</h3>${cur}` : ''}
-           <h3>◈ 세트 제작 <small class="dim">원하는 세트·부위 · 전설 85% / 차원 15%</small></h3>
-           <div class="chips">${setBtns}</div>
-           <div class="chips">${slotBtns}</div>
-           <div class="opt-list">${st.tiers.map((t) => `<div class="opt ser" style="color:${hex(st.color)}">${t.n}세트: ${t.lines.map(specialText).join(', ')}</div>`).join('')}</div>
-           <p><small>${costTxt(cost)}</small></p>
-           <div class="menu"><button class="primary" data-scraft ${canCraft ? '' : 'disabled'}>「${st.name}의 ${slotName(pick.slot, p.data.currentClass)}」 만들기</button></div>
-           <h3>⚗ 세트 합성 <small class="dim">같은 부위 7단계 유니크 이상 ${SYNTH_COUNT}개 → 그 부위의 무작위 세트 (전설)</small></h3>
-           <div class="chips">${synthSlots}</div>
-           <p class="hint">창고에 있는 장비 중 낮은 등급·낮은 강화부터 씁니다${synthSlot === 'weapon' ? ` (무기는 ${CLASSES[p.data.currentClass].name} 것만)` : ''}. 쓸 장비: ${pool.slice(0, SYNTH_COUNT).map((e) => `<span style="color:${hex(GRADES[e.grade].color)}">${esc(equipName(e))}</span>`).join(', ') || '없음'}</p>
-           <p><small>${costTxt(sc)}</small></p>
-           <div class="menu"><button class="primary" data-synth ${canSynth ? '' : 'disabled'}>합성하기 (${Math.min(pool.length, SYNTH_COUNT)}/${SYNTH_COUNT})</button></div>
-         </div>
-       </div>`,
-      onClose,
-    );
-    this.on(s, '[data-forge-main]', () => this.forge(p, onChange, onClose));
-    this.on(s, '[data-sset]', (b) => again(undefined, { ...pick, set: b.dataset.sset as SetId }));
-    this.on(s, '[data-sslot]', (b) => again(undefined, { ...pick, slot: b.dataset.sslot as EquipSlot }));
-    this.on(s, '[data-synslot]', (b) => again(undefined, pick, b.dataset.synslot as EquipSlot));
-    const make = (set: SetId, slot: EquipSlot, grade: number): Equip =>
-      withSpecials({ uid: newUid(), slot, cls: slot === 'weapon' ? p.data.currentClass : undefined, tier: 7, grade, plus: 0, set });
-    this.on(s, '[data-scraft]', () => {
-      if (p.data.gold < cost.gold || !p.hasAll(cost.items)) return;
-      if (!p.storageHasSlot) return again('<b class="bad">창고에 빈 칸이 없습니다</b>');
-      p.data.gold -= cost.gold;
-      p.takeAll(cost.items);
-      const e = make(pick.set, pick.slot, rollSetGrade(Math.random()));
-      p.data.equips.push(e);
-      p.achAdd('sets');
-      onChange();
-      again(`<b class="ok">완성! <span style="color:${hex(GRADES[e.grade].color)}">[${GRADES[e.grade].name}] ${esc(equipName(e))}</span> — 창고에 넣었습니다</b>`);
-    });
-    this.on(s, '[data-synth]', () => {
-      const use = synthPool(synthSlot).slice(0, SYNTH_COUNT);
-      if (use.length < SYNTH_COUNT || p.data.gold < sc.gold || !p.hasAll(sc.items)) return;
-      p.data.gold -= sc.gold;
-      p.takeAll(sc.items);
-      const ids = new Set(use.map((e) => e.uid));
-      p.data.equips = p.data.equips.filter((e) => !ids.has(e.uid));
-      const set = SET_IDS[Math.floor(Math.random() * SET_IDS.length)];
-      const e = make(set, synthSlot, 5);
-      p.data.equips.push(e);
-      p.achAdd('sets');
-      onChange();
-      again(`<b class="ok">합성 완료! <span style="color:${hex(SETS[set].color)}">${esc(equipName(e))}</span> — 창고에 넣었습니다</b>`, pick, synthSlot);
     });
   }
 
@@ -3056,7 +2968,10 @@ export class Screens {
 
   // ---------------- 공장: 기계 ----------------
   // ---------------- 제작대: 판 · 조립 · 채집 도구 · 장비 제작, 레벨업 ----------------
-  workbench(f: Factory, b: BuildingState, p: Progress, onChange: () => void, onClose: () => void, tab: 'plates' | 'assemble' | 'tools' | 'equip' | 'level' = 'plates', message?: string): void {
+  /** 제작대 세트 탭에서 고른 직업·부위 */
+  private setPick: { cls: ClassId; slot: EquipSlot } | null = null;
+
+  workbench(f: Factory, b: BuildingState, p: Progress, onChange: () => void, onClose: () => void, tab: 'plates' | 'assemble' | 'tools' | 'equip' | 'sets' | 'level' = 'plates', message?: string): void {
     const lv = b.level ?? 1;
     const speed = levelSpeed(lv);
     const busy = !!b.job;
@@ -3123,6 +3038,28 @@ export class Screens {
           rows.push(`<li>${equipGem(e)}<div><b>${equipName(e)}</b><small>${equipLine(e)}</small><small>일반: ${costHtml(c)}</small><small class="mana-line">${SPK('sparkle', '✨')} 마력 제작 (고급 이상): ${costHtml(mc)}</small></div>${btn(`data-eqc="${slot}:${t}"`, c)}<button class="mana-btn" data-eqm="${slot}:${t}" ${can(mc) ? '' : 'disabled'}>${SPK('sparkle', '✨')} 마력</button></li>`);
         }
       body = `<ul class="list scroll">${rows.join('')}</ul>`;
+    } else if (tab === 'sets') {
+      // 세트 장비: 설계도 + 재료 → 고른 직업·부위의 세트 장비 (그 직업의 세 세트 중 무작위)
+      const pk = (this.setPick ??= { cls: p.data.currentClass, slot: 'helmet' });
+      if (!p.data.unlockedClasses.includes(pk.cls)) pk.cls = p.data.currentClass;
+      const c = setCraftCost(pk.slot);
+      const ok = p.data.gold >= c.gold && p.hasAll(c.items) && p.storageHasSlot;
+      const all = [...Object.values(p.data.classes).flatMap((x) => Object.values(x.equipment)), ...p.data.equips, ...[p.invBag, p.dimBagObj].flatMap((x) => x.equips())].filter((e): e is Equip => !!e?.set);
+      const have = (id: SetId, sl: EquipSlot) => all.some((e) => e.set === id && e.slot === sl);
+      const sets = setsOf(pk.cls)
+        .map((st) => {
+          const owned = EQUIP_SLOTS.filter((sl) => have(st.id, sl));
+          return `<li><span class="gem" style="--c:${hex(st.color)}"></span><div><b style="color:${hex(st.color)}">${SET_TYPE_NAMES[st.type]} 「${st.name}」</b> <small class="dim">모은 부위 ${owned.length}/${SET_PIECES}${owned.length ? ` (${owned.map((sl) => slotName(sl, pk.cls)).join('·')})` : ''}</small>${st.tiers.map((t) => `<small class="${owned.length >= t.n ? 'ok' : ''}">${t.n}세트: ${t.lines.map(specialText).join(', ')}</small>`).join('')}</div></li>`;
+        })
+        .join('');
+      body = `<div class="scroll">
+        <p class="hint">???에게서 받은 <b>세트 설계도</b>로 세트 장비를 만듭니다. 직업과 부위를 고르면 그 직업의 <b>공격형·방어형·균형형</b> 중 하나가 무작위로 나옵니다. 한 부위는 최종 장비보다 약하지만(능력치 ×0.9) 2·4·7부위를 모을수록 강해집니다. 전설 85% · 차원 15%, 강화·각인·특수 옵션은 보통 장비와 같습니다.</p>
+        <div class="chips">${p.data.unlockedClasses.map((id) => `<button class="chip ${pk.cls === id ? 'on' : ''}" data-scls="${id}">${CLASSES[id].name}</button>`).join('')}</div>
+        <div class="chips">${EQUIP_SLOTS.map((sl) => `<button class="chip ${pk.slot === sl ? 'on' : ''}" data-sslot="${sl}">${slotName(sl, pk.cls)}</button>`).join('')}</div>
+        <p><small>${costHtml({ items: c.items, gold: c.gold, time: 0 })}</small></p>
+        <div class="menu"><button class="primary" data-scraft ${ok ? '' : 'disabled'}>${CLASSES[pk.cls].name} 세트 ${slotName(pk.slot, pk.cls)} 만들기 (세트 무작위)</button></div>
+        <ul class="list">${sets}</ul>
+      </div>`;
     } else {
       const c = workbenchUpgradeCost(lv);
       body = c
@@ -3159,6 +3096,7 @@ export class Screens {
            <button data-tab="assemble" class="${tab === 'assemble' ? 'on' : ''}">조립</button>
            <button data-tab="tools" class="${tab === 'tools' ? 'on' : ''}">채집 도구</button>
            <button data-tab="equip" class="${tab === 'equip' ? 'on' : ''}">장비</button>
+           ${p.flag('endgame') ? `<button data-tab="sets" class="${tab === 'sets' ? 'on' : ''}">◈ 세트</button>` : ''}
            <button data-tab="level" class="${tab === 'level' ? 'on' : ''}">레벨업</button>
          </div>
          ${body}
@@ -3217,6 +3155,30 @@ export class Screens {
       });
     };
     this.on(s, '[data-tab]', (el) => again(el.dataset.tab as typeof tab));
+    this.on(s, '[data-scls]', (el) => {
+      this.setPick = { slot: this.setPick?.slot ?? 'helmet', cls: el.dataset.scls as ClassId };
+      again('sets');
+    });
+    this.on(s, '[data-sslot]', (el) => {
+      this.setPick = { cls: this.setPick?.cls ?? p.data.currentClass, slot: el.dataset.sslot as EquipSlot };
+      again('sets');
+    });
+    this.on(s, '[data-scraft]', () => {
+      const pk = this.setPick;
+      if (!pk) return;
+      const c = setCraftCost(pk.slot);
+      if (p.data.gold < c.gold || !p.hasAll(c.items)) return;
+      if (!p.storageHasSlot) return again('sets', '<b class="bad">창고에 빈 칸이 없습니다</b>');
+      p.data.gold -= c.gold;
+      p.takeAll(c.items);
+      const set = rollClassSet(pk.cls, Math.random());
+      const e = withSpecials({ uid: newUid(), slot: pk.slot, cls: pk.slot === 'weapon' ? pk.cls : undefined, tier: 7, grade: rollSetGrade(Math.random()), plus: 0, set });
+      p.data.equips.push(e);
+      p.achAdd('sets');
+      onChange();
+      const st = SETS[set];
+      again('sets', `<b class="ok">완성! <span style="color:${hex(GRADES[e.grade].color)}">[${GRADES[e.grade].name}]</span> <span style="color:${hex(st.color)}">${esc(equipName(e))}</span> (${SET_TYPE_NAMES[st.type]}) — 창고에 넣었습니다</b>`);
+    });
     this.on(s, '[data-item]', (el) => {
       const [id, t, kind] = el.dataset.item!.split(':');
       const tier = Number(t);

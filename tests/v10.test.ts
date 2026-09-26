@@ -3,7 +3,7 @@ import { ACHIEVEMENTS } from '../src/data/achievements';
 import { BLESS_IDS, blessNeed, dayKey, hordeDaily, hordeMult, HORDE_MILESTONES, raidDayMarks, raidScore, raidSpec, trialDayMarks, vowMult, weekKey } from '../src/data/endgame';
 import { rankMarks } from '../src/data/marks';
 import { RELIC_GRADES, RELICS, rollRelic, rollRelicGrade } from '../src/data/relics';
-import { SET_IDS, SET_STAT_MULT, setCounts, setLines } from '../src/data/sets';
+import { rollClassSet, SET_IDS, setCounts, setLines, setsOf } from '../src/data/sets';
 import { equipStats, equipName } from '../src/data/equipment';
 import { ch8Mult, CH8_STAGES } from '../src/data/chapter8';
 import { BESTIARY } from '../src/data/bestiary';
@@ -32,18 +32,33 @@ describe('v10 증표 · 유물 · 세트', () => {
     expect(rollRelicGrade(0.999)).toBe(0);
   });
 
-  it('세트: 능력치 ×1.4, 2·4·6부위 효과가 특수 옵션에 들어간다', () => {
+  it('세트: 직업마다 공격·방어·균형 셋, 한 부위는 약하고 2·4·7부위 효과, 그 직업만 입는다', () => {
+    expect(SET_IDS.length).toBe(12);
+    for (const c of ['sword', 'mage', 'archer', 'summoner'] as const) expect(setsOf(c).map((x) => x.type).sort()).toEqual(['atk', 'bal', 'def']);
     const base = { uid: 'a', slot: 'armor' as const, tier: 7, grade: 5, plus: 0 };
-    expect(equipStats({ ...base, set: 'guard' }).hp).toBeGreaterThan(equipStats(base).hp * (SET_STAT_MULT - 0.05));
-    expect(equipName({ ...base, set: 'guard' })).toContain('영겁 수호');
-    expect(setLines(setCounts([{ set: 'breaker' }, { set: 'breaker' }]))).toEqual([{ k: 'atk', v: 8 }]);
-    expect(setLines(setCounts(Array.from({ length: 6 }, () => ({ set: 'guard' as const })))).length).toBe(6);
+    expect(equipStats({ ...base, set: 'sword_def' }).hp).toBeLessThan(equipStats(base).hp);
+    expect(equipName({ ...base, set: 'sword_def' })).toContain('철벽의 맹세');
+    expect(setLines(setCounts([{ set: 'sword_atk' }, { set: 'sword_atk' }]))).toEqual([{ k: 'atk', v: 8 }]);
+    expect(setLines(setCounts(Array.from({ length: 6 }, () => ({ set: 'sword_def' as const })))).length).toBe(3);
+    expect(setLines(setCounts(Array.from({ length: 7 }, () => ({ set: 'sword_def' as const })))).length).toBe(7);
     const p = new Progress(newSave());
-    for (const slot of ['helmet', 'armor', 'pants', 'boots'] as const) p.cls.equipment[slot] = { uid: slot, slot, tier: 7, grade: 5, plus: 0, set: 'swift' };
-    const sp = p.specials();
-    expect(sp.speed).toBeGreaterThanOrEqual(8);
-    expect(sp.dodgeCharge).toBe(1);
-    expect(SET_IDS.length).toBe(4);
+    for (const slot of ['helmet', 'armor', 'pants', 'boots'] as const) p.cls.equipment[slot] = { uid: slot, slot, tier: 7, grade: 5, plus: 0, set: 'sword_bal' };
+    expect(p.specials().speed).toBeGreaterThanOrEqual(8);
+    expect(p.canEquip({ ...base, set: 'sword_bal' })).toBe(true);
+    expect(p.canEquip({ ...base, set: 'mage_bal' })).toBe(false);
+    const seen = new Set<string>();
+    for (let i = 0; i < 60; i++) seen.add(rollClassSet('archer', i / 60));
+    expect([...seen].sort()).toEqual(['archer_atk', 'archer_bal', 'archer_def']);
+  });
+
+  it('예전 공용 세트 문장·장비는 설계도로 바뀐다', () => {
+    const d = newSave();
+    d.storage.set_breaker = 2;
+    d.equips.push({ uid: 'o', slot: 'helmet', tier: 7, grade: 5, plus: 0, set: 'guard' as never });
+    const p = new Progress(parseSave(JSON.stringify(d))!);
+    expect(p.stored('set_breaker')).toBe(0);
+    expect(p.stored('set_blueprint')).toBe(2 + 3);
+    expect(p.data.equips.length).toBe(0);
   });
 
   it('장착한 유물의 옵션이 특수 옵션 합계에 더해진다', () => {

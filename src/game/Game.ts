@@ -12,8 +12,8 @@ import { Input } from '../core/input';
 import { Rng, randomSeed } from '../core/rng';
 import { CLASSES, CLASS_ORDER, expToNext, MAX_LEVEL, MAX_SKILL_LEVEL, MAX_ULT_LEVEL, SKILL_LEARN, skillUpgradeCost, ULTIMATES, type ClassId } from '../data/classes';
 import { ultUpgradeCost } from '../data/ultUpgrade';
-import { durability, EQUIP_SLOTS, equipName, GRADE, GRADES, newUid, rollEquip, rollSeries, withSpecials, type Equip } from '../data/equipment';
-import { SET_IDS } from '../data/sets';
+import { durability, equipName, GRADE, GRADES, newUid, rollEquip, rollSeries, withSpecials, type Equip } from '../data/equipment';
+import { SET_TOKEN } from '../data/sets';
 import { rollManaGrade } from '../data/crafting';
 import { BUILDINGS, FACTORY_SIZES, OFFLINE_CAP_HOURS, PRODUCER_LIMIT, PRODUCER_TYPES, PRODUCER_UNLOCK, type BuildingType, type ProducerType, upgradeBlueprintCost } from '../data/factory';
 import { essenceForTier, ITEMS, TIER_PLATE, ORE_TIERS, TIER_MANA_PLATE } from '../data/items';
@@ -1827,18 +1827,15 @@ export class Game {
     this.finishRun(txt);
   }
 
-  /** 세트 장비 하나 (무작위 세트·부위, 전설) → 창고 */
-  private dropSetPiece(from: string): void {
+  /** 보스가 세트 설계도를 떨어뜨렸다 → 창고 (제작대 세트 탭에서 세트 장비로) */
+  private dropSetPiece(from: string, n = 1): void {
     const p = this.progress;
-    const set = SET_IDS[Math.floor(Math.random() * SET_IDS.length)];
-    const slot = EQUIP_SLOTS[Math.floor(Math.random() * EQUIP_SLOTS.length)];
-    const e = withSpecials({ uid: newUid(), slot, cls: slot === 'weapon' ? p.data.currentClass : undefined, tier: 7, grade: Math.random() < 0.1 ? 6 : 5, plus: 0, set });
-    p.data.equips.push(e);
-    p.achAdd('sets');
+    p.add(SET_TOKEN, n);
     this.audio.play('stone');
-    this.hud.toast(`:sparkle: ${from}이(가) 세트 장비를 떨어뜨렸다: ${equipName(e)} (창고)`, 4500);
+    this.hud.toast(`:sparkle: ${from}이(가) 세트 설계도 ${n}장을 떨어뜨렸다 (창고 · 차원집 제작대 → 세트)`, 4500);
     this.saveNow();
   }
+
 
   // ---------------- 8장 「갈라진 차원」 (v10) ----------------
   /** 거울 분신 (다시 분신이 되지 않게) */

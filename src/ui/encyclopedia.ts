@@ -34,7 +34,7 @@ import { ACHIEVEMENTS } from '../data/achievements';
 import { BLESS_IDS, BLESSINGS, HORDE_MILESTONES, raidDayMarks, trialDayMarks, VOW_IDS, VOWS } from '../data/endgame';
 import { EXCHANGE, rankMarks } from '../data/marks';
 import { RELIC_CRAFT_GOLD, RELIC_CRAFT_SHARDS, RELIC_GRADES, RELIC_SLOTS, RELICS, relicRange } from '../data/relics';
-import { SET_IDS, SET_STAT_MULT, SETS } from '../data/sets';
+import { SET_IDS, SET_STAT_MULT, SET_TYPE_NAMES, SETS } from '../data/sets';
 import { specialText } from '../data/special';
 import { CH8_RULES, CH8_SET_DROP, CH8_STAGES, ch8Mult } from '../data/chapter8';
 import { PACT_AWAKEN_KILLS, PACT_KILLS } from '../game/Progress';
@@ -411,7 +411,7 @@ export function encyclopediaPages(p: Progress): EncyPage[] {
 function v10Page(p: Progress): string {
   const vowRows = VOW_IDS.map((v) => [`<span style="color:${hex(VOWS[v].color)}">${VOWS[v].name}</span>`, VOWS[v].text, `+${Math.round(VOWS[v].bonus * 100)}%`]);
   const blessRows = BLESS_IDS.map((b) => [`<span style="color:${hex(BLESSINGS[b].color)}">${BLESSINGS[b].name}</span>`, BLESSINGS[b].text, `최대 ${BLESSINGS[b].max}`]);
-  const setRows = SET_IDS.map((id) => [`<span style="color:${hex(SETS[id].color)}">${SETS[id].name}</span> <small>${SETS[id].role}</small>`, SETS[id].tiers.map((t) => `${t.n}세트: ${t.lines.map(specialText).join(', ')}`).join('<br>')]);
+  const setRows = SET_IDS.map((id) => [`${CLASSES[SETS[id].cls].name}`, `<span style="color:${hex(SETS[id].color)}">${SET_TYPE_NAMES[SETS[id].type]} 「${SETS[id].name}」</span>`, SETS[id].tiers.map((t) => `${t.n}세트: ${t.lines.map(specialText).join(', ')}`).join('<br>')]);
   const relicRows = RELICS.map((r) => [`<span style="color:${hex(r.color)}">${r.name}</span>`, r.keys.map((k) => SPECIALS[k].text(Math.round(relicRange(k, 4)[1] * 10) / 10)).join(' · ')]);
   const ruleRows = CH8_STAGES.map((st) => [`8-${st.stage}`, st.name, st.rules.map((r) => `<span style="color:${hex(CH8_RULES[r].color)}">${CH8_RULES[r].name}</span> ${CH8_RULES[r].text}`).join('<br>'), `×${ch8Mult(st.stage).toFixed(1)}`]);
   return `
@@ -433,6 +433,6 @@ function v10Page(p: Progress): string {
   ${card('🌀 균열 서약', `<p>심연 균열에 들어가기 전에 스스로 제약을 건다. 건 서약의 보너스를 모두 더한 만큼 골드·차원 가루가 는다.</p>${table(['서약', '제약', '보상'], vowRows)}`)}
   <h3>유물 · 세트 장비</h3>
   ${card('💠 유물', `<p>유물 파편 ${RELIC_CRAFT_SHARDS}개 + ${RELIC_CRAFT_GOLD.toLocaleString()} G → 노아가 무작위 유물로 복원. 등급 ${RELIC_GRADES.map((g) => `<span style="color:${hex(g.color)}">${g.name} ${g.weight}%</span>`).join(' · ')}. 직업마다 ${RELIC_SLOTS}개 장착 (같은 종류는 하나), 분해하면 파편 일부를 돌려받는다. (값은 신화 최대)</p>${table(['유물', '효과'], relicRows)}`)}
-  ${card('◈ 세트 장비', `<p>7단계보다 한 단계 위 능력치(×${SET_STAT_MULT})에 세트 효과. 대장간 → 세트 장비: <b>문장 3개</b>로 원하는 세트·부위를 만들거나, 7단계 <b>유니크 이상 3개를 합성</b>해 무작위 세트를 얻는다. 8장·레이드 보스도 떨어뜨린다.</p>${table(['세트', '효과'], setRows)}`)}
+  ${card('◈ 세트 장비', `<p>직업마다 공격형·방어형·균형형 세 세트. ???에게서 받은 <b>세트 설계도</b>로 차원집 제작대(세트 탭)에서 직업·부위를 골라 만들면, 그 직업의 세 세트 중 하나가 무작위로 나온다 (8장·레이드 보스도 설계도를 떨어뜨린다). 한 부위는 최종 장비보다 약하지만(능력치 ×${SET_STAT_MULT}) 같은 세트를 2·4·7부위 모을수록 강해진다. 세트 장비는 그 직업만 입는다.</p>${table(['직업', '세트', '효과'], setRows)}`)}
   `;
 }
