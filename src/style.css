@@ -2949,7 +2949,7 @@ h3.sub { margin: 10px 0 6px; font-size: 14px; display: flex; align-items: center
 .volume .vol-name { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; min-width: 70px; }
 /* ---------- 백과사전 ---------- */
 .ency { display: flex; flex-direction: column; }
-.ency-tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; flex: 0 0 auto; scrollbar-width: none; }
+.ency-tabs { display: flex; flex-wrap: wrap; gap: 6px; padding-bottom: 6px; flex: 0 0 auto; max-width: 100%; }
 .ency-tabs::-webkit-scrollbar { display: none; }
 .ency-tab { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px 5px 6px; border-radius: 999px; border: 1px solid var(--panel-line); background: rgba(255, 255, 255, 0.05); font-size: 13px; font-weight: 700; white-space: nowrap; }
 .ency-tab img { width: 22px; height: 22px; object-fit: contain; }
