@@ -109,8 +109,8 @@ export const RECIPES: Recipe[] = [
   // 벌목소: 나무 단계 → 같은 단계 판자 2개
   ...WOODS.map((w, i): Recipe => ({ id: i === 0 ? 'plank' : `plank_${i + 1}`, machine: 'crusher', inputs: { [w]: 1 }, output: PLANKS[i], count: 2, tier: i + 1, time: 15 + i * 3 })),
   // 마력 주입기: 주괴 → 마력 금속, 판자 → 마력 판자 (단계에 맞는 마력 정수)
-  ...INGOTS.map((g, i): Recipe => ({ id: MANA_METALS[i], machine: 'infuser', inputs: { [g]: 1, [TIER_ESSENCE(i + 1)]: 1 }, output: MANA_METALS[i], count: 1, tier: i + 1, time: 25 + i * 5 })),
-  ...PLANKS.map((pl, i): Recipe => ({ id: `mana_plank_${i + 1}`, machine: 'infuser', inputs: { [pl]: 1, [TIER_ESSENCE(i + 1)]: 1 }, output: `mana_plank_${i + 1}`, count: 1, tier: i + 1, time: 20 + i * 5 })),
+  ...INGOTS.map((g, i): Recipe => ({ id: MANA_METALS[i], machine: 'infuser', inputs: { [g]: 1, [TIER_ESSENCE(i + 1)]: i < 3 ? 3 : 2 }, output: MANA_METALS[i], count: 1, tier: i + 1, time: 25 + i * 5 })),
+  ...PLANKS.map((pl, i): Recipe => ({ id: `mana_plank_${i + 1}`, machine: 'infuser', inputs: { [pl]: 1, [TIER_ESSENCE(i + 1)]: i < 3 ? 3 : 2 }, output: `mana_plank_${i + 1}`, count: 1, tier: i + 1, time: 20 + i * 5 })),
   { id: 'copper_ingot', machine: 'smelter', inputs: { copper_ore: 1 }, output: 'copper_ingot', count: 1, tier: 1, time: 15 },
   { id: 'iron_ingot', machine: 'smelter', inputs: { iron_ore: 1 }, output: 'iron_ingot', count: 1, tier: 2, time: 20 },
   { id: 'gold_ingot', machine: 'smelter', inputs: { gold_ore: 1 }, output: 'gold_ingot', count: 1, tier: 3, time: 30 },
@@ -122,16 +122,16 @@ export const RECIPES: Recipe[] = [
   { id: 'bag_kit', machine: 'workbench', inputs: { magi_alloy: 1, gear_part: 2, mana_iron: 1 }, output: 'bag_kit', count: 1, tier: 5, time: 120 },
   { id: 'resonator', machine: 'workbench', inputs: { dim_ingot: 3, orichalcum_ingot: 2, mana_titanium: 2 }, output: 'resonator', count: 1, tier: 7, time: 300 },
   // 차원 응축기: 파밍한 차원 가루 → 차원 파편 / 차원 마력 정수
-  { id: 'dim_shard', machine: 'condenser', inputs: { dim_dust: 8, essence_high: 1, titanium_plate: 1 }, output: 'dim_shard', count: 1, tier: 1, time: 120 },
+  { id: 'dim_shard', machine: 'condenser', inputs: { dim_dust: 8, essence_high: 2, titanium_plate: 1 }, output: 'dim_shard', count: 1, tier: 1, time: 120 },
   { id: 'essence_dim', machine: 'condenser', inputs: { dim_dust: 4, essence_supreme: 1, orichalcum_ingot: 1 }, output: 'essence_dim', count: 1, tier: 1, time: 90 },
   { id: 'dim_alloy2', machine: 'workbench', inputs: { titanium_plate: 3, orichalcum_plate: 3, mana_titanium_plate: 1, essence_supreme: 1 }, output: 'dim_alloy2', count: 1, tier: 6, time: 150 },
   { id: 'dim_alloy', machine: 'workbench', inputs: { copper_plate: 3, iron_plate: 3, gold_plate: 2, diamond_plate: 2, essence_high: 1 }, output: 'dim_alloy', count: 1, tier: 4, time: 90 },
-  { id: 'food_guard', machine: 'alchemy', inputs: { frost_plank: 2, plank: 3, essence_low: 2 }, output: 'food_guard', count: 1, tier: 3, time: 40 },
-  { id: 'food_luck', machine: 'alchemy', inputs: { crystal_plank: 2, plank: 2, essence_low: 1 }, output: 'food_luck', count: 1, tier: 4, time: 45 },
-  { id: 'food_exp', machine: 'alchemy', inputs: { ironwood_plank: 2, redpine_plank: 2, essence_mid: 1 }, output: 'food_exp', count: 1, tier: 5, time: 50 },
-  { id: 'food_atk', machine: 'alchemy', inputs: { flame_plank: 2, redpine_plank: 2, essence_mid: 1 }, output: 'food_atk', count: 1, tier: 6, time: 55 },
-  { id: 'potion_mid', machine: 'alchemy', inputs: { potion: 1, essence_mid: 1 }, output: 'potion_mid', count: 1, tier: 3, time: 40 },
-  { id: 'potion_high', machine: 'alchemy', inputs: { potion_mid: 1, essence_high: 1 }, output: 'potion_high', count: 1, tier: 6, time: 60 },
+  { id: 'food_guard', machine: 'alchemy', inputs: { frost_plank: 2, plank: 3, essence_low: 5 }, output: 'food_guard', count: 1, tier: 3, time: 40 },
+  { id: 'food_luck', machine: 'alchemy', inputs: { crystal_plank: 2, plank: 2, essence_low: 4 }, output: 'food_luck', count: 1, tier: 4, time: 45 },
+  { id: 'food_exp', machine: 'alchemy', inputs: { ironwood_plank: 2, redpine_plank: 2, essence_mid: 3 }, output: 'food_exp', count: 1, tier: 5, time: 50 },
+  { id: 'food_atk', machine: 'alchemy', inputs: { flame_plank: 2, redpine_plank: 2, essence_mid: 3 }, output: 'food_atk', count: 1, tier: 6, time: 55 },
+  { id: 'potion_mid', machine: 'alchemy', inputs: { potion: 1, essence_low: 2, essence_mid: 1 }, output: 'potion_mid', count: 1, tier: 3, time: 40 },
+  { id: 'potion_high', machine: 'alchemy', inputs: { potion_mid: 1, essence_mid: 2, essence_high: 1 }, output: 'potion_high', count: 1, tier: 6, time: 60 },
 ];
 
 /** 예전 저장의 레시피 id → 새 id */

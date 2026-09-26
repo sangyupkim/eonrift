@@ -163,12 +163,15 @@ export const SKILL_LEARN: SkillCost[] = [
   { level: 30, gold: 9000, items: { gold_plate: 5, mana_gold: 5 } },
 ];
 
+/** 단계 → 마력 정수 (items.ts의 essenceForTier와 같다) */
+const ESS_OF = (t: number) => (t <= 3 ? 'essence_low' : t <= 5 ? 'essence_mid' : t <= 6 ? 'essence_high' : 'essence_supreme');
 const PLATES = ['copper_plate', 'iron_plate', 'gold_plate', 'diamond_plate', 'titanium_plate', 'orichalcum_plate', 'dim_plate'];
 
 /** 스킬 강화 비용 (현재 레벨 → 다음 레벨). 높은 스킬·높은 레벨일수록 상위 판이 든다 */
 export function skillUpgradeCost(index: number, lv: number): SkillCost {
   const tier = Math.min(7, 1 + Math.floor(index / 2) + Math.floor(lv / 2));
-  return { gold: Math.round(250 * lv * lv * (index + 1)), level: SKILL_LEARN[index].level + lv * 4, items: { [PLATES[tier - 1]]: 1 + lv } };
+  // 스킬 강화에는 그 단계의 마력 정수가 많이 든다 (남아도는 정수를 쓰는 곳)
+  return { gold: Math.round(250 * lv * lv * (index + 1)), level: SKILL_LEARN[index].level + lv * 4, items: { [PLATES[tier - 1]]: 1 + lv, [ESS_OF(tier)]: 4 + lv * 3 } };
 }
 export const POINTS_PER_LEVEL = 5;
 

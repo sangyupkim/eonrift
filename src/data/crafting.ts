@@ -16,7 +16,7 @@ export interface CraftCost {
 export function workbenchUpgradeCost(level: number): CraftCost | null {
   if (level >= WORKBENCH_MAX_LEVEL) return null;
   return {
-    items: { [TIER_INGOT[level - 1]]: 10 + level * 5, [TIER_PLANK[level - 1]]: 10 + level * 2, [essenceForTier(level)]: 5 + level },
+    items: { [TIER_INGOT[level - 1]]: 10 + level * 5, [TIER_PLANK[level - 1]]: 10 + level * 2, [essenceForTier(level)]: 10 + level * 4 },
     time: 0,
     gold: 500 * level,
   };
@@ -31,7 +31,8 @@ const SLOT_INGOTS: Record<EquipSlot, number> = { weapon: 5, helmet: 3, armor: 6,
 export function equipCraftCost(slot: EquipSlot, tier: number): CraftCost {
   const items: Record<string, number> = { [TIER_INGOT[tier - 1]]: SLOT_INGOTS[slot] };
   if (slot !== 'ring' && slot !== 'necklace') items[TIER_PLANK[tier - 1]] = 2;
-  else items[essenceForTier(tier)] = 2;
+  // 모든 장비 제작에 마력 정수가 든다 (장신구는 더 많이)
+  items[essenceForTier(tier)] = slot === 'ring' || slot === 'necklace' ? 5 : 2;
   return { items, time: 15 * tier, gold: 40 * tier };
 }
 

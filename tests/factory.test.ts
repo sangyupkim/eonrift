@@ -97,7 +97,7 @@ describe('판자·마력 가공', () => {
     expect(line('crusher', 2, { redpine_wood: 2 }).redpine_plank).toBe(4);
   });
   it('마력 주입기는 판자와 정수로 마력 판자를 만든다', () => {
-    expect(line('infuser', 1, { plank: 2, essence_low: 2 }).mana_plank_1).toBe(2);
+    expect(line('infuser', 1, { plank: 2, essence_low: 6 }).mana_plank_1).toBe(2);
   });
   // 버그(v5.8까지): 정수는 여러 레시피(마력 구리·철·금·판자)에 쓰이는데, 주입기가 '정수가 들어가는 첫 레시피(마력 구리)'만 보고
   // 판자·철 주괴가 들어 있으면 정수를 거부 → 판자만 든 채 영원히 멈췄다 (상자를 주입기에 바로 붙였을 때 특히)
@@ -115,9 +115,9 @@ describe('판자·마력 가공', () => {
       return Object.values(out.buffer!).reduce((a, b) => a + b, 0);
     };
     for (const belts of [0, 2]) {
-      expect(run(1, { plank: 12, essence_low: 12 }, belts)).toBe(12);
-      expect(run(2, { iron_ingot: 12, essence_low: 12 }, belts)).toBe(12);
-      expect(run(1, { copper_ingot: 6, plank: 6, essence_low: 12 }, belts)).toBe(12);
+      expect(run(1, { plank: 12, essence_low: 36 }, belts)).toBe(12);
+      expect(run(2, { iron_ingot: 12, essence_low: 36 }, belts)).toBe(12);
+      expect(run(1, { copper_ingot: 6, plank: 6, essence_low: 36 }, belts)).toBe(12);
     }
   }, 20000);
 });
@@ -131,7 +131,7 @@ describe('부족한 재료 안내', () => {
     f.place('wire', 2, 1, 0);
     f.place('generator', 2, 2, 0)!.buffer = { essence_low: 10 };
     f.simulate(60);
-    expect(f.missingInputs(m)?.missing).toEqual({ essence_low: 1 });
+    expect(f.missingInputs(m)?.missing).toEqual({ essence_low: 3 });
   });
 });
 
@@ -149,7 +149,7 @@ describe('레일 막힘 방지', () => {
     f.place('generator', 3, 2, 0)!.buffer = { essence_low: 20 };
     f.simulate(60);
     inBox.buffer!.copper_ingot += 50;
-    inBox.buffer!.essence_low = 40;
+    inBox.buffer!.essence_low = 120;
     f.simulate(600);
     expect(out.buffer!.mana_copper).toBeGreaterThan(15);
   });

@@ -96,6 +96,8 @@ export function engraveCost(stage: number): { gold: number; items: Record<string
   // 마력판: 2단 마력 구리판, 3단 마력 철판, 4단 마력 티타늄판, 5단 마력 오리하르콘판
   if (k >= 2) items[TIER_MANA_PLATE[k <= 3 ? k - 2 : k]] = k;
   if (k >= 5) items[TIER_PLATE[6]] = 3;
+  // 마력 정수: 1~2단 상급, 3~4단 최상급, 5단 차원 마력 정수
+  items[k <= 2 ? 'essence_high' : k <= 4 ? 'essence_supreme' : 'essence_dim'] = 3 + k * 2;
   return { gold: 1500 * k * k, items };
 }
 
