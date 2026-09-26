@@ -3076,7 +3076,7 @@ export class Game {
           e.series = rollSeries(e.slot, Math.random());
           withSpecials(e);
           p.data.equips.push(e);
-          this.hud.toast(`제작대: ${j.mana ? `:sparkle: [${GRADES[e.grade].name}] ` : ''}${equipName(e)} 완성! (창고)`);
+          this.hud.toast(`제작대: ${j.mana ? `:sparkle: [${GRADES[e.grade].name}] ` : ''}${equipName(e)} 완성! (제작대 앞에 레일·출하 상자가 없어 공유 창고로)`);
         }
       }
       b.ready = [];
@@ -3325,7 +3325,7 @@ export class Game {
     const existing = f.at(cell.x, cell.y);
     if (tool === 'remove') {
       if (!existing) return;
-      f.remove(cell.x, cell.y, (id, n) => p.add(id, n));
+      f.remove(cell.x, cell.y, (id, n) => p.add(id, n), (e) => p.data.equips.push(e));
       for (const [id, n] of Object.entries(BUILDINGS[existing.type].cost)) p.add(id, n);
       // 제작대: 남은 작업의 재료와 골드를 돌려주고, 다 된 장비·도구는 창고로
       for (const j of [existing.job, ...(existing.queue ?? [])]) {

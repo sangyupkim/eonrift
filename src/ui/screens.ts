@@ -16,7 +16,7 @@ import { BUILDINGS, BUILD_ORDER, buildingUpgradeCost, ESSENCE_BOOST, ESSENCE_BUR
 import { ITEMS, ITEM_LIST, ORE_TIERS, TIER_PLATE, WOOD_TIERS } from '../data/items';
 import { QUEST_BY_ID, type QuestDef } from '../data/quests';
 import { THEMES } from '../data/themes';
-import { canEnqueue, enqueueJob, WORKBENCH_OUT_MAX, WORKBENCH_QUEUE_MAX, BOX_CAPACITY, boxTotal, producerStock, producerTarget, ESSENCES, MACHINE_TYPES, RECIPE_BY_ID, recipesFor, type BuildingState, type Factory, type WorkJob } from '../factory/sim';
+import { equipFromToken, isEquipToken, canEnqueue, enqueueJob, WORKBENCH_OUT_MAX, WORKBENCH_QUEUE_MAX, BOX_CAPACITY, boxTotal, producerStock, producerTarget, ESSENCES, MACHINE_TYPES, RECIPE_BY_ID, recipesFor, type BuildingState, type Factory, type WorkJob } from '../factory/sim';
 import type { Bag, Slot } from '../game/Bag';
 import { CATCH_UP_EXP, ROSTER_STEP, PACT_AWAKEN_KILLS, PACT_KILLS, BAG_MAX_LEVEL, BAG_STEP, stageIndex, STORAGE_MAX_LEVEL, storageSlotsFor, STORE_STACK, warehouseSlots, type Progress } from '../game/Progress';
 import { objectiveNeed, objectiveProgress, objectiveText, todayKey, type Quests } from '../game/Quests';
@@ -2912,6 +2912,10 @@ export class Screens {
     const insideRows = inside
       .map(([id, n]) => `<li>${itemGem(id)}<div><b>${ITEMS[id].name}</b><small>상자 안 ${n}개</small></div><button data-out="${id}" data-n="q">${qty}개 꺼내기</button><button data-out="${id}" data-n="all">전부</button></li>`)
       .join('');
+    const eqs = b.equips ?? [];
+    const eqRows = eqs
+      .map((e, i) => `<li>${equipGem(e)}<div>${equipTitle(e)}<small>${equipLine(e)}</small></div><button data-eqbag="${i}">가방으로</button><button data-eqout="${i}">창고로</button></li>`)
+      .join('');
     const storeRows = ITEM_LIST.filter((i) => i.kind !== 'key' && p.count(i.id) > 0)
       .map((i) => `<li>${itemGem(i.id)}<div><b>${i.name}</b><small>창고 ${p.count(i.id)}개</small></div><button data-in="${i.id}" data-n="q">${qty}개 넣기</button><button data-in="${i.id}" data-n="all">전부</button></li>`)
       .join('');
@@ -2919,15 +2923,16 @@ export class Screens {
       'factory-config',
       `<div class="panel wide tall">
          <button class="close">${ICONS.close}</button>
-         <h2>보관상자 <small>${boxTotal(b)} / ${BOX_CAPACITY}</small> <button class="tool-sm rot" data-rotate>↻ 방향 돌리기</button></h2>
+         <h2>보관상자 <small>${boxTotal(b)} / ${BOX_CAPACITY}${(b.equips?.length ?? 0) ? ` · 장비 ${b.equips!.length}` : ''}</small> <button class="tool-sm rot" data-rotate>↻ 방향 돌리기</button></h2>
          <div class="tabs">
            <button data-mode="in" class="${b.mode === 'in' ? 'on' : ''}">투입 (앞 기계로 보내기)</button>
            <button data-mode="out" class="${b.mode === 'out' ? 'on' : ''}">출하 (완성품 받기)</button>
          </div>
          <div class="qty-row">개수 <button data-q="-10">−10</button><button data-q="-1">−1</button><input type="number" min="1" max="${BOX_CAPACITY}" value="${qty}" data-qty><button data-q="1">+1</button><button data-q="10">+10</button></div>
          <div class="scroll">
+           ${eqs.length ? `<h3>장비 ${eqs.length}개 <small class="dim">레일로 들어온 제작대 장비</small> <button class="tool-sm" data-eqall>모두 창고로</button></h3><ul class="list">${eqRows}</ul>` : ''}
            <h3>상자 안</h3>
-           <ul class="list">${insideRows || '<li class="empty">비어 있습니다</li>'}</ul>
+           <ul class="list">${insideRows || (eqs.length ? '<li class="empty">장비 말고는 비어 있습니다</li>' : '<li class="empty">비어 있습니다</li>')}</ul>
            <h3>창고에서 넣기</h3>
            <ul class="list">${storeRows || '<li class="empty">창고가 비어 있습니다</li>'}</ul>
          </div>
@@ -2955,6 +2960,29 @@ export class Screens {
         if (b.buffer![id] <= 0) delete b.buffer![id];
         p.add(id, n);
       }
+      again();
+    });
+    this.on(s, '[data-eqout]', (el) => {
+      const e = eqs[Number(el.dataset.eqout)];
+      if (!e) return;
+      if (!p.storageHasSlot) return this.box(b, p, onChange, onClose, readQty());
+      b.equips = eqs.filter((x) => x !== e);
+      p.data.equips.push(e);
+      again();
+    });
+    this.on(s, '[data-eqbag]', (el) => {
+      const e = eqs[Number(el.dataset.eqbag)];
+      if (!e || !p.invBag.addEquip(e)) return;
+      b.equips = eqs.filter((x) => x !== e);
+      again();
+    });
+    this.on(s, '[data-eqall]', () => {
+      const left: Equip[] = [];
+      for (const e of eqs) {
+        if (p.storageHasSlot) p.data.equips.push(e);
+        else left.push(e);
+      }
+      b.equips = left;
       again();
     });
     this.on(s, '[data-in]', (el) => {
@@ -3037,7 +3065,7 @@ export class Screens {
           const mc = equipManaCraftCost(slot, t);
           rows.push(`<li>${equipGem(e)}<div><b>${equipName(e)}</b><small>${equipLine(e)}</small><small>일반: ${costHtml(c)}</small><small class="mana-line">${SPK('sparkle', '✨')} 마력 제작 (고급 이상): ${costHtml(mc)}</small></div>${btn(`data-eqc="${slot}:${t}"`, c)}<button class="mana-btn" data-eqm="${slot}:${t}" ${can(mc) ? '' : 'disabled'}>${SPK('sparkle', '✨')} 마력</button></li>`);
         }
-      body = `<ul class="list scroll">${rows.join('')}</ul>`;
+      body = `<p class="hint">제작대 앞쪽(→ 방향)에 레일이나 <b>출하</b> 보관상자를 이어 두면 완성된 장비가 레일을 타고 상자로 갑니다. 이어져 있지 않으면 공유 창고로 들어갑니다.</p><ul class="list scroll">${rows.join('')}</ul>`;
     } else if (tab === 'sets') {
       // 세트 장비: 설계도 + 재료 → 고른 직업·부위의 세트 장비 (그 직업의 세 세트 중 무작위)
       const pk = (this.setPick ??= { cls: p.data.currentClass, slot: 'helmet' });
@@ -3228,7 +3256,10 @@ export class Screens {
     });
     this.on(s, '[data-collect]', () => {
       const n = b.out?.length ?? 0;
-      for (const id of b.out ?? []) p.add(id, 1);
+      for (const id of b.out ?? []) {
+        if (isEquipToken(id)) p.data.equips.push(equipFromToken(id));
+        else p.add(id, 1);
+      }
       b.out = [];
       onChange();
       again(tab, `완성품 ${n}개를 창고로 옮겼습니다`);

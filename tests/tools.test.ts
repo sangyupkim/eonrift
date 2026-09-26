@@ -58,7 +58,27 @@ describe('제작대', () => {
     expect(wb.job!.left).toBe(10);
   });
 
-  it('장비·도구는 ready로 넘겨 창고에 넣게 한다', () => {
+  it('장비: 앞에 레일·출하 상자가 이어져 있으면 레일을 타고 상자 속 장비가 된다', () => {
+    const { f, wb } = line();
+    f.place('belt', 1, 0, 0);
+    const out = f.place('box', 2, 0, 0)!;
+    out.mode = 'out';
+    wb.job = job({ kind: 'equip', id: 'helmet', tier: 3, mana: true, left: 2 });
+    f.simulate(60);
+    expect(wb.ready?.length ?? 0).toBe(0);
+    expect(out.equips!.length).toBe(2);
+    expect(out.equips![0].slot).toBe('helmet');
+    expect(out.equips![0].tier).toBe(3);
+    expect(out.equips![0].grade).toBeGreaterThan(0);
+    expect(Object.keys(out.buffer!)).toEqual([]);
+    // 철거하면 상자 속 장비는 장비로 돌려준다
+    const back: unknown[] = [];
+    f.remove(2, 0, () => back.push('item'), (e) => back.push(e));
+    expect(back.length).toBe(2);
+    expect(back.every((x) => typeof x === 'object')).toBe(true);
+  });
+
+  it('장비·도구는 (앞에 아무것도 없으면) ready로 넘겨 창고에 넣게 한다', () => {
     const { f, wb } = line();
     wb.job = job({ kind: 'equip', id: 'helmet', left: 1 });
     f.simulate(20);

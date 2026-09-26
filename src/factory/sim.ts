@@ -1,3 +1,6 @@
+import { newUid, rollSeries, withSpecials, type Equip, type EquipSlot } from '../data/equipment';
+import { rollManaGrade } from '../data/crafting';
+import type { ClassId } from '../data/classes';
 import { BUILDINGS, ESSENCE_BOOST, ESSENCE_BURN, generatorPower, levelSpeed, PRODUCER_CAP, PRODUCER_TYPES, producerOutputs, producerTime, RECIPES, type BuildingType, type ProducerType, type Recipe } from '../data/factory';
 
 /** 0: +x(동), 1: +z(남), 2: -x(서), 3: -z(북) */
@@ -43,7 +46,27 @@ export interface BuildingState {
   queue?: WorkJob[];
   /** 제작대: 완성된 장비·도구 (게임이 창고로 옮긴다) */
   ready?: WorkJob[];
+  /** 출하 보관상자: 레일로 들어온 장비 */
+  equips?: Equip[];
 }
+
+/**
+ * 레일 위를 흐르는 장비: "@eq:부위:단계:마력(0/1):직업". 출하 보관상자에 들어가는 순간 진짜 장비가 된다
+ * (등급·계열·특수 옵션을 그때 굴린다)
+ */
+export const EQUIP_TOKEN = '@eq:';
+export const isEquipToken = (id: string) => id.startsWith(EQUIP_TOKEN);
+export function equipToken(j: WorkJob): string {
+  return `${EQUIP_TOKEN}${j.id}:${j.tier}:${j.mana ? 1 : 0}:${j.cls ?? ''}`;
+}
+export function equipFromToken(id: string, rand: () => number = Math.random): Equip {
+  const [slot, tier, mana, cls] = id.slice(EQUIP_TOKEN.length).split(':');
+  const e: Equip = { uid: newUid(), slot: slot as EquipSlot, cls: slot === 'weapon' ? ((cls || undefined) as ClassId | undefined) : undefined, tier: Number(tier) || 1, grade: mana === '1' ? rollManaGrade(rand()) : 0, plus: 0 };
+  e.series = rollSeries(e.slot, rand());
+  return withSpecials(e, rand);
+}
+/** 출하 보관상자에 둘 수 있는 장비 수 */
+export const BOX_EQUIP_MAX = 200;
 
 /**
  * 제작대 작업. 재료와 골드는 시작할 때 전부 낸다.
@@ -225,12 +248,15 @@ export class Factory {
   }
 
   /** 철거. 안에 있던 아이템은 창고로 돌려준다 */
-  remove(x: number, y: number, give: (id: string, n: number) => void): BuildingState | null {
+  remove(x: number, y: number, give: (id: string, n: number) => void, giveEquip?: (e: Equip) => void): BuildingState | null {
     const b = this.at(x, y);
     if (!b) return null;
-    if (b.item) give(b.item, 1);
-    for (const [id, n] of Object.entries(b.buffer ?? {})) if (n > 0) give(id, n);
-    for (const id of b.out ?? []) give(id, 1);
+    // 레일 위·출구의 장비는 장비로 돌려준다
+    const back = (id: string, n: number) => (isEquipToken(id) ? giveEquip?.(equipFromToken(id)) : give(id, n));
+    if (b.item) back(b.item, 1);
+    for (const [id, n] of Object.entries(b.buffer ?? {})) if (n > 0) back(id, n);
+    for (const id of b.out ?? []) back(id, 1);
+    for (const e of b.equips ?? []) giveEquip?.(e);
     if (b.crafting) for (const [id, n] of Object.entries(RECIPE_BY_ID[b.crafting].inputs)) give(id, n);
     this.state.buildings = this.state.buildings.filter((o) => o !== b);
     this.reindex();
@@ -397,6 +423,10 @@ export class Factory {
         for (let i = 0; i < job.count; i++) b.out.push(job.id);
         this.onCraft?.(job.id, job.count);
         while (b.out.length > 0 && this.pushForward(b, b.out[0])) b.out.shift();
+      } else if (job.kind === 'equip' && this.feedsForward(b)) {
+        // 앞쪽에 레일·출하 상자가 이어져 있으면 장비도 레일로 내보낸다 (없으면 창고로)
+        b.out.push(equipToken(job));
+        while (b.out.length > 0 && this.pushForward(b, b.out[0])) b.out.shift();
       } else (b.ready ??= []).push({ ...job, left: 1 });
       job.left--;
       if (job.left <= 0) b.job = b.queue?.shift() ?? null;
@@ -531,6 +561,13 @@ export class Factory {
     });
   }
 
+  /** 앞쪽 칸에 레일·분배기·출하 상자가 있는지 */
+  private feedsForward(b: BuildingState): boolean {
+    const [dx, dy] = DIRS[b.dir];
+    const t = this.at(b.x + dx, b.y + dy);
+    return !!t && (t.type === 'belt' || t.type === 'splitter' || (t.type === 'box' && t.mode === 'out'));
+  }
+
   private pushForward(b: BuildingState, item: string): boolean {
     return this.pushTo(b, b.dir, item);
   }
@@ -555,9 +592,15 @@ export class Factory {
         return true;
       }
       case 'warehouse':
-        // 일반 창고: 레일로 들어온 것을 차원집 보관함에 모은다
+        // 일반 창고: 레일로 들어온 것을 차원집 보관함에 모은다 (장비는 출하 상자로만)
+        if (isEquipToken(item)) return false;
         return this.onStore?.(item) ?? false;
       case 'box': {
+        if (isEquipToken(item)) {
+          if (target.mode !== 'out' || (target.equips?.length ?? 0) >= BOX_EQUIP_MAX) return false;
+          (target.equips ??= []).push(equipFromToken(item));
+          return true;
+        }
         if (target.mode !== 'out' || boxTotal(target) >= BOX_CAPACITY) return false;
         target.buffer![item] = (target.buffer![item] ?? 0) + 1;
         return true;

@@ -179,7 +179,8 @@ export function buildItemGeometry(id: string): BufferGeometry {
   const def = ITEMS[id];
   const c = def?.color ?? 0xffffff;
   let g: BufferGeometry[];
-  if (id.endsWith('_ore')) g = ore(c);
+  if (id.startsWith('@eq:')) g = plate(0xffd86a);
+  else if (id.endsWith('_ore')) g = ore(c);
   else if (id === 'wood' || id.endsWith('_wood')) g = log(c);
   else if (id.startsWith('mana_plank_')) g = [...planks(c), part(new OctahedronGeometry(0.12, 0), 0x9a7aff, { pos: [0.1, 0.2, 0.05] })];
   else if (id === 'plank' || id.endsWith('_plank')) g = planks(c);
