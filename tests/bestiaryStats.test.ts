@@ -3,7 +3,7 @@ import { BESTIARY, bestiaryStats, isStageMaster } from '../src/data/bestiary';
 
 describe('bestiary permanent stats', () => {
   it('nothing below the thresholds', () => {
-    const s = bestiaryStats(() => 999);
+    const s = bestiaryStats((id) => (BESTIARY.find((e) => e.species.id === id)?.rank === 'normal' ? 999 : 29));
     expect(Object.values(s).every((v) => v === 0)).toBe(true);
   });
   it('same gain regardless of tier', () => {
