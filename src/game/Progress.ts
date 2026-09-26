@@ -1,5 +1,6 @@
 import { CLASSES, CLASS_ORDER, ULTIMATES, expToNext, MAX_LEVEL, POINTS_PER_LEVEL, STAT_KEYS, type BaseStats, type ClassId, type StatKey } from '../data/classes';
 import { durability, equipStats, seriesBonus, withSpecials, type Equip, type EquipSlot } from '../data/equipment';
+import type { AwakenBranch } from '../data/awaken';
 import { specialBonus, specialStats, sumSpecials, type SpecialTotals } from '../data/special';
 import { newTool, type ToolKind, type ToolState } from '../data/tools';
 import { FACTORY_SIZES, RECIPES, RECIPE_RENAMES } from '../data/factory';
@@ -32,6 +33,8 @@ export interface ClassState {
   tlv?: number;
   texp?: number;
   tpts?: Partial<Record<BonusKey, number>>;
+  /** 스킬 각성: 's0'~'s5'(스킬), 'u0'·'u1'(궁극기) → 고른 방향. 키가 있으면 각성한 것 */
+  awaken?: Record<string, AwakenBranch>;
 }
 
 export interface RunCheckpoint {
@@ -518,6 +521,12 @@ export class Progress {
     return ULTIMATES[clsId].map((u, i) => (this.data.dimStones.includes(u.stone) && lv >= u.level ? i : -1)).filter((i) => i >= 0);
   }
   /** 궁극기 레벨 (기본 1) */
+  /** 각성 방향 (각성하지 않았으면 null). key: 's0'~'s5' 스킬, 'u0'·'u1' 궁극기 */
+  awakenOf(key: string, clsId: ClassId = this.data.currentClass): AwakenBranch | null {
+    if (this.trial) return null;
+    return this.data.classes[clsId].awaken?.[key] ?? null;
+  }
+
   ultLevel(index: number, clsId: ClassId = this.data.currentClass): number {
     if (this.trial) return 1;
     return this.data.classes[clsId].ultLv?.[index] ?? 1;

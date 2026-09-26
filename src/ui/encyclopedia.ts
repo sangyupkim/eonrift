@@ -14,6 +14,7 @@ import {
   rushReward,
   towerFirstClear,
 } from '../data/endgame';
+import { AWAKEN_HOLD, awakenCost, SKILL_AWAKEN, ULT_AWAKEN } from '../data/awaken';
 import { specialPool, specialRange, specialRerollCost, SPECIALS, type SpecialKey } from '../data/special';
 import { enhanceCost, EQUIP_MAX_DUR, EQUIP_SLOTS, GRADES, repairMaterial, SERIES, SERIES_IDS, slotName, type Equip } from '../data/equipment';
 import { PRODUCER_CAP, PRODUCER_LIMIT, PRODUCER_MAX_LEVEL, producerTime } from '../data/factory';
@@ -136,8 +137,16 @@ function classes(): string {
   <p>레벨이 오를 때마다 스탯 포인트 5점. 가방 화면의 [능력치]에서 찍는다.</p>
   ${table(['스탯', '효과'], Object.values(STAT_INFO).map((s) => [s.name, s.desc]))}
   <h3>스킬·궁극기 강화</h3>
-  <p>궁극기는 수호자의 차원석을 얻고 <b>첫 번째는 Lv.15, 두 번째는 Lv.35</b>가 되면 열린다. 캐릭터 → 스킬에서 하나를 골라 궁극기 칸에 둔다. 궁극기·스킬은 던전에서만 쓸 수 있다.</p><p>교관 카엘에게 스킬을 배우고 Lv.${MAX_SKILL_LEVEL}까지 올린다(골드 + 판). 강화할 때마다 공격 스킬은 위력 +15%, 방어·보조 스킬은 지속 시간이 늘고, 재사용 대기 −6%. 배운 스킬은 캐릭터 → 스킬에서 퀵슬롯(1·2·3)에 놓는다 (스킬을 누르고 칸을 누른다). 궁극기는 수호자의 차원석으로 열리고, 엔딩 뒤 <b>차원 파편</b>으로 Lv.5까지 올린다 (레벨마다 위력 +${pct(ultPower(2) - 1)}, 재사용 −5초).</p>
-  ${table(['궁극기', '필요 파편'], [1, 2, 3, 4].map((lv) => [`Lv.${lv} → ${lv + 1}`, it('dim_shard', ultUpgradeCost(lv)!.items.dim_shard)]))}`;
+  <p>궁극기는 수호자의 차원석을 얻고 <b>첫 번째는 Lv.15, 두 번째는 Lv.35</b>가 되면 열린다. 캐릭터 → 스킬에서 하나를 골라 궁극기 칸에 둔다. 궁극기·스킬은 던전에서만 쓸 수 있다.</p><p>교관 카엘에게 스킬을 배우고 Lv.${MAX_SKILL_LEVEL}까지 올린다(골드 + 판 + 마력 정수). 강화할 때마다 공격 스킬은 위력 +15%, 방어·보조 스킬은 지속 시간이 늘고, 재사용 대기는 Lv.5까지 −6%씩·그 뒤로 −2%씩. 효과는 Lv.4~6에서 고리·불꽃이, Lv.7~10에서 문양·빛기둥·금빛 불꽃이 더해진다. 배운 스킬은 캐릭터 → 스킬에서 퀵슬롯(1·2·3)에 놓는다 (스킬을 누르고 칸을 누른다). 궁극기는 수호자의 차원석으로 열리고, 엔딩 뒤 <b>차원 파편</b>으로 Lv.5까지 올린다 (레벨마다 위력 +${pct(ultPower(2) - 1)}, 재사용 −5초).</p>
+  ${table(['궁극기', '필요 파편'], [1, 2, 3, 4].map((lv) => [`Lv.${lv} → ${lv + 1}`, it('dim_shard', ultUpgradeCost(lv)!.items.dim_shard)]))}
+  <h3>스킬 각성</h3>
+  <p>스킬 <b>Lv.${MAX_SKILL_LEVEL}</b>(궁극기는 Lv.5)이면 교관 카엘에게 최고급 재료를 내고 각성한다. 각성은 두 방향 중 하나를 골라 쓰고, 교관에게 가면 <b>언제든 공짜로</b> 바꿀 수 있다.</p>
+  <ul class="enc-list">
+    <li><b>A · 충전형</b> — 스킬을 2번까지 모아 두었다가 연달아 쓴다 (버튼에 남은 횟수).</li>
+    <li><b>B · 집중형</b> — 버튼을 꾹 누르면 최대 ${AWAKEN_HOLD}초 힘을 모으고(버튼 둘레가 금빛으로 차오름), 떼는 순간 훨씬 강하게 나간다. 모으는 동안은 천천히 걷는다.</li>
+  </ul>
+  ${table(['비용', '재료'], [['스킬', `${awakenCost(false).gold.toLocaleString()} G · ${items(awakenCost(false).items)}`], ['궁극기', `${awakenCost(true).gold.toLocaleString()} G · ${items(awakenCost(true).items)}`]])}
+  ${CLASS_ORDER.map((c) => table([`${CLASSES[c].name} 스킬`, 'A · 충전형', 'B · 집중형'], [...CLASSES[c].skills.map((sk, i) => [sk.name, SKILL_AWAKEN[c][i].a.name, `${SKILL_AWAKEN[c][i].b.name}<br><small class="dim">${SKILL_AWAKEN[c][i].b.desc.replace('꾹 눌러 힘을 모은다. ', '')}</small>`]), ...ULTIMATES[c].map((u, i) => [`${u.name} (궁극기)`, ULT_AWAKEN[c][i].a.name, `${ULT_AWAKEN[c][i].b.name}<br><small class="dim">${ULT_AWAKEN[c][i].b.desc.replace('꾹 눌러 힘을 모은다. ', '')}</small>`])])).join('')}`;
 }
 
 function equipment(): string {

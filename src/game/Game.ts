@@ -10,7 +10,7 @@ import { CAMERA_OFFSET, GAME_VERSION, PLAYER, SCREEN_RIGHT, SCREEN_UP, TILE, VIE
 import { Audio } from '../core/audio';
 import { Input } from '../core/input';
 import { Rng, randomSeed } from '../core/rng';
-import { CLASSES, CLASS_ORDER, expToNext, MAX_SKILL_LEVEL, SKILL_LEARN, skillUpgradeCost, ULTIMATES, type ClassId } from '../data/classes';
+import { CLASSES, CLASS_ORDER, expToNext, MAX_SKILL_LEVEL, MAX_ULT_LEVEL, SKILL_LEARN, skillUpgradeCost, ULTIMATES, type ClassId } from '../data/classes';
 import { ultUpgradeCost } from '../data/ultUpgrade';
 import { durability, equipName, GRADE, GRADES, newUid, rollEquip, rollSeries, withSpecials, type Equip } from '../data/equipment';
 import { rollManaGrade } from '../data/crafting';
@@ -30,6 +30,7 @@ import { Bag } from './Bag';
 import { Combat } from './Combat';
 import type { Monster } from './Monster';
 import type { SpecialTotals } from '../data/special';
+import { AWAKEN_HOLD, awakenCost, SKILL_AWAKEN, ULT_AWAKEN } from '../data/awaken';
 import { rememberNickname, submitTrial } from '../core/leaderboard';
 import { saveControls } from '../core/controls';
 import { Player } from './Player';
@@ -479,6 +480,7 @@ export class Game {
       hitStop: (t) => (this.hitStopT = Math.max(this.hitStopT, t)),
       sfx: (n) => this.audio.play(n),
       // 시련: 배운 스킬은 모두 최고 레벨로 (같은 조건)
+      awaken: (key) => this.progress.awakenOf(key),
       skillLevel: (i) => (this.progress.trial && (this.progress.cls.skills[i] ?? 0) > 0 ? MAX_SKILL_LEVEL : (this.progress.cls.skills[i] ?? 0)),
       bonus: (k) => this.progress.bonus(k),
       autoAim: () => this.progress.data.settings.autoAim !== false,
@@ -1168,6 +1170,30 @@ export class Game {
           this.audio.play('level');
           this.saveNow();
           this.openSkillShop(`궁극기 ${ULTIMATES[p.data.currentClass][u].name} Lv.${lv + 1}!`);
+        },
+        (key, branch) => {
+          const p = this.progress;
+          const c = p.cls;
+          const ult = key.startsWith('u');
+          const i = Number(key.slice(1));
+          const def = (ult ? ULT_AWAKEN : SKILL_AWAKEN)[p.data.currentClass][i];
+          const name = ult ? ULTIMATES[p.data.currentClass][i].name : CLASSES[p.data.currentClass].skills[i].name;
+          if (branch === null) {
+            // 각성하기: 최고 레벨 + 최고급 재료
+            const maxed = ult ? p.unlockedUlts().includes(i) && p.ultLevel(i) >= MAX_ULT_LEVEL : (c.skills[i] ?? 0) >= MAX_SKILL_LEVEL;
+            const cost = awakenCost(ult);
+            if (!maxed || c.awaken?.[key] || p.data.gold < cost.gold || !p.hasAll(cost.items)) return;
+            p.data.gold -= cost.gold;
+            p.takeAll(cost.items);
+            (c.awaken ??= {})[key] = 'A';
+            this.audio.play('stone');
+            this.saveNow();
+            return this.openSkillShop(`:sparkle: ${name} 각성! 지금은 A · ${def.a.name} — 아래에서 B · ${def.b.name}(으)로 바꿀 수 있습니다`);
+          }
+          if (!c.awaken?.[key]) return;
+          c.awaken[key] = branch;
+          this.saveNow();
+          this.openSkillShop(`${name}: ${branch} · ${branch === 'A' ? def.a.name : def.b.name}`);
         },
       ),
     );
@@ -2801,19 +2827,30 @@ export class Game {
     for (let i = 0; i < 3; i++) {
       if (input.consume(`skill${i + 1}` as 'skill1')) {
         const idx = this.progress.cls.quick[i] ?? -1;
-        const msg = idx < 0 ? '스킬 칸이 비어 있습니다 (캐릭터 → 스킬에서 배치)' : this.combat.useSkill(idx);
-        if (msg) this.hud.toast(msg);
-        else this.gathering = null;
+        if (idx < 0) this.hud.toast('스킬 칸이 비어 있습니다 (캐릭터 → 스킬에서 배치)');
+        else if (this.progress.awakenOf(`s${idx}`) === 'B') {
+          // 집중형 각성: 누르고 있는 동안 힘을 모은다
+          const b = this.combat.skillBlock(idx);
+          if (b) this.hud.toast(b);
+          else if (b === null && !this.charging) this.charging = { slot: i, ult: false, index: idx, t: 0, fx: 0 };
+        } else {
+          const msg = this.combat.useSkill(idx);
+          if (msg) this.hud.toast(msg);
+          else this.gathering = null;
+        }
       }
     }
     if (input.consume('ult')) {
       const ui = this.progress.ultIndex;
-      const msg = ui < 0 ? '궁극기는 1-10 수호자를 처음 쓰러뜨리면 얻습니다' : this.combat.useUlt(ui, this.progress.ultLevel(ui));
-      if (msg) this.hud.toast(msg);
-      else if (ui >= 0) {
-        this.gathering = null;
-        this.hud.toast(`궁극기: ${ULTIMATES[this.progress.data.currentClass][ui].name}!`, 1400);
-      }
+      const block = ui < 0 ? '궁극기는 1-10 수호자를 처음 쓰러뜨리면 얻습니다' : this.combat.ultBlock(ui);
+      if (block) this.hud.toast(block);
+      else if (block === null && this.progress.awakenOf(`u${ui}`) === 'B') {
+        if (!this.charging) this.charging = { slot: -1, ult: true, index: ui, t: 0, fx: 0 };
+      } else if (block === null) this.fireUlt(ui, 0);
+    }
+    if (this.charging) {
+      move = { x: move.x * 0.5, y: move.y * 0.5 };
+      this.updateCharging(dt);
     }
     if (input.consume('potion')) this.drinkPotion();
     if ((this.attackBuffer > 0 || input.attackHeld) && !this.building && pl.canAct) {
@@ -3039,19 +3076,32 @@ export class Game {
     this.hud.setDodgeIcon(pl.cls.id === 'mage' ? skillIconUrl('mage', 8) : pl.cls.id === 'archer' ? skillIconUrl('archer', 8) : null, pl.cls.id === 'mage' ? '블링크' : pl.cls.id === 'archer' ? '후방 도약' : '');
     const skills = pl.cls.skills;
     const quick = p.cls.quick.map((i) => (i >= 0 && (p.cls.skills[i] ?? 0) > 0 ? i : -1));
+    const cb = this.combat;
     this.hud.setSkills(
-      quick.map((i) => (i >= 0 ? (this.combat.cooldowns[i] ?? 0) / skills[i].cooldown : 0)),
+      quick.map((i) => (i >= 0 && cb.stock[i] < 1 ? (cb.cooldowns[i] ?? 0) / Math.max(0.1, cb.cdMax[i]) : 0)),
       quick.map((i) => i < 0 || pl.mp >= skills[i].mp),
       quick.map((i) => (i >= 0 ? skills[i].name : null)),
       quick.map((i) => (i >= 0 ? skillIconUrl(pl.cls.id, i) : '')),
-      quick.map((i) => (i >= 0 ? (this.combat.cooldowns[i] ?? 0) : 0)),
+      quick.map((i) => (i >= 0 && cb.stock[i] < 1 ? (cb.cooldowns[i] ?? 0) : 0)),
+      quick.map((i) => (i >= 0 && cb.maxStock(i) > 1 ? cb.stock[i] : -1)),
+      this.charging && !this.charging.ult ? { slot: this.charging.slot, k: Math.min(1, this.charging.t / AWAKEN_HOLD) } : null,
     );
     // 궁극기 칸
     const ui = p.ultIndex;
     if (ui < 0) this.hud.setUlt({ name: '궁극기', icon: '', ratio: 0, secs: 0, ready: true, lockedMsg: '궁극기는 1-10 수호자를 처음 쓰러뜨리면 얻습니다 (4-10 수호자를 쓰러뜨리면 하나 더)' });
     else {
       const u = ULTIMATES[pl.cls.id][ui];
-      this.hud.setUlt({ name: u.name, icon: skillIconUrl(pl.cls.id, 6 + ui), ratio: this.combat.ultCooldown / this.combat.ultCooldownMax, secs: this.combat.ultCooldown, ready: pl.mp >= u.mp });
+      const ultA = p.awakenOf(`u${ui}`) === 'A';
+      const empty = this.combat.ultStock < 1;
+      this.hud.setUlt({
+        name: u.name,
+        icon: skillIconUrl(pl.cls.id, 6 + ui),
+        ratio: empty ? this.combat.ultCooldown / this.combat.ultCooldownMax : 0,
+        secs: empty ? this.combat.ultCooldown : 0,
+        ready: pl.mp >= u.mp,
+        stock: ultA ? this.combat.ultStock : -1,
+        charge: this.charging?.ult ? Math.min(1, this.charging.t / AWAKEN_HOLD) : -1,
+      });
     }
     const inv = this.run ? this.run.bag : this.progress.invBag;
     this.hud.setBagCount(inv.used, inv.slots.length);
@@ -3217,6 +3267,53 @@ export class Game {
       },
       msg,
     );
+  }
+
+  /** 집중형 각성: 모으는 중인 스킬 (slot -1 = 궁극기) */
+  private charging: { slot: number; ult: boolean; index: number; t: number; fx: number } | null = null;
+
+  private fireUlt(ui: number, charge: number): void {
+    const msg = this.combat.useUlt(ui, this.progress.ultLevel(ui), charge);
+    if (msg) this.hud.toast(msg);
+    else {
+      this.gathering = null;
+      this.hud.toast(`궁극기: ${ULTIMATES[this.progress.data.currentClass][ui].name}${charge > 0 ? ` (${Math.round(charge * 100)}%)` : ''}!`, 1400);
+    }
+  }
+
+  /** 꾹 누르고 있는 동안 힘을 모으고, 떼면(또는 3초를 넘기면) 쏜다 */
+  private updateCharging(dt: number): void {
+    const c = this.charging!;
+    const pl = this.player;
+    const d = this.level instanceof DungeonScene ? this.level : null;
+    if (!d || !pl.alive || pl.buff('stun') || pl.buff('silence')) {
+      this.charging = null;
+      return;
+    }
+    const before = c.t;
+    c.t += dt;
+    const k = Math.min(1, c.t / AWAKEN_HOLD);
+    // 모으는 모습: 발밑 고리가 점점 커지고, 다 모이면 금빛으로 번쩍
+    c.fx -= dt;
+    if (c.fx <= 0) {
+      c.fx = 0.22;
+      const col = k >= 1 ? 0xffe08a : 0x9fd8ff;
+      d.effects.ring(pl.position.x, pl.position.z, 0.8 + k * 1.8, col, 0.25, 0.8);
+      d.effects.sparks(pl.position.x, 0.6, pl.position.z, col, 4 + Math.round(k * 8), { speed: 2 + k * 3, up: true, spread: 0.6 });
+    }
+    if (before < AWAKEN_HOLD && c.t >= AWAKEN_HOLD) {
+      d.effects.ring(pl.position.x, pl.position.z, 2.8, 0xffe08a, 0.4, 1.2);
+      this.audio.play('level');
+    }
+    const action = c.ult ? 'ult' : (`skill${c.slot + 1}` as 'skill1');
+    if (this.input.held(action) && c.t < AWAKEN_HOLD + 0.6) return;
+    this.charging = null;
+    if (c.ult) this.fireUlt(c.index, k);
+    else {
+      const msg = this.combat.useSkill(c.index, k);
+      if (msg) this.hud.toast(msg);
+      else this.gathering = null;
+    }
   }
 
   /** 마우스 이동 목적지 */

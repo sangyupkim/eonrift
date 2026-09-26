@@ -59,6 +59,7 @@ export class Input {
     window.addEventListener('keyup', (e) => this.keys.delete(e.key.toLowerCase()));
     window.addEventListener('blur', () => {
       this.keys.clear();
+      this.heldButtons.clear();
       this.mouseHeld = false;
       this.mouseMoveHeld = false;
       this.attackButtonHeld = false;
@@ -105,6 +106,18 @@ export class Input {
 
   press(action: Action): void {
     this.pressed.add(action);
+  }
+
+  /** 화면 버튼을 누르고 있는지 (꾹 눌러 모으는 스킬) */
+  private heldButtons = new Set<Action>();
+  holdButton(action: Action, on: boolean): void {
+    if (on) this.heldButtons.add(action);
+    else this.heldButtons.delete(action);
+  }
+
+  /** 이 동작의 키나 버튼을 지금 누르고 있는지 */
+  held(action: Action): boolean {
+    return this.heldButtons.has(action) || this.keys.has(this.controls.keys[action]);
   }
 
   /** 이번 프레임에 눌렸는지 확인하고 소비한다 */

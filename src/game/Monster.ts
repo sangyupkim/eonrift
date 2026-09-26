@@ -368,6 +368,15 @@ export class Monster {
   }
 
   /** 피해를 받는다. 죽었으면 true */
+  /** (x, z) 쪽으로 끌어당긴다 (보스는 끌려오지 않는다) */
+  pull(x: number, z: number, strength: number): void {
+    if (this.isBoss || !this.alive) return;
+    const d = Math.hypot(x - this.x, z - this.z) || 1;
+    const k = Math.min(strength, Math.max(0, d - this.radius - 0.8));
+    this.knockX += ((x - this.x) / d) * k;
+    this.knockZ += ((z - this.z) / d) * k;
+  }
+
   damage(amount: number, fromX: number, fromZ: number, knock: number): boolean {
     if (!this.alive) return false;
     if (this.state === 'down') return false;

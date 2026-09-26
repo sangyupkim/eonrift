@@ -218,10 +218,19 @@ export class Hud {
       e.preventDefault();
       if (this.ultLockedMsg) this.toast(this.ultLockedMsg, 2600);
       else {
+        try {
+          ult.setPointerCapture(e.pointerId);
+        } catch {
+          /* 캡처가 안 되는 브라우저 */
+        }
         input.press('ult');
+        input.holdButton('ult', true);
         this.onPress();
       }
     });
+    const ultUp = () => input.holdButton('ult', false);
+    ult.addEventListener('pointerup', ultUp);
+    ult.addEventListener('pointercancel', ultUp);
     this.potionBtn = this.button('act potion', itemIconUrl('potion') ? `<img class="mico" src="${itemIconUrl('potion')}" alt="">` : ICONS.potion, 'potion');
     this.potionCount = el('span', 'badge');
     this.potionBtn.appendChild(this.potionCount);
@@ -349,13 +358,23 @@ export class Hud {
     const b = el('button', className, icon) as HTMLButtonElement;
     b.addEventListener('pointerdown', (e) => {
       e.preventDefault();
+      // 꾹 누르는 스킬(집중형 각성): 손가락이 버튼 밖으로 나가도 뗄 때까지 누른 것으로
+      try {
+        b.setPointerCapture(e.pointerId);
+      } catch {
+        /* 캡처가 안 되는 브라우저 */
+      }
       this.input.press(action);
+      this.input.holdButton(action, true);
       b.classList.add('down');
       this.onPress();
     });
-    const up = () => b.classList.remove('down');
+    const up = () => {
+      b.classList.remove('down');
+      this.input.holdButton(action, false);
+    };
     b.addEventListener('pointerup', up);
-    b.addEventListener('pointerleave', up);
+    b.addEventListener('pointerleave', () => b.classList.remove('down'));
     b.addEventListener('pointercancel', up);
     return b;
   }
@@ -661,9 +680,21 @@ export class Hud {
   private ultCdWas = false;
 
   /** 궁극기 칸. lockedMsg가 있으면 잠김 */
-  setUlt(o: { name: string; icon: string; ratio: number; secs: number; ready: boolean; lockedMsg?: string }): void {
+  private ultStockEl: HTMLSpanElement | null = null;
+  setUlt(o: { name: string; icon: string; ratio: number; secs: number; ready: boolean; lockedMsg?: string; stock?: number; charge?: number }): void {
     this.ultLockedMsg = o.lockedMsg ?? '';
     const b = this.ultBtn;
+    if (!this.ultStockEl) {
+      this.ultStockEl = el('span', 'dodge-count hidden');
+      b.appendChild(this.ultStockEl);
+    }
+    const sv = o.stock ?? -1;
+    this.ultStockEl.classList.toggle('hidden', sv < 0);
+    if (sv >= 0 && this.ultStockEl.textContent !== String(sv)) this.ultStockEl.textContent = String(sv);
+    const ch = o.charge ?? -1;
+    b.classList.toggle('charging', ch >= 0);
+    b.classList.toggle('charged', ch >= 0.99);
+    if (ch >= 0) b.style.setProperty('--charge', `${Math.round(ch * 360)}deg`);
     b.classList.toggle('locked', !!o.lockedMsg);
     const cooling = o.ratio > 0.001;
     b.classList.toggle('cooling', cooling);
@@ -693,9 +724,24 @@ export class Hud {
    * 퀵슬롯 3칸. names[i]가 null이면 빈 칸.
    * 재사용 대기 중에는 빨간 그늘 + 남은 초, 다시 쓸 수 있게 되면 한 번 번쩍인다
    */
-  setSkills(cooldowns: number[], ready: boolean[], names: (string | null)[], icons: string[] = [], secs: number[] = []): void {
+  private skillStocks: HTMLSpanElement[] = [];
+  /** stocks: 충전형 각성이면 남은 충전 수 (아니면 -1). charging: 집중형으로 모으는 중인 칸과 정도 */
+  setSkills(cooldowns: number[], ready: boolean[], names: (string | null)[], icons: string[] = [], secs: number[] = [], stocks: number[] = [], charging: { slot: number; k: number } | null = null): void {
     cooldowns.forEach((r, i) => {
       const btn = this.skillBtns[i];
+      let st = this.skillStocks[i];
+      if (!st) {
+        st = el('span', 'dodge-count hidden');
+        btn.appendChild(st);
+        this.skillStocks[i] = st;
+      }
+      const sv = stocks[i] ?? -1;
+      st.classList.toggle('hidden', sv < 0);
+      if (sv >= 0 && st.textContent !== String(sv)) st.textContent = String(sv);
+      const ch = charging && charging.slot === i ? charging.k : -1;
+      btn.classList.toggle('charging', ch >= 0);
+      btn.classList.toggle('charged', ch >= 0.99);
+      if (ch >= 0) btn.style.setProperty('--charge', `${Math.round(ch * 360)}deg`);
       const cooling = r > 0.001;
       this.skillShades[i].style.transform = `scaleY(${Math.min(1, r)})`;
       btn.classList.toggle('cooling', cooling);

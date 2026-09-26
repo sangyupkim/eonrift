@@ -28,7 +28,7 @@ export function makeTestSave(): SaveData {
     alloc[main] = Math.round(pts * 0.6);
     alloc.vit = Math.round(pts * 0.3);
     alloc.dex = pts - alloc[main] - alloc.vit;
-    d.classes[id] = { level: MAX_LEVEL, exp: 0, equipment: gear(id), alloc, points: 0, skills: [5, 5, 5, 5, 5, 5], quick: [0, 1, 2], ult: 0, ultLv: [1, 1], tlv: 5, texp: 0, tpts: {} };
+    d.classes[id] = { level: MAX_LEVEL, exp: 0, equipment: gear(id), alloc, points: 0, skills: [10, 10, 10, 10, 10, 10], quick: [0, 1, 2], ult: 0, ultLv: [5, 5], tlv: 5, texp: 0, tpts: {} };
   }
   d.unlockedClasses = [...CLASS_ORDER];
   d.gold = 10_000_000;

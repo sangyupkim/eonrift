@@ -145,7 +145,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
 export const CLASS_ORDER: ClassId[] = ['sword', 'mage', 'archer'];
 
 export const MAX_LEVEL = 99;
-export const MAX_SKILL_LEVEL = 5;
+export const MAX_SKILL_LEVEL = 10;
 
 export interface SkillCost {
   gold: number;

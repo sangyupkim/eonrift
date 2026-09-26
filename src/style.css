@@ -3298,3 +3298,18 @@ h3.sub { margin: 10px 0 6px; font-size: 14px; display: flex; align-items: center
 /* 머리 위 내 닉네임 */
 .name-label.self { font-size: 11px; color: #bfe6ff; background: rgba(10, 9, 22, 0.45); padding: 0 6px; }
 .panel button.rank-refresh { margin-left: 8px; padding: 2px 10px; font-size: 12px; vertical-align: middle; }
+/* 집중형 각성: 꾹 눌러 모으는 중 (버튼 둘레가 차오른다) */
+.act.charging::after { content: ''; position: absolute; inset: 0; border-radius: 50%; pointer-events: none; z-index: 3; background: conic-gradient(#ffe08a var(--charge, 0deg), rgba(255, 255, 255, 0.15) 0); -webkit-mask: radial-gradient(circle, transparent 60%, #000 62%); mask: radial-gradient(circle, transparent 60%, #000 62%); }
+.act.charged::after { background: conic-gradient(#fff3b0 360deg, #fff3b0 0); filter: drop-shadow(0 0 6px #ffd23a); animation: chargedPulse 0.5s ease-in-out infinite alternate; }
+@keyframes chargedPulse { from { opacity: 0.7; } to { opacity: 1; } }
+/* 스킬 각성 (교관) */
+.awk { margin-top: 6px; padding: 6px 8px; border-radius: 10px; background: rgba(255, 210, 90, 0.07); border: 1px solid rgba(255, 210, 90, 0.35); }
+.awk-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-bottom: 4px; }
+.awk-head b { color: #ffd87a; }
+.awk-head button { margin-left: auto; padding: 4px 12px; border-radius: 8px; font-weight: 800; font-size: 12px; }
+.awk-opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 6px; }
+.awk-opt { display: flex; flex-direction: column; gap: 2px; text-align: left; white-space: normal; min-width: 0; height: auto; padding: 6px 8px; border-radius: 8px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--panel-line); color: var(--ink); font-size: 12px; }
+.awk-opt small { color: var(--ink-dim); line-height: 1.35; }
+button.awk-opt { cursor: pointer; }
+.awk-opt.on { background: rgba(255, 210, 90, 0.2); border-color: #ffd23a; }
+.awk-opt b, .awk-opt small { white-space: normal; overflow-wrap: anywhere; }

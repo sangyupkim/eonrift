@@ -24,6 +24,7 @@ import { ICONS, mico, richText } from './icons';
 import { buildingThumb } from './thumbs';
 import { gearLook } from '../models/items';
 import { equipIconUrl, heroPortraitUrl, itemIconUrl, monsterIconUrl, skillIconUrl, toolIconUrl } from './itemIcons';
+import { AWAKEN_HOLD, awakenCost, effectTier, SKILL_AWAKEN, ULT_AWAKEN, type AwakenBranch, type AwakenDef } from '../data/awaken';
 import { rollSpecials, specialRange, specialRerollCost, specialText } from '../data/special';
 import { BESTIARY, BESTIARY_BY_ID, COLLECTION_MILESTONES, isStageMaster, killMilestones, MASTER_ALL_GAIN, milestoneReward, RESEARCH_BONUS, SPECIES_STAT_KILLS, statMilestone, type BestiaryReward } from '../data/bestiary';
 import { BOSS_SPECIES, DEBUFF_INFO, TRAIT_TEXT, type Faction } from '../data/species';
@@ -2288,9 +2289,24 @@ export class Screens {
   }
 
   // ---------------- 교관: 스킬 배우기·강화 ----------------
-  skillShop(p: Progress, onBuy: (i: number) => void, onClose: () => void, message?: string, onUlt?: (i: number) => void): void {
+  skillShop(p: Progress, onBuy: (i: number) => void, onClose: () => void, message?: string, onUlt?: (i: number) => void, onAwaken?: (key: string, branch: AwakenBranch | null) => void): void {
     const c = p.cls;
     const cls = CLASSES[p.data.currentClass];
+    // 각성 칸: 최고 레벨이면 [각성하기], 각성했으면 두 방향 중 고르기 (언제든 공짜로 바꾼다)
+    const awakenBlock = (key: string, def: AwakenDef, maxed: boolean, ult: boolean) => {
+      if (!maxed) return '';
+      const cur = c.awaken?.[key];
+      if (!cur) {
+        const cost = awakenCost(ult);
+        const ok = p.data.gold >= cost.gold && p.hasAll(cost.items);
+        const items = Object.entries(cost.items).map(([id, n]) => `<span class="${p.count(id) >= n ? '' : 'bad'}">${inlineGem(id)}${ITEMS[id].name} ${p.count(id)}/${n}</span>`).join(' · ');
+        return `<div class="awk"><div class="awk-head"><b>✦ 각성</b><small class="dim"><span class="${p.data.gold >= cost.gold ? '' : 'bad'}">${cost.gold.toLocaleString()} G</span> · ${items}</small><button class="primary" data-awk="${key}" ${ok ? '' : 'disabled'}>각성하기</button></div>
+          <div class="awk-opts"><div class="awk-opt"><b>A · ${def.a.name}</b><small>${def.a.desc}</small></div><div class="awk-opt"><b>B · ${def.b.name}</b><small>${def.b.desc}</small></div></div></div>`;
+      }
+      const opt = (br: AwakenBranch, o: { name: string; desc: string }) =>
+        `<button class="awk-opt ${cur === br ? 'on' : ''}" data-awkset="${key}:${br}"><b>${br} · ${o.name}${cur === br ? ' <span class="ok">사용 중</span>' : ''}</b><small>${o.desc}</small></button>`;
+      return `<div class="awk done"><div class="awk-head"><b class="gold">✦ 각성함</b><small class="dim">눌러서 방향을 바꿀 수 있습니다 (무료)</small></div><div class="awk-opts">${opt('A', def.a)}${opt('B', def.b)}</div></div>`;
+    };
     const rows = cls.skills
       .map((sk, i) => {
         const lv = c.skills[i] ?? 0;
@@ -2303,7 +2319,8 @@ export class Screens {
         const req = cost ? `필요 레벨 ${cost.level}${c.level < cost.level ? ' <span class="bad">(부족)</span>' : ''}${itemsTxt}` : '';
         return `<li><img class="gem ico" src="${skillIconUrl(p.data.currentClass, i)}" alt=""><div><b>${sk.name} ${lv ? `<span class="ok">Lv.${lv}</span>` : '<span class="dim">(미습득)</span>'}</b>
           <small>${sk.description} · MP ${sk.mp} · ${sk.cooldown}초</small>
-          <small class="dim">${lv ? `위력 +${(lv - 1) * 15}% · 재사용 -${(lv - 1) * 6}%` : ''} ${req}</small></div>
+          <small class="dim">${lv ? `위력 +${(lv - 1) * 15}% · 재사용 -${Math.round((Math.min(4, lv - 1) * 0.06 + Math.max(0, lv - 5) * 0.02) * 100)}% · 효과 ${['기본', '강화', '화려'][effectTier(lv)]}` : ''} ${req}</small>
+          ${awakenBlock(`s${i}`, SKILL_AWAKEN[p.data.currentClass][i], lv >= MAX_SKILL_LEVEL, false)}</div>
           <button data-skill="${i}" ${ok ? '' : 'disabled'}>${label}</button></li>`;
       })
       .join('');
@@ -2319,7 +2336,8 @@ export class Screens {
         const next = cost ? ` → Lv.${lv + 1}: 위력 ${Math.round(ultPower(lv + 1) * 100)}% · ${ultCooldown(lv + 1)}초` : '';
         return `<li class="${got ? '' : 'locked'}"><img class="gem ico" src="${skillIconUrl(p.data.currentClass, 6 + i)}" alt=""><div><b>${u.name} ${got ? `<span class="ok">Lv.${lv}</span>` : `<span class="dim">(${u.stone}-10 수호자 · Lv.${u.level})</span>`}</b>
           <small>${u.description} · 위력 ${Math.round(ultPower(lv) * 100)}% · ${ultCooldown(lv)}초${next}</small>
-          <small class="dim">${req}</small></div>
+          <small class="dim">${req}</small>
+          ${got ? awakenBlock(`u${i}`, ULT_AWAKEN[p.data.currentClass][i], lv >= MAX_ULT_LEVEL, true) : ''}</div>
           <button data-ult="${i}" ${ok ? '' : 'disabled'}>${!got ? '잠김' : cost ? '강화' : '최대'}</button></li>`;
       })
       .join('');
@@ -2330,6 +2348,7 @@ export class Screens {
          <h2>교관 카엘의 훈련장 <small>${cls.name} · <span class="gold">${p.data.gold.toLocaleString()} G</span></small></h2>
          ${message ? `<div class="notice">${message}</div>` : ''}
          
+         <p class="hint">스킬 Lv.${MAX_SKILL_LEVEL}·궁극기 Lv.${MAX_ULT_LEVEL}이면 최고급 재료로 <b>각성</b>: A 충전형(2번까지 모아 쓰기) 또는 B 집중형(꾹 눌러 최대 ${AWAKEN_HOLD}초 모으기). 효과는 Lv.4·Lv.7에서 더 화려해집니다.</p>
          <ul class="list scroll">${rows}
            <li class="sub-head"><div><b>궁극기 강화</b><small class="dim">${inlineGem('dim_shard')}차원 파편은 5단계 이상 파수꾼·수호자와 차원의 끝에서 모은 차원 가루를 차원집의 차원 응축기로 압축해 만듭니다. 레벨마다 위력 +25%, 재사용 대기 -5초 (최대 Lv.${MAX_ULT_LEVEL}).</small></div></li>
            ${ultRows}</ul>
@@ -2338,6 +2357,11 @@ export class Screens {
     );
     this.on(s, '[data-skill]', (b) => onBuy(Number(b.dataset.skill)));
     this.on(s, '[data-ult]', (b) => onUlt?.(Number(b.dataset.ult)));
+    this.on(s, '[data-awk]', (b) => onAwaken?.(b.dataset.awk!, null));
+    this.on(s, '[data-awkset]', (b) => {
+      const [key, br] = b.dataset.awkset!.split(':');
+      onAwaken?.(key, br as AwakenBranch);
+    });
   }
 
   // ---------------- 직업의 전당 ----------------
