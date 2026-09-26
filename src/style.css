@@ -3223,3 +3223,15 @@ h3.sub { margin: 10px 0 6px; font-size: 14px; display: flex; align-items: center
 .trial-boss { display: flex; align-items: center; gap: 10px; padding: 6px 10px; margin: 6px 0; border-radius: 10px; background: rgba(182, 124, 255, 0.12); border: 1px solid rgba(182, 124, 255, 0.4); }
 .trial-boss img { width: 56px; height: 56px; object-fit: contain; }
 .trial-boss div { display: flex; flex-direction: column; gap: 2px; }
+/* 주간 시련 순위 */
+.rank-me { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0; }
+.rank-me .code-box { width: 140px; }
+.rank-board { list-style: none; margin: 4px 0 8px; padding: 0; max-height: 220px; overflow-y: auto; }
+.rank-board li { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto auto; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 8px; font-size: 13px; }
+.rank-board li:nth-child(odd) { background: rgba(255, 255, 255, 0.04); }
+.rank-board li.me { background: rgba(182, 124, 255, 0.2); border: 1px solid rgba(182, 124, 255, 0.5); }
+.rank-board li:nth-child(1) .rk { color: #ffd23a; }
+.rank-board li:nth-child(2) .rk { color: #dfe8f4; }
+.rank-board li:nth-child(3) .rk { color: #c98a50; }
+.rank-board .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rank-board li.dim { display: block; }

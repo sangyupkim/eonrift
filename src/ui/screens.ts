@@ -1,4 +1,5 @@
 import { BUILD_ID, GAME_VERSION } from '../config';
+import { fetchBoard, rankName, RANK_NAME_MAX, setRankName, submitTrial } from '../core/leaderboard';
 import { encyclopediaPages } from './encyclopedia';
 import { SCRIPTS, STORY_REPLAY, type Step } from '../data/story';
 import { FEEDBACK_KINDS, FEEDBACK_MAX, FEEDBACK_NAME_MAX, feedbackWait, savedFeedbackName, sendFeedback, type FeedbackInfo } from '../core/feedback';
@@ -424,6 +425,9 @@ export class Screens {
           <span>이번 주 <b>${tr?.best ? trialScoreText(tr.best) : '기록 없음'}</b> ${g >= 0 ? `<b style="color:${hex(TRIAL_GRADES[g].color)}">${TRIAL_GRADES[g].name}</b>` : ''}</span></div>
         <div class="trial-boss"><img src="${monsterIconUrl(tb, spec.tier, true)}" alt=""><div><b>${tb.name}</b><small class="dim">${THEMES[spec.tier - 1].name} · 체력 7-10 수호자의 ${TRIAL_HP}배 · ${formatClock(TRIAL_TIME)}</small></div></div>
         <div class="menu row"><button class="primary" data-trial>도전하기</button></div>
+        <h3 class="sub">이번 주 순위</h3>
+        <div class="rank-me"><input class="code-box" data-rname maxlength="${RANK_NAME_MAX}" placeholder="순위에 쓸 이름" value="${esc(rankName())}"><button data-rup ${tr?.best ? '' : 'disabled'}>내 기록 올리기</button><span data-rup-out class="dim"></span></div>
+        <ol class="rank-board" data-tboard><li class="dim">순위를 불러오는 중…</li></ol>
         <h3 class="sub">발밑 오라 ${worn >= 0 ? '<button class="chip" data-taura="-1">끄기</button>' : ''}</h3>
         <div class="rush-row trial-row">${TRIAL_GRADES.map((t, i) => {
           const open = topG >= i;
@@ -497,6 +501,40 @@ export class Screens {
     this.on(s, '[data-rift]', () => h.rift(cur.tier, cur.level));
     this.on(s, '[data-trial]', () => h.trial());
     this.on(s, '[data-taura]', (b) => h.trialAura(Number(b.dataset.taura)));
+    // 주간 시련 순위 (의견함과 같은 시트)
+    const board = s.querySelector<HTMLElement>('[data-tboard]');
+    const loadBoard = () => {
+      if (!board) return;
+      void fetchBoard(weekKey()).then((r) => {
+        if (!board.isConnected) return;
+        if (!r.ok) board.innerHTML = `<li class="dim">순위를 불러오지 못했습니다 · ${esc(r.reason)}</li>`;
+        else if (!r.rows.length) board.innerHTML = '<li class="dim">아직 이번 주 기록이 없습니다. 첫 기록을 올려 보세요!</li>';
+        else
+          board.innerHTML = r.rows
+            .map((x, i) => `<li class="${x.me ? 'me' : ''}"><b class="rk">${i + 1}</b><span class="nm">${esc(x.name)}</span><small class="dim">${CLASSES[x.cls as ClassId]?.name ?? ''} Lv.${x.level}</small><b class="sc">${trialScoreText(x.score)}</b></li>`)
+            .join('');
+      });
+    };
+    loadBoard();
+    const nameIn = s.querySelector<HTMLInputElement>('[data-rname]');
+    nameIn?.addEventListener('change', () => setRankName(nameIn.value.trim()));
+    this.on(s, '[data-rup]', (b) => {
+      const name = nameIn?.value.trim() ?? '';
+      const upOut = s.querySelector<HTMLElement>('[data-rup-out]');
+      if (!tr?.best) return;
+      if (!name) {
+        if (upOut) upOut.innerHTML = '<span class="bad">이름을 먼저 적어 주세요</span>';
+        return;
+      }
+      setRankName(name);
+      (b as HTMLButtonElement).disabled = true;
+      if (upOut) upOut.textContent = '올리는 중…';
+      void submitTrial({ week: tr.week, name, cls: tr.cls || p.data.currentClass, level: p.data.classes[(tr.cls || p.data.currentClass) as ClassId]?.level ?? 1, score: tr.best, seconds: tr.time, boss: BOSS_SPECIES[spec.tier - 1].name, version: GAME_VERSION }).then((r) => {
+        (b as HTMLButtonElement).disabled = false;
+        if (upOut) upOut.innerHTML = r.ok ? '<span class="ok">올렸습니다!</span>' : `<span class="bad">${esc(r.reason ?? '실패')}</span>`;
+        if (r.ok) loadBoard();
+      });
+    });
     // 탑: 다음 도전 층이 목록 가운데 오도록
     const list = s.querySelector<HTMLElement>('[data-floors]');
     const nextRow = s.querySelector<HTMLElement>('[data-next]');

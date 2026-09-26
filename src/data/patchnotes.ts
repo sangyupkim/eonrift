@@ -7,6 +7,11 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '8.6.1',
+    date: '2026-09-26',
+    items: ['주간 시련 순위표: 이번 주 순위(최대 50명)를 시련 화면에서 본다. 이름을 적어 두면 최고 기록을 세울 때 자동으로 올라가고, [내 기록 올리기]로 직접 올릴 수도 있다 (의견함과 같은 스프레드시트)'],
+  },
+  {
     version: '8.6',
     date: '2026-09-26',
     items: [

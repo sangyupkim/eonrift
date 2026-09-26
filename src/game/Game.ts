@@ -30,6 +30,7 @@ import { Bag } from './Bag';
 import { Combat } from './Combat';
 import type { Monster } from './Monster';
 import type { SpecialTotals } from '../data/special';
+import { rankName, submitTrial } from '../core/leaderboard';
 import { Player } from './Player';
 import { DIM_BAG_MAX, deleteSave, hasSave, loadSave, newSave, Progress, useTestSlot, stageIndex, stageOf, type SaveData, type Stats, type RunCheckpoint } from './Progress';
 import { objectiveNeed, objectiveProgress, Quests } from './Quests';
@@ -1490,6 +1491,13 @@ export class Game {
       t.hits = end.hits;
       t.cls = this.progress.data.currentClass;
       best = ' · 이번 주 최고 기록!';
+      // 순위 이름이 있으면 시트에 바로 올린다
+      const name = rankName();
+      if (name) {
+        void submitTrial({ week: t.week, name, cls: t.cls, level: this.progress.cls.level, score, seconds: t.time, boss: BOSS_SPECIES[trialSpec(t.week).tier - 1].name, version: GAME_VERSION }).then((r) =>
+          this.hud.toast(r.ok ? ':sparkle: 순위표에 기록을 올렸습니다' : `순위표 올리기 실패: ${r.reason}`, 3000),
+        );
+      }
     }
     // 처음 오른 등급이면 그 오라를 얻고 바로 두른다
     if (grade > t.topGrade) {
