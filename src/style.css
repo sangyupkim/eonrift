@@ -3289,3 +3289,11 @@ h3.sub { margin: 10px 0 6px; font-size: 14px; display: flex; align-items: center
 .panel button.ctl-opt { flex: 1 1 180px; padding: 9px 12px; border-radius: 10px; font-weight: 800; font-size: 14px; color: var(--ink); background: rgba(255, 255, 255, 0.06); border: 1px solid var(--panel-line); }
 .panel button.ctl-opt.on { background: var(--accent); color: #10101e; border-color: transparent; }
 .panel .bind-row .bind-key { position: static; flex: 0 0 auto; color: var(--ink); }
+.panel button.rank-up { padding: 6px 14px; border-radius: 10px; font-weight: 800; font-size: 13px; color: var(--ink); background: rgba(182, 124, 255, 0.28); border: 1px solid rgba(182, 124, 255, 0.6); }
+.panel button.rank-up:disabled { opacity: 0.45; }
+/* 닉네임 정하기 */
+.nick-panel { max-width: 420px; text-align: center; }
+.nick-panel .nick-input { width: 100%; box-sizing: border-box; margin: 8px 0 4px; padding: 10px 12px; border-radius: 10px; font-size: 18px; font-weight: 800; text-align: center; color: var(--ink); background: rgba(0, 0, 0, 0.35); border: 1px solid var(--panel-line); }
+.nick-panel .nick-msg { font-size: 12px; min-height: 18px; }
+/* 머리 위 내 닉네임 */
+.name-label.self { font-size: 11px; color: #bfe6ff; background: rgba(10, 9, 22, 0.45); padding: 0 6px; }

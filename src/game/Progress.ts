@@ -51,6 +51,8 @@ export interface RunCheckpoint {
 
 export interface SaveData {
   version: number;
+  /** 닉네임 (순위표·의견함·머리 위 이름·대화에 쓴다, 1~12자) */
+  nickname?: string;
   gold: number;
   currentClass: ClassId;
   classes: Record<ClassId, ClassState>;

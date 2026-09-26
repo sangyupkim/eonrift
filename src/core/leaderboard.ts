@@ -1,4 +1,4 @@
-import { FEEDBACK_URL, savedFeedbackName } from './feedback';
+import { FEEDBACK_URL } from './feedback';
 
 /**
  * 주간 시련 순위: 의견함과 같은 앱스 스크립트 웹 앱으로 기록을 올리고, 이번 주 순위를 받아 온다.
@@ -7,7 +7,12 @@ import { FEEDBACK_URL, savedFeedbackName } from './feedback';
 const NAME_KEY = 'nonamerpg-feedback-name';
 const ID_KEY = 'nonamerpg-feedback-id';
 
-export const RANK_NAME_MAX = 12;
+export const NICK_MAX = 12;
+
+/** 닉네임 다듬기: 앞뒤 빈칸·꺾쇠를 빼고 12자까지. 비면 빈 문자열 */
+export function cleanNickname(v: string): string {
+  return v.replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, NICK_MAX);
+}
 
 function store(k: string, v?: string): string | null {
   try {
@@ -18,8 +23,8 @@ function store(k: string, v?: string): string | null {
   }
 }
 
-export const rankName = (): string => savedFeedbackName();
-export const setRankName = (n: string): void => void store(NAME_KEY, n.slice(0, RANK_NAME_MAX));
+/** 의견함 이름 칸(타이틀 화면)에도 닉네임이 들어가게 기억해 둔다 */
+export const rememberNickname = (n: string): void => void store(NAME_KEY, n.slice(0, NICK_MAX));
 
 /** 의견함과 같은 기기 번호 (없으면 만든다) */
 export function deviceId(): string {

@@ -1,6 +1,6 @@
 import { BUILD_ID, GAME_VERSION } from '../config';
 import { BIND_LIST, defaultControls, keyLabel, type Bindable, type Controls } from '../core/controls';
-import { fetchBoard, rankName, RANK_NAME_MAX, setRankName, submitTrial } from '../core/leaderboard';
+import { cleanNickname, fetchBoard, NICK_MAX, submitTrial } from '../core/leaderboard';
 import { encyclopediaPages } from './encyclopedia';
 import { SCRIPTS, STORY_REPLAY, type Step } from '../data/story';
 import { FEEDBACK_KINDS, FEEDBACK_MAX, FEEDBACK_NAME_MAX, feedbackWait, savedFeedbackName, sendFeedback, type FeedbackInfo } from '../core/feedback';
@@ -199,6 +199,8 @@ export class Screens {
   }
 
   close(): void {
+    // 꼭 끝내야 하는 창(닉네임 정하기)은 Esc 등으로 닫히지 않는다
+    if (this.current?.dataset.locked) return;
     this.current?.remove();
     this.current = null;
     const cb = this.onCloseCb;
@@ -444,7 +446,7 @@ export class Screens {
         <div class="trial-boss"><img src="${monsterIconUrl(tb, spec.tier, true)}" alt=""><div><b>${tb.name}</b><small class="dim">${THEMES[spec.tier - 1].name} · 체력 7-10 수호자의 ${TRIAL_HP}배 · ${formatClock(TRIAL_TIME)}</small></div></div>
         <div class="menu row"><button class="primary" data-trial>도전하기</button></div>
         <h3 class="sub">이번 주 순위</h3>
-        <div class="rank-me"><input class="code-box" data-rname maxlength="${RANK_NAME_MAX}" placeholder="순위에 쓸 이름" value="${esc(rankName())}"><button data-rup ${tr?.best ? '' : 'disabled'}>내 기록 올리기</button><span data-rup-out class="dim"></span></div>
+        <div class="rank-me"><span>닉네임 <b>${esc(p.data.nickname ?? '')}</b></span><button class="rank-up" data-rup ${tr?.best ? '' : 'disabled'}>내 기록 올리기</button><span data-rup-out class="dim"></span></div>
         <ol class="rank-board" data-tboard><li class="dim">순위를 불러오는 중…</li></ol>
         <h3 class="sub">발밑 오라 ${worn >= 0 ? '<button class="chip" data-taura="-1">끄기</button>' : ''}</h3>
         <div class="rush-row trial-row">${TRIAL_GRADES.map((t, i) => {
@@ -534,17 +536,10 @@ export class Screens {
       });
     };
     loadBoard();
-    const nameIn = s.querySelector<HTMLInputElement>('[data-rname]');
-    nameIn?.addEventListener('change', () => setRankName(nameIn.value.trim()));
     this.on(s, '[data-rup]', (b) => {
-      const name = nameIn?.value.trim() ?? '';
+      const name = p.data.nickname ?? '';
       const upOut = s.querySelector<HTMLElement>('[data-rup-out]');
-      if (!tr?.best) return;
-      if (!name) {
-        if (upOut) upOut.innerHTML = '<span class="bad">이름을 먼저 적어 주세요</span>';
-        return;
-      }
-      setRankName(name);
+      if (!tr?.best || !name) return;
       (b as HTMLButtonElement).disabled = true;
       if (upOut) upOut.textContent = '올리는 중…';
       void submitTrial({ week: tr.week, name, cls: tr.cls || p.data.currentClass, level: p.data.classes[(tr.cls || p.data.currentClass) as ClassId]?.level ?? 1, score: tr.best, seconds: tr.time, boss: BOSS_SPECIES[spec.tier - 1].name, version: GAME_VERSION }).then((r) => {
@@ -609,10 +604,44 @@ export class Screens {
     s.querySelector<HTMLElement>('.ency-tab.on')?.scrollIntoView({ block: 'nearest', inline: 'center' });
   }
 
+  /** 닉네임 정하기 (꼭 정해야 닫힌다). 1~12자, 순위표·의견함·머리 위 이름·대화에 쓴다 */
+  nickname(current: string, onOk: (name: string) => void, intro = '모험가의 이름을 정해 주세요'): void {
+    const s = this.open(
+      'nickname',
+      `<div class="panel nick-panel">
+         <h2>닉네임 정하기</h2>
+         <p>${intro}</p>
+         <input class="nick-input" maxlength="${NICK_MAX}" placeholder="1~${NICK_MAX}자" value="${esc(current)}" />
+         <div class="nick-msg dim">순위표 · 의견함 · 머리 위 이름 · 대화에 쓰입니다</div>
+         <div class="menu"><button class="primary" data-nick-ok>정하기</button></div>
+       </div>`,
+    );
+    s.dataset.locked = '1';
+    const input = s.querySelector<HTMLInputElement>('.nick-input')!;
+    const msg = s.querySelector<HTMLElement>('.nick-msg')!;
+    input.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') ok();
+    });
+    const ok = () => {
+      const name = cleanNickname(input.value);
+      if (!name) {
+        msg.innerHTML = `<span class="bad">1~${NICK_MAX}자로 적어 주세요 (앞뒤 빈칸·특수 기호 < > 는 빠집니다)</span>`;
+        return;
+      }
+      delete s.dataset.locked;
+      this.current?.remove();
+      this.current = null;
+      onOk(name);
+    };
+    this.on(s, '[data-nick-ok]', ok);
+    window.setTimeout(() => input.focus(), 50);
+  }
+
   // ---------------- 의견함 (구글 시트로 보낸다) ----------------
   feedback(info: FeedbackInfo, onBack: () => void): void {
     let kind: string = FEEDBACK_KINDS[0];
-    let name = savedFeedbackName();
+    let name = info.nickname || savedFeedbackName();
     let text = '';
     let status = '';
     let sending = false;
@@ -629,7 +658,7 @@ export class Screens {
            <button class="close">${ICONS.close}</button>
            <h2>의견 보내기</h2>
            <div class="fb-kinds">${FEEDBACK_KINDS.map((k) => `<button class="chip ${k === kind ? 'on' : ''}" data-kind="${k}">${k}</button>`).join('')}</div>
-           <label class="fb-label">이름 <input class="fb-name" maxlength="${FEEDBACK_NAME_MAX}" placeholder="닉네임 (필수)" value="${name.replace(/"/g, '&quot;')}"/></label>
+           <label class="fb-label">이름 <input class="fb-name" maxlength="${FEEDBACK_NAME_MAX}" placeholder="닉네임 (필수)" value="${name.replace(/"/g, '&quot;')}" ${info.nickname ? 'readonly' : ''}/></label>
            <textarea class="fb-text" maxlength="${FEEDBACK_MAX}" placeholder="버그, 어려웠던 점, 바라는 점… 무엇이든 적어 주세요">${text.replace(/</g, '&lt;')}</textarea>
            <div class="fb-foot"><small class="dim"><span data-count>${text.length}</span>/${FEEDBACK_MAX}</small>
              <button class="primary" data-a="send" ${wait > 0 || sending ? 'disabled' : ''}>${sending ? '보내는 중…' : wait > 0 ? `${secs}초 뒤에 다시 보낼 수 있어요` : '보내기'}</button></div>

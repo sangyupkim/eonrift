@@ -7,6 +7,8 @@ export interface DialogueHandlers {
   click: () => void;
   /** 말하는 사람 이름 → 초상화 이미지 (없으면 빈 문자열) */
   portrait?: (speaker: string) => string;
+  /** 대화창에 보일 이름 ('나' → 닉네임) */
+  displayName?: (speaker: string) => string;
   /** 글자가 나올 때 소리 (speaker: 말하는 사람) */
   blip?: (speaker: string) => void;
 }
@@ -87,7 +89,7 @@ export class Dialogue {
     if ('s' in step) {
       this.box.classList.add('show');
       this.box.classList.toggle('narration', step.s === '');
-      this.nameEl.textContent = step.s;
+      this.nameEl.textContent = this.handlers.displayName?.(step.s) ?? step.s;
       const img = this.box.querySelector<HTMLImageElement>('.dlg-portrait')!;
       const url = step.s ? (this.handlers.portrait?.(step.s) ?? '') : '';
       if (url) {

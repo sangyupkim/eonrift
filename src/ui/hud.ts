@@ -753,7 +753,7 @@ export class Hud {
   }
 
   /** 머리 위 이름표 */
-  setLabels(labels: { text: string; x: number; y: number; accent?: boolean }[]): void {
+  setLabels(labels: { text: string; x: number; y: number; accent?: boolean; self?: boolean }[]): void {
     while (this.labelPool.length < labels.length) {
       const l = el('div', 'name-label');
       this.labelLayer.appendChild(l);
@@ -771,6 +771,7 @@ export class Hud {
         l.innerHTML = richText(d.text);
       }
       l.classList.toggle('accent', !!d.accent);
+      l.classList.toggle('self', !!d.self);
       l.style.transform = `translate(${d.x}px, ${d.y}px) translate(-50%, -100%)`;
     });
   }

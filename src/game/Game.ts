@@ -30,7 +30,7 @@ import { Bag } from './Bag';
 import { Combat } from './Combat';
 import type { Monster } from './Monster';
 import type { SpecialTotals } from '../data/special';
-import { rankName, submitTrial } from '../core/leaderboard';
+import { rememberNickname, submitTrial } from '../core/leaderboard';
 import { saveControls } from '../core/controls';
 import { Player } from './Player';
 import { DIM_BAG_MAX, deleteSave, hasSave, loadSave, newSave, Progress, useTestSlot, stageIndex, stageOf, type SaveData, type Stats, type RunCheckpoint } from './Progress';
@@ -166,6 +166,7 @@ export class Game {
         for (const c of speaker) h = (h * 31 + c.charCodeAt(0)) >>> 0;
         this.audio.blip(speaker ? 320 + (h % 9) * 45 : 220);
       },
+      displayName: (speaker) => (speaker === '나' && this.progress?.data.nickname ? this.progress.data.nickname : speaker),
       portrait: (speaker) => {
         const npc = NPCS.find((n) => n.name === speaker || n.name.endsWith(` ${speaker}`));
         return npc ? bustUrl(npc.id, npc.look) : '';
@@ -316,27 +317,51 @@ export class Game {
       }
       this.hud.toast(`${cp.tier}-${cp.stage} 던전으로 돌아왔습니다 (마지막 저장 지점)`, 3500);
       this.saveNow();
+      this.needNickname(() => {});
       return;
     }
     this.enterVillage('start');
     if (isNew) {
       this.saveNow();
-      this.playScript('prologue', () => {
+      this.askNickname(() => this.playScript('prologue', () => {
         // 프롤로그가 끝나면 리아의 첫 의뢰를 바로 받는다
         const q = QUEST_BY_ID.m1_hunt;
         this.quests.accept(q);
         this.hud.toast(`퀘스트 수락: ${q.title}`, 3000);
         this.refreshHud();
-      });
+      }));
     } else if (offline > 60 && this.progress.flag('home') && data.factory.buildings.length) {
       const before = this.boxSnapshot();
       this.factory.simulate(offline);
       const after = this.boxSnapshot();
       const produced = new Map<string, number>();
       for (const [id, n] of after) if (n > (before.get(id) ?? 0)) produced.set(id, n - (before.get(id) ?? 0));
-      this.openMenu(() => this.screens.offlineReward(offline, produced, () => this.resume()));
       this.saveNow();
-    }
+      this.needNickname(() => this.openMenu(() => this.screens.offlineReward(offline, produced, () => this.resume())));
+    } else this.needNickname(() => {});
+  }
+
+  /** 닉네임이 없는 예전 저장: 먼저 닉네임을 정하게 한다 (꼭 정해야 넘어간다) */
+  private needNickname(then: () => void): void {
+    if (this.progress.data.nickname) return then();
+    this.askNickname(then, '업데이트로 닉네임이 생겼습니다. 순위표·의견함·머리 위 이름에 쓸 닉네임을 정해 주세요');
+  }
+
+  /** 닉네임 정하기 창 (게임은 멈춘다) */
+  private askNickname(then: () => void, intro?: string): void {
+    this.openMenu(() =>
+      this.screens.nickname(
+        this.progress.data.nickname ?? '',
+        (name) => {
+          this.progress.data.nickname = name;
+          rememberNickname(name);
+          this.saveNow();
+          this.resume();
+          then();
+        },
+        intro,
+      ),
+    );
   }
 
   /** 출하 보관상자의 내용물 합계 (오프라인 보상 계산용) */
@@ -688,6 +713,7 @@ export class Game {
           this.screens.feedback(
             {
               version: GAME_VERSION,
+              nickname: this.progress.data.nickname,
               cls: `${CLASSES[this.progress.data.currentClass].name} Lv.${c.level}`,
               progress: `${cleared >= 70 ? '전체 클리어' : `진행 ${Math.floor(cleared / 10) + 1}-${(cleared % 10) + 1}`}${this.progress.flag('endgame') ? ' · 엔딩 뒤' : ''}${where}`,
             },
@@ -1496,7 +1522,7 @@ export class Game {
       t.cls = this.progress.data.currentClass;
       best = ' · 이번 주 최고 기록!';
       // 순위 이름이 있으면 시트에 바로 올린다
-      const name = rankName();
+      const name = this.progress.data.nickname;
       if (name) {
         void submitTrial({ week: t.week, name, cls: t.cls, level: this.progress.cls.level, score, seconds: t.time, boss: BOSS_SPECIES[trialSpec(t.week).tier - 1].name, version: GAME_VERSION }).then((r) =>
           this.hud.toast(r.ok ? ':sparkle: 순위표에 기록을 올렸습니다' : `순위표 올리기 실패: ${r.reason}`, 3000),
@@ -3038,8 +3064,14 @@ export class Game {
       this.hud.setBubbles([]);
       return;
     }
-    const labels: { text: string; x: number; y: number; accent?: boolean }[] = [];
+    const labels: { text: string; x: number; y: number; accent?: boolean; self?: boolean }[] = [];
     const p = this.player.position;
+    // 머리 위 내 닉네임
+    const nick = this.progress.data.nickname;
+    if (nick && !this.building) {
+      const s = this.toScreen(p.x, 2.35, p.z);
+      labels.push({ text: nick, x: s.x, y: s.y, self: true });
+    }
     if (!this.building) {
       for (const it of this.level.interactables) {
         if (!it.title || Math.hypot(it.x - p.x, it.z - p.z) > 14) continue;

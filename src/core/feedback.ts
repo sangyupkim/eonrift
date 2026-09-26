@@ -52,6 +52,8 @@ export function deviceLabel(): string {
 
 export interface FeedbackInfo {
   version: string;
+  /** 게임 안에서 보낼 때: 닉네임으로 고정 */
+  nickname?: string;
   cls?: string;
   progress?: string;
 }

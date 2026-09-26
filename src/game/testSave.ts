@@ -13,6 +13,7 @@ import { newSave, parseSave, zeroStats, type SaveData } from './Progress';
  */
 export function makeTestSave(): SaveData {
   const d = newSave();
+  d.nickname = '테스터';
   let n = 0;
   const gear = (cls: ClassId): Partial<Record<Equip['slot'], Equip>> => {
     const out: Partial<Record<Equip['slot'], Equip>> = {};
