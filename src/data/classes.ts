@@ -39,7 +39,7 @@ export interface ClassDef {
 
 /**
  * 궁극기: 직업마다 두 개. 수호자를 처음 쓰러뜨려 차원석을 얻으면 열린다
- * (첫 번째: 1-10 수호자, 두 번째: 4-10 수호자). 재사용 대기 60초
+ * (첫 번째: 1-10 수호자 + Lv.15, 두 번째: 4-10 수호자 + Lv.35). 재사용 대기 60초
  */
 export interface UltDef {
   name: string;
@@ -47,6 +47,8 @@ export interface UltDef {
   description: string;
   /** 이 단계 수호자의 차원석이 있으면 열린다 */
   stone: number;
+  /** 그리고 이 직업 레벨이 되어야 열린다 */
+  level: number;
 }
 export const ULT_COOLDOWN = 60;
 /** 궁극기 최대 레벨 (차원 파편으로 강화) */
@@ -61,16 +63,16 @@ export function ultCooldown(lv: number): number {
 }
 export const ULTIMATES: Record<ClassId, [UltDef, UltDef]> = {
   sword: [
-    { name: '천검난무', mp: 30, stone: 1, description: '2.4초 동안 칼날 폭풍이 되어 주변을 끊임없이 벤다. 그동안 피해를 받지 않는다.' },
-    { name: '대지 붕괴', mp: 40, stone: 4, description: '적에게 뛰어올라 내려찍어 넓은 범위에 큰 피해를 주고 2.5초 동안 기절시킨다.' },
+    { name: '천검난무', mp: 30, stone: 1, level: 15, description: '2.4초 동안 칼날 폭풍이 되어 주변을 끊임없이 벤다. 그동안 피해를 받지 않는다.' },
+    { name: '대지 붕괴', mp: 40, stone: 4, level: 35, description: '적에게 뛰어올라 내려찍어 넓은 범위에 큰 피해를 주고 2.5초 동안 기절시킨다.' },
   ],
   mage: [
-    { name: '메테오', mp: 40, stone: 1, description: '적이 모인 곳에 운석 세 개를 차례로 떨어뜨린다.' },
-    { name: '절대영도', mp: 45, stone: 4, description: '주변을 얼려 큰 피해를 주고 3초 동안 얼어붙게 한다.' },
+    { name: '메테오', mp: 40, stone: 1, level: 15, description: '적이 모인 곳에 운석 세 개를 차례로 떨어뜨린다.' },
+    { name: '절대영도', mp: 45, stone: 4, level: 35, description: '주변을 얼려 큰 피해를 주고 3초 동안 얼어붙게 한다.' },
   ],
   archer: [
-    { name: '화살비', mp: 35, stone: 1, description: '넓은 곳에 3초 동안 화살비를 퍼붓는다.' },
-    { name: '용의 사격', mp: 40, stone: 4, description: '힘을 모아 모든 것을 꿰뚫는 거대한 화살을 쏜다.' },
+    { name: '화살비', mp: 35, stone: 1, level: 15, description: '넓은 곳에 3초 동안 화살비를 퍼붓는다.' },
+    { name: '용의 사격', mp: 40, stone: 4, level: 35, description: '힘을 모아 모든 것을 꿰뚫는 거대한 화살을 쏜다.' },
   ],
 };
 

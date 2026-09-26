@@ -101,7 +101,7 @@ export interface SaveData {
   storageV2?: boolean;
   /** 차원집 일반 창고 (차원집 안의 모든 일반 창고가 함께 쓰는 보관함) */
   homeStorage?: Record<string, number>;
-  settings: { shadows: boolean; sound: boolean; music?: number; sfx?: number; autoAim?: boolean; timersOpen?: boolean };
+  settings: { shadows: boolean; sound: boolean; music?: number; sfx?: number; autoAim?: boolean; timersOpen?: boolean; questsOpen?: boolean; hiddenQuests?: string[] };
   /** 곡괭이·도끼 내구도 */
   tools: Record<ToolKind, ToolState>;
 }
@@ -492,9 +492,10 @@ export class Progress {
     return (c.tlv ?? 0) - Object.values(c.tpts ?? {}).reduce((a, n) => a + (n ?? 0), 0);
   }
 
-  /** 열린 궁극기 번호들 (수호자의 차원석으로 열린다) */
+  /** 열린 궁극기 번호들 (수호자의 차원석 + 그 직업의 레벨) */
   unlockedUlts(clsId: ClassId = this.data.currentClass): number[] {
-    return ULTIMATES[clsId].map((u, i) => (this.data.dimStones.includes(u.stone) ? i : -1)).filter((i) => i >= 0);
+    const lv = this.data.classes[clsId].level;
+    return ULTIMATES[clsId].map((u, i) => (this.data.dimStones.includes(u.stone) && lv >= u.level ? i : -1)).filter((i) => i >= 0);
   }
   /** 궁극기 레벨 (기본 1) */
   ultLevel(index: number, clsId: ClassId = this.data.currentClass): number {

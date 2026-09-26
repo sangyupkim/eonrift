@@ -13,13 +13,18 @@ describe('궁극기', () => {
     expect(ULT_COOLDOWN).toBe(60);
   });
 
-  it('1-10 수호자 차원석으로 첫 번째, 4-10으로 두 번째가 열린다', () => {
+  it('1-10 수호자 차원석 + Lv.15로 첫 번째, 4-10 + Lv.35로 두 번째가 열린다', () => {
     const p = new Progress(newSave());
     expect(p.ultIndex).toBe(-1);
     p.data.dimStones = [1];
+    // 차원석이 있어도 레벨이 모자라면 잠겨 있다
+    expect(p.unlockedUlts()).toEqual([]);
+    p.cls.level = 15;
     expect(p.unlockedUlts()).toEqual([0]);
     expect(p.ultIndex).toBe(0);
     p.data.dimStones = [1, 2, 3, 4];
+    expect(p.unlockedUlts()).toEqual([0]);
+    p.cls.level = 35;
     expect(p.unlockedUlts()).toEqual([0, 1]);
     p.cls.ult = 0;
     expect(p.ultIndex).toBe(0);

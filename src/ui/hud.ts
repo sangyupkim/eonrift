@@ -102,6 +102,13 @@ export class Hud {
     this.buffEl = el('div', 'buffs');
     status.appendChild(this.buffEl);
     this.objectiveEl = el('div', 'objective');
+    this.objectiveEl.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.objectiveOpen = !this.objectiveOpen;
+      this.onObjectiveToggle?.(this.objectiveOpen);
+      this.setObjective(this.objectiveText);
+    });
     status.appendChild(this.objectiveEl);
     this.root.appendChild(status);
 
@@ -364,13 +371,22 @@ export class Hud {
     if (this.buffEl.innerHTML !== html) this.buffEl.innerHTML = html;
   }
 
+  /** 퀘스트 알림판 접힘 (눌러서 접고 편다) */
+  objectiveOpen = true;
+  onObjectiveToggle?: (open: boolean) => void;
+  private objectiveText = '';
+
   setObjective(text: string): void {
-    const t = text ? text.split('\n').map((l, i) => (i === 0 ? `▶ ${l}` : `· ${l}`)).join('\n') : '';
+    this.objectiveText = text;
+    const lines = text ? text.split('\n') : [];
+    const body = lines.map((l, i) => (i === 0 ? `▶ ${l}` : `· ${l}`)).join('\n');
+    const t = `${this.objectiveOpen ? 1 : 0}|${body}`;
     if (this.objectiveEl.dataset.t !== t) {
       this.objectiveEl.dataset.t = t;
-      this.objectiveEl.innerHTML = richText(t);
+      this.objectiveEl.innerHTML = `<span class="obj-head">퀘스트 ${this.objectiveOpen ? '▴' : `▾ <small>${lines.length}</small>`}</span>${this.objectiveOpen ? `<div class="obj-body">${richText(body)}</div>` : ''}`;
     }
     this.objectiveEl.classList.toggle('hidden', !text);
+    this.objectiveEl.classList.toggle('closed', !this.objectiveOpen);
   }
 
   /** 레이드 보스 체력: 여러 줄. 지금 줄은 앞에, 다음 줄 색이 뒤에 깔린다 */

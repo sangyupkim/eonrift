@@ -197,6 +197,11 @@ export class Game {
   private setProgress(p: Progress): void {
     this.progress = p;
     this.hud.timersOpen = p.data.settings.timersOpen !== false;
+    this.hud.objectiveOpen = p.data.settings.questsOpen !== false;
+    this.hud.onObjectiveToggle = (open) => {
+      p.data.settings.questsOpen = open;
+      this.saveNow();
+    };
     this.hud.onTimersToggle = (open) => {
       p.data.settings.timersOpen = open;
       this.saveNow();
@@ -1711,6 +1716,15 @@ export class Game {
       this.checkTitles();
     }
     if (ups > 0) {
+      // 레벨이 올라 새 궁극기가 열렸는지
+      const p = this.progress;
+      const before = p.cls.level - ups;
+      for (const [i, u] of ULTIMATES[p.data.currentClass].entries()) {
+        if (before < u.level && p.cls.level >= u.level && p.data.dimStones.includes(u.stone)) {
+          p.cls.ult = i;
+          window.setTimeout(() => this.hud.toast(`:sparkle: 궁극기 해금! ${u.name}`, 4000), 1500);
+        }
+      }
       this.applyStats();
       this.player.hp = this.player.maxHp;
       this.player.mp = this.player.maxMp;
@@ -1839,7 +1853,10 @@ export class Game {
         this.hud.toast(`차원석을 얻었다! (${p.stoneCount}/7)`, 4000);
         // 수호자의 차원석으로 궁극기가 열린다 (1-10, 4-10)
         const newUlt = ULTIMATES[p.data.currentClass].findIndex((u) => u.stone === tier);
-        if (newUlt >= 0) {
+        if (newUlt >= 0 && !p.unlockedUlts().includes(newUlt)) {
+          const u = ULTIMATES[p.data.currentClass][newUlt];
+          window.setTimeout(() => this.hud.toast(`궁극기 ${u.name}의 힘을 얻었다 — Lv.${u.level}이 되면 쓸 수 있습니다`, 4500), 2500);
+        } else if (newUlt >= 0) {
           p.cls.ult = newUlt;
           const names = CLASS_ORDER.map((c) => ULTIMATES[c][newUlt].name).join(' · ');
           window.setTimeout(() => this.hud.toast(`:sparkle: 궁극기 획득! ${ULTIMATES[p.data.currentClass][newUlt].name} (모든 직업: ${names}) — 캐릭터 → 스킬에서 고를 수 있습니다`, 5000), 2500);
@@ -2861,7 +2878,12 @@ export class Game {
       // 방을 정리했으면 언제든 워프 창을 열 수 있는 버튼
       this.hud.setWarpButton(!!this.run.roomCleared && d.exitOpen);
       this.hud.setObjective([head, ...questLines(p, this.quests)].join('\n'));
-    } else this.hud.setObjective(objective(p, this.quests));
+    } else {
+      // 마을·차원집: 이야기 목표 + 추적 중인 퀘스트
+      const main = objective(p, this.quests);
+      const lines = questLines(p, this.quests, 4).filter((l) => !main.includes(l.split(':')[0]));
+      this.hud.setObjective([main || lines.shift() || '', ...lines].filter(Boolean).join('\n'));
+    }
     this.hud.setBuffs(pl.buffs.map((b) => ({ text: `${b.name}${b.stacks !== undefined ? ` ${b.stacks}회` : ''} ${Math.ceil(b.t)}s`, bad: b.bad })));
     this.hud.setPotions(this.run && this.level instanceof DungeonScene ? this.run.pouch.length : POTION_KINDS.reduce((a, [k]) => a + p.count(k), 0), this.potionCd / POTION_COOLDOWN);
     this.hud.setDodgeCooldown(pl.dodgeMax > 0 ? pl.rollCooldown / pl.dodgeMax : 0);

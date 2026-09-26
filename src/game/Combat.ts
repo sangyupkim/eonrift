@@ -1,4 +1,7 @@
-import { PLAYER } from '../config';
+import { AdditiveBlending, MeshBasicMaterial, NormalBlending } from 'three';
+import { PLAYER, TILE } from '../config';
+import { isFloor } from '../dungeon/generator';
+import { buildProjectileMesh } from '../models/monsters';
 import type { BonusKey } from '../data/bonus';
 import { ultCooldown, ultPower, ULT_COOLDOWN, ULTIMATES, type ClassId } from '../data/classes';
 import type { Monster } from './Monster';
@@ -357,7 +360,7 @@ export class Combat {
       return;
     }
 
-    // 마을·차원집: 쏠 적이 없으니 자세와 빛줄기만 보여 준다 (직업 고유 모습 그대로)
+    // 마을·차원집: 맞힐 적은 없지만 던전과 똑같은 마탄·화살이 날아간다 (보기만)
     const d = this.host.dungeon();
     if (!d) {
       const mage = cls === 'mage';
@@ -368,11 +371,7 @@ export class Combat {
           hitAt: mage ? 0.5 : 0.55,
           onHit: () => {
             this.host.sfx(mage ? 'magic' : 'bow');
-            const x = player.position.x;
-            const z = player.position.z;
-            const len = mage ? 5 : 7;
-            level.effects.streak(x, z, x + Math.sin(player.facing) * len, z + Math.cos(player.facing) * len, color, mage ? 0.7 : 0.35);
-            level.effects.sparks(x + Math.sin(player.facing) * 0.8, 1.2, z + Math.cos(player.facing) * 0.8, color, mage ? 10 : 5, { speed: 3 });
+            this.fakeShot(level, player.position.x, player.position.z, player.facing, color, mage);
           },
         },
         player.facing,
@@ -408,6 +407,35 @@ export class Combat {
         aim,
       );
     }
+  }
+
+  /** 던전 밖에서 보여 주기만 하는 기본 공격 투사체 (던전의 마탄·화살과 같은 모델·속도) */
+  private fakeShot(level: Level, x0: number, z0: number, angle: number, color: number, orb: boolean): void {
+    const mat = new MeshBasicMaterial({ color, transparent: true, opacity: 0.95, blending: orb ? AdditiveBlending : NormalBlending, depthWrite: false });
+    const mesh = buildProjectileMesh(mat, orb ? 'orb' : 'arrow');
+    if (!orb) mesh.material = new MeshBasicMaterial({ vertexColors: true });
+    mesh.rotation.y = angle;
+    const speed = orb ? 17 : 26;
+    const life = 1.6;
+    const sx = Math.sin(angle);
+    const sz = Math.cos(angle);
+    const y = orb ? 1.2 : 1.1;
+    let gone = false;
+    level.effects.add(mesh, life, (k) => {
+      if (gone) return;
+      const d = 0.6 + speed * life * k;
+      const x = x0 + sx * d;
+      const z = z0 + sz * d;
+      mesh.position.set(x, y, z);
+      // 벽에 닿으면 튀고 사라진다
+      if (!isFloor(level.grid, Math.floor(x / TILE), Math.floor(z / TILE))) {
+        gone = true;
+        mesh.visible = false;
+        level.effects.sparks(x - sx * 0.3, y, z - sz * 0.3, color, 4, { speed: 2 });
+        return;
+      }
+      if (orb || Math.random() < 0.5) level.effects.sparks(x, y, z, color, 1, { speed: 0.3, life: 0.25, size: orb ? 0.8 : 0.5 });
+    });
   }
 
   /** 스킬 사용. 실패 이유를 문자열로 돌려준다 */

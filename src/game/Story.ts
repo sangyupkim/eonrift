@@ -22,7 +22,7 @@ export function objective(p: Progress, quests: Quests): string {
   if (stones >= 3 && !f('smith3')) return '대장장이 고른과 이야기하자';
   if (stones >= 4 && !p.data.unlockedClasses.includes('archer')) return '마을 남서쪽의 수상한 인물을 찾아가자';
   if (stones < 7) return `${stones + 1}-10의 수호자를 쓰러뜨리자 (차원석 ${stones}/7)`;
-  if (f('endgame')) return '마을 남쪽 "차원의 끝"의 무한의 탑에 도전하자 (탑 → 보스 러시 → 심연 균열 → 주간 시련 순서로 열림)';
+  if (f('endgame')) return '차원의 끝에 도전하자';
   if (!f('resonatorHint')) return '마공학자 세라와 이야기하자';
   if (p.count('resonator') === 0) return '차원집 제작대(조립 탭)에서 차원석 공명 장치를 만들자';
   return '촌장 에단에게 공명 장치를 가져가자';
@@ -65,18 +65,21 @@ export function hasStory(npc: NpcId, p: Progress): boolean {
 }
 
 /** 던전 HUD용: 진행 중인 퀘스트의 남은 목표 (최대 3줄) */
-export function questLines(p: Progress, quests: Quests): string[] {
+/** 퀘스트 알림판에 띄울 줄 (퀘스트 탭에서 끈 퀘스트는 빼고) */
+export function questLines(p: Progress, quests: Quests, limit = 3): string[] {
   const lines: string[] = [];
+  const hidden = new Set(p.data.settings.hiddenQuests ?? []);
   for (const q of quests.activeList()) {
+    if (hidden.has(q.id)) continue;
     const prog = quests.progress(q);
     if (prog.every((x) => x.cur >= x.need)) lines.push(`${q.title}: 완료! ${npcName(q.npc)}에게 보고`);
     else lines.push(`${q.title}: ${prog.filter((x) => x.cur < x.need).map((x) => `${x.text} ${x.cur}/${x.need}`).join(', ')}`);
   }
   for (const d of quests.state.daily.list) {
-    if (d.claimed || !d.accepted) continue;
+    if (d.claimed || !d.accepted || hidden.has(`daily:${d.id}`)) continue;
     const need = objectiveNeed(d.objective);
     const cur = Math.min(need, objectiveProgress(d.objective, d.progress, { count: (id) => p.count(id), stones: p.stoneCount, cleared: p.data.cleared, flag: (f) => p.flag(f), discovered: p.discovered }));
     if (cur < need) lines.push(`[일일] ${objectiveText(d.objective)} ${cur}/${need}`);
   }
-  return lines.slice(0, 3);
+  return lines.slice(0, limit);
 }

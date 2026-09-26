@@ -104,6 +104,9 @@ function basics(): string {
       ['지도 · 가방 · 메뉴', '위쪽 버튼', 'M · I · Esc'],
     ],
   )}
+  <h3>퀘스트</h3>
+  <p>머리 위에 <b>!</b>가 뜬 주민에게 말을 걸면 퀘스트를 받는다. 촌장 에단은 매일 일일 의뢰 3개를 주는데, <b>수락한 의뢰만</b> 진행된다. 목표를 채우면 의뢰한 주민에게 보고.</p>
+  ${tip('화면 왼쪽 퀘스트 알림판은 머리글을 눌러 접고 펼 수 있다. 캐릭터 → 퀘스트 탭의 [표시] 체크로 알림판에 띄울 퀘스트를 고른다.')}
   <h3>쓰러지면</h3>
   ${card('일반 가방은 잃는다', `<p>던전에서 쓰러지면 <b>일반 가방</b>의 짐은 모두 잃는다. <b>차원가방</b>과 <b>물약 주머니</b>는 지켜진다.</p>${tip('귀한 것은 가방 화면에서 차원가방으로 옮겨 두자. 귀환석을 쓰면 짐을 모두 들고 마을로 돌아온다.')}`, img(itemIconUrl('return_stone')))}
   <h3>내구도</h3>
@@ -115,7 +118,7 @@ function classes(): string {
     const c = CLASSES[id];
     const dodge = id === 'sword' ? '구르기' : id === 'mage' ? '블링크(순간이동)' : '후방 도약';
     const skills = c.skills.map((s, i) => `<li>${img(skillIconUrl(id, i), 'enc-ico')}<b>${s.name}</b> <small>MP ${s.mp} · ${s.cooldown}초 · Lv.${SKILL_LEARN[i].level}부터</small><br><small class="dim">${s.description}</small></li>`).join('');
-    const ults = ULTIMATES[id].map((u) => `<li><b>${u.name}</b> <small>MP ${u.mp} · ${u.stone}단계 차원석으로 해금</small><br><small class="dim">${u.description}</small></li>`).join('');
+    const ults = ULTIMATES[id].map((u) => `<li><b>${u.name}</b> <small>MP ${u.mp} · ${u.stone}단계 차원석 + Lv.${u.level}에 해금</small><br><small class="dim">${u.description}</small></li>`).join('');
     return card(
       `${img(weaponIconUrl(id), 'enc-ico')} ${c.name} <small>무기: ${c.weaponNoun} · 회피: ${dodge} · 기본 공격: ${c.basic}</small>`,
       `<ul class="enc-list">${skills}</ul><p class="enc-sub">궁극기</p><ul class="enc-list">${ults}</ul>`,
@@ -129,7 +132,7 @@ function classes(): string {
   <p>레벨이 오를 때마다 스탯 포인트 5점. 가방 화면의 [능력치]에서 찍는다.</p>
   ${table(['스탯', '효과'], Object.values(STAT_INFO).map((s) => [s.name, s.desc]))}
   <h3>스킬·궁극기 강화</h3>
-  <p>교관 카엘에게 스킬을 배우고 Lv.${MAX_SKILL_LEVEL}까지 올린다(골드 + 판). 궁극기는 수호자의 차원석으로 열리고, 엔딩 뒤 <b>차원 파편</b>으로 Lv.5까지 올린다 (레벨마다 위력 +${pct(ultPower(2) - 1)}, 재사용 −5초).</p>
+  <p>궁극기는 수호자의 차원석을 얻고 <b>첫 번째는 Lv.15, 두 번째는 Lv.35</b>가 되면 열린다. 캐릭터 → 스킬에서 하나를 골라 궁극기 칸에 둔다. 궁극기·스킬은 던전에서만 쓸 수 있다.</p><p>교관 카엘에게 스킬을 배우고 Lv.${MAX_SKILL_LEVEL}까지 올린다(골드 + 판). 강화할 때마다 공격 스킬은 위력 +15%, 방어·보조 스킬은 지속 시간이 늘고, 재사용 대기 −6%. 배운 스킬은 캐릭터 → 스킬에서 퀵슬롯(1·2·3)에 놓는다 (스킬을 누르고 칸을 누른다). 궁극기는 수호자의 차원석으로 열리고, 엔딩 뒤 <b>차원 파편</b>으로 Lv.5까지 올린다 (레벨마다 위력 +${pct(ultPower(2) - 1)}, 재사용 −5초).</p>
   ${table(['궁극기', '필요 파편'], [1, 2, 3, 4].map((lv) => [`Lv.${lv} → ${lv + 1}`, it('dim_shard', ultUpgradeCost(lv)!.items.dim_shard)]))}`;
 }
 
@@ -145,6 +148,7 @@ function equipment(): string {
   <h3>부위</h3>
   <div class="enc-row">${EQUIP_SLOTS.map((s) => `<span class="enc-slot">${eq({ slot: s, tier: 2, grade: 1, cls: 'sword' })}${slotName(s, 'sword')}</span>`).join('')}</div>
   <p>무기는 직업마다 다르다(검·지팡이·활). 방어구·장신구는 어느 직업이나 낄 수 있다.</p>
+  ${tip('던전 안에서는 가방에 든 장비로만 바꿔 낄 수 있다. 장비·도구는 차원집 제작대에서 만들고, 강화·수리는 대장장이 고른에게 한다.')}
   <h3>재질 (단계)</h3>
   <div class="enc-row">${TOOL_TIER_NAMES.map((n, i) => `<span class="enc-slot">${eq({ slot: 'weapon', cls: 'sword', tier: i + 1, grade: 0 })}${i + 1}. ${n}</span>`).join('')}</div>
   <p>단계가 오를수록 크게 강해진다. 다음 단계 무기는 이전 단계 +10보다 세다.</p>
@@ -164,7 +168,7 @@ function equipment(): string {
   <h3>강화 (대장장이 고른)</h3>
   ${table(['단계', '성공 확률', '재료 (장비 재질)'], enh)}
   <p>+1~+5는 <b>판</b>, +6~+10은 <b>마력판</b>을 쓴다. 실패해도 강화 단계는 떨어지지 않고 재료만 사라진다. 차원 등급은 재료·골드가 세 배.</p>
-  <h3>수리</h3>
+  <h3>수리 (대장장이 고른)</h3>
   ${table(
     ['강화 단계', '수리 재료 (구리 장비 예)'],
     [
@@ -263,7 +267,7 @@ function factory(): string {
   <p>차원집은 나만의 공장이다. 마을의 차원집 문으로 들어가 <b>건설 모드(망치 버튼, B)</b>로 건물을 놓는다. 건설 재료는 공유 창고에서 빠진다.</p>
   <h3>기본 구조</h3>
   ${flow([`${img(buildingThumb('box'), 'enc-ico')} 보관상자(투입)`, `${img(buildingThumb('belt'), 'enc-ico')} 레일`, `${img(buildingThumb('smelter'), 'enc-ico')} 기계`, `${img(buildingThumb('belt'), 'enc-ico')} 레일`, `${img(buildingThumb('box'), 'enc-ico')} 보관상자(출하)`])}
-  <p>기계는 <b>마력선</b>으로 <b>마력 발전기</b>와 이어야 움직인다. 발전기에 마력 정수를 넣으면 타면서 전력을 만든다(좋은 정수일수록 오래 타고 생산이 빨라진다). 전력보다 기계를 많이 이으면 느려진다.</p>
+  <p>기계는 <b>마력선</b>으로 <b>마력 발전기</b>와 이어야 움직인다. 발전기에 마력 정수를 넣으면 <b>좋은 것부터</b> 타면서 전력을 만든다 (좋은 정수일수록 오래 타고 생산이 빨라진다). 연료는 돌아가는 기계가 쓰는 전력만큼 줄고, 쉬는 기계는 전력을 쓰지 않는다. 수요가 공급보다 크면 기계들이 그만큼 느려진다.</p><p>레시피북(제작대·기계 화면)에서 회색으로 보이는 재료는 지금 부족한 것. 완성품은 기계 앞쪽 레일로 나간다.</p>
   ${tip(`게임을 꺼 둔 동안에도 최대 ${OFFLINE_CAP_HOURS}시간까지 공장이 돌아간다.`)}
   <h3>건물</h3>
   ${bRows}

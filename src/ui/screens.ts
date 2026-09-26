@@ -318,15 +318,14 @@ export class Screens {
       const off = !unlocked || wait > 0 || !hasTool;
       return `<button class="farm-btn ${off ? 'waiting' : ''}" data-farm="${kind}" ${off ? 'disabled' : ''}>${icon}<span><b>${tier}단계 ${kind === 'wood' ? '벌목지' : '광맥지'}</b><small>${sub}</small></span></button>`;
     };
-    const farmRow = onFarm ? `<h3>채집 특화 맵 <small>각각 30분에 한 번 (어느 단계든 한 곳)</small></h3><div class="farm-row">${farmBtn('wood')}${farmBtn('ore')}</div>` : '';
+    const farmRow = onFarm ? `<h3>채집 특화 맵</h3><div class="farm-row">${farmBtn('wood')}${farmBtn('ore')}</div>` : '';
     const s = this.open(
       'select',
       `<div class="panel wide">
          <button class="close">${ICONS.close}</button>
          <h2>차원문 광장 <small>${theme.name}</small></h2>
          <div class="tier-tabs">${tiers}</div>
-         ${onEnd && p.flag('endgame') && !endLock(p.data.end!, 'rift') ? `<button class="end-banner" data-end="1">${SPK('portal', '◎')} <b>심연 균열</b> <small>스테이지를 7-10보다 강한 난이도로 · 차원 가루·장비 파밍</small></button>` : ''}
-         <p class="hint">5번째 방 파수꾼(1시간마다 재등장) · 10번째 방 차원석 수호자(4시간마다). 대기 중엔 정예가 지킵니다.</p>
+         ${onEnd && p.flag('endgame') && !endLock(p.data.end!, 'rift') ? `<button class="end-banner" data-end="1">${SPK('portal', '◎')} <b>심연 균열</b></button>` : ''}
          <div class="stage-grid">${stages}</div>
          ${farmRow}
        </div>`,
@@ -507,7 +506,7 @@ export class Screens {
       `<div class="panel">
          <button class="close">${ICONS.close}</button>
          <h2>워프 게이트</h2>
-         <p class="hint">${label} 클리어! 가방의 전리품은 그대로 들고 갑니다.</p>
+         <p class="hint">${label} 클리어!</p>
          <div class="menu">
            ${next ? `<button class="primary" data-a="next">다음 방으로 (${next})</button>` : ''}
            <button data-a="village" class="${next ? '' : 'primary'}">마을로 귀환</button>
@@ -528,7 +527,7 @@ export class Screens {
       'ency',
       `<div class="panel wide tall ency">
          <button class="close">${ICONS.close}</button>
-         <h2>${SPK('book', '📖')} 백과사전 <small>궁금한 항목을 고르세요</small></h2>
+         <h2>${SPK('book', '📖')} 백과사전</h2>
          <div class="ency-tabs">${pages
            .map((x) => `<button class="ency-tab ${x.id === page.id ? 'on' : ''} ${x.locked ? 'locked' : ''}" data-ency="${x.id}"><img src="${x.icon}" alt="">${x.name}${x.locked ? ' 🔒' : ''}</button>`)
            .join('')}</div>
@@ -562,11 +561,11 @@ export class Screens {
         'feedback',
         `<div class="panel">
            <button class="close">${ICONS.close}</button>
-           <h2>의견 보내기 <small>개발자에게 바로 전달됩니다</small></h2>
+           <h2>의견 보내기</h2>
            <div class="fb-kinds">${FEEDBACK_KINDS.map((k) => `<button class="chip ${k === kind ? 'on' : ''}" data-kind="${k}">${k}</button>`).join('')}</div>
            <label class="fb-label">이름 <input class="fb-name" maxlength="${FEEDBACK_NAME_MAX}" placeholder="닉네임 (필수)" value="${name.replace(/"/g, '&quot;')}"/></label>
            <textarea class="fb-text" maxlength="${FEEDBACK_MAX}" placeholder="버그, 어려웠던 점, 바라는 점… 무엇이든 적어 주세요">${text.replace(/</g, '&lt;')}</textarea>
-           <div class="fb-foot"><small class="dim"><span data-count>${text.length}</span>/${FEEDBACK_MAX}자 · 버전·직업·레벨·기기 정보가 함께 보내집니다</small>
+           <div class="fb-foot"><small class="dim"><span data-count>${text.length}</span>/${FEEDBACK_MAX}</small>
              <button class="primary" data-a="send" ${wait > 0 || sending ? 'disabled' : ''}>${sending ? '보내는 중…' : wait > 0 ? `${secs}초 뒤에 다시 보낼 수 있어요` : '보내기'}</button></div>
            ${status ? `<div class="notice">${status}</div>` : ''}
          </div>`,
@@ -666,7 +665,6 @@ export class Screens {
          </div>
          ${opts.seed !== undefined ? `<div class="seed">던전 시드 ${opts.seed}</div>` : ''}
          <div class="keys">배경음: Dreamy Analog Synth Loop · Dreamy Ambient Loop · Relaxing Dreamy Synth Rhodes Loop · Melodic Groove Bass Synth Loop — orangefreesounds.com (CC BY 4.0)</div>
-         <div class="keys">PC 조작: WASD 이동 · J/클릭 공격 · Space 회피(검사 구르기 · 마법사 블링크 · 궁수 후방 도약) · 1·2·3 스킬 · 4/F 궁극기 · Q 물약 · E 상호작용·채집 · M 지도 · I 가방 · B 건설 · Esc 메뉴</div>
        </div>`,
       opts.onClose,
     );
@@ -704,7 +702,7 @@ export class Screens {
 
   // ---------------- 던전 가방: 누르면 정보, 반대쪽 가방을 누르면 옮기기 ----------------
   bag(bag: Bag, dimBag: Bag, onMove: (from: 'bag' | 'dim', index: number) => boolean, onClose: () => void, onEquip?: () => void): void {
-    let info = '아이템을 누르면 정보가 나옵니다. 그다음 반대쪽 가방을 누르면 그쪽으로 옮겨지고, [버리기]로 버릴 수 있습니다.';
+    let info = '';
     let sel: { from: 'bag' | 'dim'; i: number } | null = null;
     /** 버리기는 한 번 더 눌러야 한다 */
     let dropArm = false;
@@ -730,7 +728,7 @@ export class Screens {
            <h2>가방 <small>${bag.used}/${bag.slots.length}</small> ${onEquip ? `<button class="tool-sm" data-a="equip">${SPK('shield', '🛡')} 장비 교체</button>` : ''}</h2>
            <div class="bag-grid ${target === 'bag' ? 'drop' : ''}" data-bag="bag">${bag.slots.map((x, i) => cell(x, 'bag', i)).join('')}</div>
            <div class="item-info">${info}${dropRow()}</div>
-           <h3>차원가방 <small>쓰러져도 지켜지는 가방 · ${dimBag.used}/${dimBag.slots.length}</small></h3>
+           <h3>차원가방 <small>${dimBag.used}/${dimBag.slots.length}</small></h3>
            <div class="bag-grid dim-row ${target === 'dim' ? 'drop' : ''}" data-bag="dim">${dimBag.slots.map((x, i) => cell(x, 'dim', i)).join('')}</div>
          </div>`,
         onClose,
@@ -780,7 +778,7 @@ export class Screens {
             const i = Number(el.dataset.i);
             sel = sel && sel.from === from && sel.i === i ? null : { from, i };
             dropArm = false;
-            info = sel ? `${slotInfo((from === 'bag' ? bag : dimBag).slots[i]!)}<br><small class="ok">▶ ${from === 'bag' ? '차원가방' : '일반 가방'}을 누르면 옮겨집니다</small>` : info;
+            info = sel ? `${slotInfo((from === 'bag' ? bag : dimBag).slots[i]!)}<br><small class="ok">→ ${from === 'bag' ? '차원가방' : '일반 가방'}</small>` : info;
             this.click();
             render();
           }
@@ -817,7 +815,7 @@ export class Screens {
         rows.push(row(MANA_PLATE_OF(t), 1, m.items, `제작대 Lv.${t} · ${m.time}초 · +6~+10 강화 재료`));
       }
       for (const r of recipesFor('workbench')) rows.push(row(r.output, r.count, r.inputs, `제작대 Lv.${r.tier} · ${r.time}초 · 조립`));
-      body = `<p class="hint">제작대에서는 판 합성, 조립(귀환석 등), 채집 도구(주괴 4 + 판자 3), 장비(주괴 + 판자 / ${SPK('sparkle', '✨')} 마력 판자)를 만듭니다. 제작을 시작하면 전력을 쓰며 시간이 걸립니다. 제작대 레벨 = 만들 수 있는 최고 단계.</p><ul class="list">${rows.join('')}</ul>`;
+      body = `<ul class="list">${rows.join('')}</ul>`;
     } else if (tab === 'source') {
       const src: [string, string][] = [
         ['copper_ore', '1~2챕터 던전 광맥 (곡괭이)'],
@@ -837,18 +835,17 @@ export class Screens {
         ['magi_alloy', '5챕터 합금 잔해'],
         ['potion', '상인 무트 (기본 물약만 판매)'],
       ];
-      body = `<ul class="list">${src.map(([id, where]) => `<li>${itemGem(id)}<div><b>${ITEMS[id].name} <small class="dim">보유 ${p.count(id)}</small></b><small>${where}</small></div></li>`).join('')}</ul>
-        <p class="hint">광석·나무는 한 단계 위까지 지금 도구로 캘 수 있지만 내구도가 3배로 닳습니다.</p>`;
+      body = `<ul class="list">${src.map(([id, where]) => `<li>${itemGem(id)}<div><b>${ITEMS[id].name} <small class="dim">보유 ${p.count(id)}</small></b><small>${where}</small></div></li>`).join('')}</ul>`;
     } else {
       const recipes = RECIPES.filter((r) => r.machine === tab);
       const b = BUILDINGS[tab as BuildingType];
-      body = `<p class="hint">${b.description} 레시피마다 필요한 건물 레벨이 있습니다 (세라의 강화 도면).</p><ul class="list">${recipes.map((r) => row(r.output, r.count, r.inputs, `${b.name} Lv.${r.tier} · ${r.time}초`)).join('')}</ul>`;
+      body = `<ul class="list">${recipes.map((r) => row(r.output, r.count, r.inputs, `${b.name} Lv.${r.tier} · ${r.time}초`)).join('')}</ul>`;
     }
     const s = this.open(
       'recipes',
       `<div class="panel wide tall">
          <button class="close">${ICONS.close}</button>
-         <h2>레시피북 <small>회색 재료는 지금 부족한 것</small></h2>
+         <h2>레시피북</h2>
          <div class="tabs recipe-tabs">${tabs.map(([k, n]) => `<button data-tab="${k}" class="${tab === k ? 'on' : ''}">${n}</button>`).join('')}</div>
          <div class="scroll">${body}</div>
        </div>`,
@@ -978,7 +975,7 @@ export class Screens {
         ? `${equipTitle(sel)}<br><small>${equipLine(sel) || '<span class="bad">망가짐 — 대장간에서 수리하세요</span>'} · 내구도 ${durability(sel)}/${EQUIP_MAX_DUR}</small> <button data-un="${selSlot}">해제</button>`
         : selSlot
           ? `<span class="dim">${slotName(selSlot, p.data.currentClass)} 칸이 비어 있습니다. 아래 목록에서 장착하세요.</span>`
-          : '<span class="dim">칸을 누르면 장비 정보가 나옵니다.</span>';
+          : '';
       const bagEquips = field ? field.bags.flatMap((b) => b.equips()) : [];
       const pool = [...bagEquips, ...(field?.dungeon ? [] : p.data.equips)];
       const list = pool
@@ -998,7 +995,7 @@ export class Screens {
             <div class="doll-stats"><span>공격 <b>${st.atk}</b></span><span>방어 <b>${st.def}</b></span><span>HP <b>${st.maxHp}</b></span><span>치명 <b>${st.crit}%</b></span></div></div>
         </div>
         <div class="item-info">${info}</div>
-        <h3>채집 도구 <small>강화·수리: 대장장이 고른 · 제작: 차원집 제작대</small></h3>
+        <h3>채집 도구</h3>
         <div class="tool-row">${(['pickaxe', 'axe'] as ToolKind[])
           .map((k) => {
             const t = p.data.tools[k];
@@ -1008,7 +1005,7 @@ export class Screens {
             return `<div class="tool-card ${t.dur <= 0 ? 'broken' : ''}">${toolGem(k, t)}<div><b>${toolName(k, t)}</b><small>내구도 <span class="${t.dur <= 0 ? 'bad' : r < 0.2 ? 'warn' : ''}">${t.dur}/${toolMaxDur(t)}</span> · 속도 +${Math.round((toolSpeed(t) - 1) * 100)}%</small><i class="dur" style="width:${Math.round(r * 100)}%"></i></div></div>`;
           })
           .join('')}</div>
-        <h3>${field?.dungeon ? '가방 속 장비 <small>던전에서는 가방에 든 장비로만 바꿀 수 있습니다</small>' : '가방·창고의 장비'} ${selSlot ? `<small>${slotName(selSlot, p.data.currentClass)}만 · <a data-slot="">전체 보기</a></small>` : ''}</h3><ul class="list">${list || '<li class="empty">장비가 없습니다</li>'}</ul></div>`;
+        <h3>${field?.dungeon ? '가방 속 장비' : '가방·창고의 장비'} ${selSlot ? `<small>${slotName(selSlot, p.data.currentClass)}만 · <a data-slot="">전체 보기</a></small>` : ''}</h3><ul class="list">${list || '<li class="empty">장비가 없습니다</li>'}</ul></div>`;
     } else if (tab === 'skills') {
       const quickRow = c.quick
         .map((idx, slot) => {
@@ -1029,13 +1026,13 @@ export class Screens {
       const ultRows = ULTIMATES[p.data.currentClass]
         .map((u, i) => {
           const got = open.includes(i);
-          return `<li class="${cur === i ? 'sel' : ''} ${got ? '' : 'locked'}" ${got ? `data-ult="${i}"` : ''}><img class="gem ico" src="${skillIconUrl(p.data.currentClass, 6 + i)}" alt=""><div><b>${u.name} ${cur === i ? '<span class="ok">[장착]</span>' : got ? '<span class="dim">(누르면 장착)</span>' : `<span class="dim">(${u.stone}-10 수호자 처치 시 획득)</span>`}</b><small>${got ? `Lv.${p.ultLevel(i)} · 위력 ${Math.round(ultPower(p.ultLevel(i)) * 100)}% · ` : ''}${u.description} · MP ${u.mp} · ${ultCooldown(p.ultLevel(i))}초</small></div></li>`;
+          return `<li class="${cur === i ? 'sel' : ''} ${got ? '' : 'locked'}" ${got ? `data-ult="${i}"` : ''}><img class="gem ico" src="${skillIconUrl(p.data.currentClass, 6 + i)}" alt=""><div><b>${u.name} ${cur === i ? '<span class="ok">[장착]</span>' : got ? '' : `<span class="dim">(${u.stone}-10 수호자 · Lv.${u.level})</span>`}</b><small>${got ? `Lv.${p.ultLevel(i)} · 위력 ${Math.round(ultPower(p.ultLevel(i)) * 100)}% · ` : ''}${u.description} · MP ${u.mp} · ${ultCooldown(p.ultLevel(i))}초</small></div></li>`;
         })
         .join('');
       body = `<div class="scroll">
-        <h3>퀵슬롯 <small>${selSkill === undefined ? '아래에서 스킬을 누른 뒤 놓을 칸을 누르세요. 칸을 누르면 비웁니다' : `<b class="ok">${cls.skills[selSkill].name}</b>을(를) 놓을 칸을 누르세요`}</small></h3>
+        <h3>퀵슬롯 ${selSkill === undefined ? '' : `<small><b class="ok">${cls.skills[selSkill].name}</b> → 칸 선택</small>`}</h3>
         <div class="quick-row">${quickRow}</div>
-        <h3>궁극기 <small>수호자를 처음 쓰러뜨려 차원석을 얻으면 열립니다 · 하나를 골라 궁극기 칸에 둡니다</small></h3><ul class="list">${ultRows}</ul>
+        <h3>궁극기</h3><ul class="list">${ultRows}</ul>
         <h3>배운 스킬</h3><ul class="list">${rows}</ul></div>`;
     } else if (tab === 'stats') {
       const next = expToNext(c.level);
@@ -1059,26 +1056,29 @@ export class Screens {
         <h3>스탯 <small>남은 포인트 <b class="${c.points ? 'ok' : ''}">${c.points}</b> · 레벨업마다 5포인트</small></h3>
         <div class="stat-rows">${statRows}</div>
         ${this.transcendBlock(p)}
-        <h3>스킬 <small>교관 카엘에게서 배우고 강화합니다</small></h3><ul class="list">${cls.skills.map((sk, i) => `<li><span class="key">${i + 1}</span><div><b>${sk.name} ${c.skills[i] ? `Lv.${c.skills[i]}` : '<span class="dim">(미습득)</span>'}</b><small>${sk.description} · MP ${sk.mp} · ${sk.cooldown}초</small></div></li>`).join('')}</ul>
+        <h3>스킬</h3><ul class="list">${cls.skills.map((sk, i) => `<li><span class="key">${i + 1}</span><div><b>${sk.name} ${c.skills[i] ? `Lv.${c.skills[i]}` : '<span class="dim">(미습득)</span>'}</b><small>${sk.description} · MP ${sk.mp} · ${sk.cooldown}초</small></div></li>`).join('')}</ul>
       </div>`;
     } else {
       const ql = quests.activeList();
+      // 왼쪽 퀘스트 알림판에 띄울지 (체크하면 보인다)
+      const hidden = new Set(p.data.settings.hiddenQuests ?? []);
+      const track = (id: string) => `<label class="q-track" title="알림판에 표시"><input type="checkbox" data-track="${id}" ${hidden.has(id) ? '' : 'checked'}/><span>표시</span></label>`;
       const row = (q: QuestDef) => {
         const prog = quests.progress(q);
         const done = prog.every((x) => x.cur >= x.need);
-        return `<li class="quest ${q.kind}"><div><b>${q.kind === 'main' ? '[메인] ' : '[서브] '}${q.title}</b>
+        return `<li class="quest ${q.kind}">${track(q.id)}<div><b>${q.kind === 'main' ? '[메인] ' : '[서브] '}${q.title}</b>
           <small>${prog.map((x) => `${x.text} ${x.cur}/${x.need}`).join(' · ')}</small>
-          <small class="${done ? 'ok' : 'dim'}">${done ? `✔ ${npcName(q.npc)}에게 보고하기` : `의뢰인: ${npcName(q.npc)}`}</small></div></li>`;
+          ${done ? `<small class="ok">✔ ${npcName(q.npc)}에게 보고</small>` : ''}</div></li>`;
       };
       const daily = quests.state.daily.list
         .filter((d) => d.accepted)
         .map((d) => {
           const need = objectiveNeed(d.objective);
           const cur = objectiveProgress(d.objective, d.progress, { count: (id) => p.count(id), stones: p.stoneCount, cleared: p.data.cleared, flag: (f) => p.flag(f), discovered: p.discovered });
-          return `<li class="quest daily ${d.claimed ? 'claimed' : ''}"><div><b>[일일] ${d.title}</b><small>${objectiveText(d.objective)} ${Math.min(cur, need)}/${need}</small><small class="${d.claimed ? 'dim' : cur >= need ? 'ok' : 'dim'}">${d.claimed ? '보상 받음' : cur >= need ? '✔ 촌장 에단에게 보고하기' : '촌장 에단의 일일 의뢰'}</small></div></li>`;
+          return `<li class="quest daily ${d.claimed ? 'claimed' : ''}">${d.claimed ? '' : track(`daily:${d.id}`)}<div><b>[일일] ${d.title}</b><small>${objectiveText(d.objective)} ${Math.min(cur, need)}/${need}</small>${d.claimed ? '<small class="dim">보상 받음</small>' : cur >= need ? '<small class="ok">✔ 촌장 에단에게 보고</small>' : ''}</div></li>`;
         })
         .join('');
-      body = `<ul class="list scroll">${ql.map(row).join('')}${daily}${!ql.length && !daily ? '<li class="empty">진행 중인 퀘스트가 없습니다. 머리 위에 !가 뜬 주민에게 말을 걸어 보세요.</li>' : ''}</ul>`;
+      body = `<ul class="list scroll">${ql.map(row).join('')}${daily}${!ql.length && !daily ? '<li class="empty">진행 중인 퀘스트 없음</li>' : ''}</ul>`;
     }
     const s = this.open(
       'inventory',
@@ -1115,6 +1115,16 @@ export class Screens {
       again(tab, selSlot);
     });
     this.on(s, '[data-tab]', (b) => again(b.dataset.tab as typeof tab, undefined));
+    s.querySelectorAll<HTMLInputElement>('[data-track]').forEach((el) =>
+      el.addEventListener('change', () => {
+        const id = el.dataset.track!;
+        const set = new Set(p.data.settings.hiddenQuests ?? []);
+        if (el.checked) set.delete(id);
+        else set.add(id);
+        p.data.settings.hiddenQuests = [...set];
+        onChange();
+      }),
+    );
     this.on(s, '[data-slot]', (b) => {
       this.click();
       const slot = (b.dataset.slot || undefined) as EquipSlot | undefined;
@@ -1176,7 +1186,7 @@ export class Screens {
     const bo = p.bonuses();
     const sum = (Object.entries(bo) as [BonusKey, number][]).filter(([, v]) => v).map(([k, v]) => bonusText(k, v)).join(' · ');
     const food = p.data.food && p.data.food.until > Date.now() ? `${ITEMS[p.data.food.id]?.name ?? ''} ${Math.ceil((p.data.food.until - Date.now()) / 60000)}분 남음` : '없음';
-    let html = `<h3>추가 보너스 <small>각인 · 칭호 · 초월 · 음식</small></h3><p class="hint">${sum || '아직 없습니다 (엔딩 뒤 각인·칭호·초월이 열립니다)'}<br>음식: ${food}</p>`;
+    let html = `<h3>추가 보너스</h3><p class="hint">${sum || '없음'}<br>음식: ${food}</p>`;
     if (c.level < MAX_LEVEL) return html;
     const pts = p.transcendPoints();
     const need = transcendExp(c.tlv ?? 0);
@@ -1185,7 +1195,7 @@ export class Screens {
     const c1 = transcendCost(spent, 1);
     const c5 = transcendCost(spent, 5);
     html += `<h3>초월 Lv.${c.tlv ?? 0} <small>경험치 ${c.texp ?? 0} / ${need} · 남은 초월 포인트 <b class="${pts ? 'ok' : ''}">${pts}</b></small></h3>
-      <p class="hint">포인트를 찍을 때 ${inlineGem('dim_shard')}차원 파편이 듭니다 (보유 <b class="${shards >= c1 ? '' : 'bad'}">${shards}</b>). 찍은 포인트 5점마다 1점당 파편이 1개씩 늘어납니다 · 지금 1점당 ${c1}개</p>
+      <p class="hint">1점당 ${inlineGem('dim_shard')}${c1} · 보유 <b class="${shards >= c1 ? '' : 'bad'}">${shards}</b></p>
       <div class="stat-rows">${TRANSCEND_STATS.map((t) => `<div class="stat-row"><b>${BONUS_NAMES[t.key]}</b><span class="num">${c.tpts?.[t.key] ?? 0}</span><small>1포인트당 ${bonusText(t.key, t.per)}</small>
         <button data-tp="${t.key}" data-n="1" ${pts > 0 && shards >= c1 ? '' : 'disabled'}>+1 <small>(파편 ${c1})</small></button><button data-tp="${t.key}" data-n="5" ${pts >= 5 && shards >= c5 ? '' : 'disabled'}>+5 <small>(파편 ${c5})</small></button></div>`).join('')}</div>`;
     return html;
@@ -1195,7 +1205,7 @@ export class Screens {
   storage(p: Progress, onClose: () => void, message?: string, onChange?: () => void): void {
     type Sel = { from: 'bag' | 'dim'; i: number } | { from: 'store'; id: string } | { from: 'storeEq'; uid: string } | null;
     let sel: Sel = null;
-    let info = message ?? '아이템을 누르고 반대쪽(가방 ↔ 창고)을 누르면 옮겨집니다.';
+    let info = message ?? '';
     const bag = p.invBag;
     const dim = p.dimBagObj;
     const render = () => {
@@ -1301,17 +1311,17 @@ export class Screens {
           if (el.dataset.store) {
             const id = el.dataset.store;
             sel = sel?.from === 'store' && sel.id === id ? null : { from: 'store', id };
-            info = sel ? `${slotInfo({ itemId: id, count: p.stored(id) })}<br><small class="ok">▶ 가방을 누르면 꺼냅니다</small>` : info;
+            info = sel ? `${slotInfo({ itemId: id, count: p.stored(id) })}<br><small class="ok">→ 가방</small>` : info;
           } else if (el.dataset.storeeq) {
             const e = p.data.equips.find((x) => x.uid === el.dataset.storeeq)!;
             sel = sel?.from === 'storeEq' && sel.uid === e.uid ? null : { from: 'storeEq', uid: e.uid };
-            info = sel ? `${slotInfo({ itemId: 'equip', count: 1, equip: e })}<br><small class="ok">▶ 가방을 누르면 꺼냅니다</small>` : info;
+            info = sel ? `${slotInfo({ itemId: 'equip', count: 1, equip: e })}<br><small class="ok">→ 가방</small>` : info;
           } else {
             const from = el.dataset.from as 'bag' | 'dim';
             const i = Number(el.dataset.i);
             const same = sel && (sel.from === 'bag' || sel.from === 'dim') && sel.from === from && sel.i === i;
             sel = same ? null : { from, i };
-            info = sel ? `${slotInfo((from === 'bag' ? bag : dim).slots[i]!)}<br><small class="ok">▶ 창고를 누르면 보관합니다</small>` : info;
+            info = sel ? `${slotInfo((from === 'bag' ? bag : dim).slots[i]!)}<br><small class="ok">→ 창고</small>` : info;
           }
           render();
         }),
@@ -1357,7 +1367,7 @@ export class Screens {
   warehouse(p: Progress, b: BuildingState, onChange: () => void, onClose: () => void, side: 'bag' | 'shared' = 'bag', message?: string): void {
     type Sel = { from: 'bag' | 'dim'; i: number } | { from: 'shared' | 'home'; id: string } | null;
     let sel: Sel = null;
-    let info = message ?? '아이템을 누르고 반대쪽을 누르면 옮겨집니다. 차원집 안에서는 이 창고의 재료도 제작·건설에 바로 쓰입니다.';
+    let info = message ?? '';
     const bag = p.invBag;
     const dim = p.dimBagObj;
     const render = () => {
@@ -1390,7 +1400,7 @@ export class Screens {
            <div class="store-split scroll">
              <div>${left}</div>
              <div>
-               <h3>일반 창고 <small>차원집의 일반 창고 ${p.data.factory.buildings.filter((x) => x.type === 'warehouse').length}개가 함께 씀 · 레일로 들어온 것도 여기로</small></h3>
+               <h3>일반 창고</h3>
                <div class="store-grid" data-grid="home">${pool(p.home, 'home')}${empty}</div>
              </div>
            </div>
@@ -1445,16 +1455,16 @@ export class Screens {
           if (el.dataset.home) {
             const id = el.dataset.home;
             sel = sel && 'id' in sel && sel.from === 'home' && sel.id === id ? null : { from: 'home', id };
-            info = sel ? `${slotInfo({ itemId: id, count: p.homeStored(id) })}<br><small class="ok">▶ 반대쪽을 누르면 꺼냅니다</small>` : info;
+            info = sel ? `${slotInfo({ itemId: id, count: p.homeStored(id) })}<br><small class="ok">→ 꺼내기</small>` : info;
           } else if (el.dataset.shared) {
             const id = el.dataset.shared;
             sel = sel && 'id' in sel && sel.from === 'shared' && sel.id === id ? null : { from: 'shared', id };
-            info = sel ? `${slotInfo({ itemId: id, count: p.stored(id) })}<br><small class="ok">▶ 일반 창고를 누르면 옮깁니다</small>` : info;
+            info = sel ? `${slotInfo({ itemId: id, count: p.stored(id) })}<br><small class="ok">→ 일반 창고</small>` : info;
           } else if (el.dataset.from) {
             const from = el.dataset.from as 'bag' | 'dim';
             const i = Number(el.dataset.i);
             sel = sel && 'i' in sel && sel.from === from && sel.i === i ? null : { from, i };
-            info = sel ? `${slotInfo((from === 'bag' ? bag : dim).slots[i]!)}<br><small class="ok">▶ 일반 창고를 누르면 넣습니다</small>` : info;
+            info = sel ? `${slotInfo((from === 'bag' ? bag : dim).slots[i]!)}<br><small class="ok">→ 일반 창고</small>` : info;
           }
           render();
         }),
@@ -1555,7 +1565,7 @@ export class Screens {
       'daily',
       `<div class="panel wide">
          <button class="close">${ICONS.close}</button>
-         <h2>촌장의 일일 의뢰 <small>매일 새로 바뀝니다 · 수락한 의뢰만 진행되고, 다 하면 촌장에게 보고하세요</small></h2>
+         <h2>촌장의 일일 의뢰</h2>
          <ul class="list">${rows}</ul>
        </div>`,
       onClose,
@@ -1654,9 +1664,9 @@ export class Screens {
          <button class="close">${ICONS.close}</button>
          <h2>몬스터 도감 <small>발견 ${found}/${BESTIARY.length} · 연구 보너스 공격력·체력 +${Math.round(research * RESEARCH_BONUS * 100)}%</small></h2>
          ${message ? `<div class="notice">${message}</div>` : ''}
-         ${canClaim ? '' : '<p class="hint">보상은 마을의 몬스터 연구자 노아에게서 받을 수 있습니다.</p>'}
+         
          <div class="scroll">
-           <h3>수집 보상 <small>서로 다른 몬스터를 발견할수록</small></h3>
+           <h3>수집 보상</h3>
            <div class="bms wide">${cols}</div>
            <div class="tier-tabs">${tabs}</div>
            <ul class="list beasts">${cards}</ul>
@@ -1823,9 +1833,9 @@ export class Screens {
          ${message ? `<div class="notice">${message}</div>` : ''}
          <div class="scroll">
          <p class="notice">도면 없이 바로 지을 수 있는 기본 건물: 마력 발전기 · 마력선 · 레일 · 보관상자 · 제작대 · <b>마력 치유석(HP·MP 회복)</b> · 제련로 — 차원집의 망치 버튼(건설 모드)에서 고르세요.</p>
-         <h3>건물 도면 <small>사면 차원집 건설 모드에서 지을 수 있습니다</small></h3>
+         <h3>건물 도면</h3>
          <ul class="list">${rows}</ul>
-         <h3>강화 도면 <small>설치한 건물을 누르고 업그레이드하면 상위 재료를 가공합니다</small></h3>
+         <h3>강화 도면</h3>
          <ul class="list">${upRows}</ul>
          </div>
        </div>`,
@@ -1865,8 +1875,7 @@ export class Screens {
       const t = tools[selTool];
       const cost = toolRepair(t);
       detail = `<p><b>${toolName(selTool, t)}</b> · 내구도 ${t.dur}/${toolMaxDur(t)}</p>
-        <p class="hint">${TOOL_TIER_NAMES[t.tier - 1]} 단계 자원까지는 내구도 1, 한 단계 위(${TOOL_TIER_NAMES[t.tier] ?? '-'})는 3씩 닳습니다. 그보다 위는 캘 수 없습니다.<br>
-        캐는 속도 +${Math.round((toolSpeed(t) - 1) * 100)}% · 추가 채집 ${Math.round(toolBonusChance(t) * 100)}%</p>`;
+        <p class="hint">캐는 속도 +${Math.round((toolSpeed(t) - 1) * 100)}% · 추가 채집 ${Math.round(toolBonusChance(t) * 100)}%</p>`;
       if (cost) {
         const ok = p.count(cost.ore) >= cost.count && p.data.gold >= cost.gold;
         detail += `<h3>수리</h3>${costLine(cost.ore, cost.count, cost.gold)}<div class="menu"><button data-repair-tool="${selTool}" ${ok ? '' : 'disabled'}>수리하기</button></div>`;
@@ -1874,7 +1883,7 @@ export class Screens {
       const ec = toolEnhanceCost(t);
       if (ec) {
         const ok = p.count(ec.ore) >= ec.count && p.data.gold >= ec.gold;
-        detail += `<h3>강화 → +${t.plus + 1} <small>속도 +6% · 추가 채집 +5%</small></h3>${costLine(ec.ore, ec.count, ec.gold)}<p>성공 확률 <b>${Math.round(ec.rate * 100)}%</b></p><div class="menu"><button class="primary" data-enh-tool="${selTool}" ${ok ? '' : 'disabled'}>강화하기</button></div>`;
+        detail += `<h3>강화 → +${t.plus + 1}</h3>${costLine(ec.ore, ec.count, ec.gold)}<p>성공 확률 <b>${Math.round(ec.rate * 100)}%</b></p><div class="menu"><button class="primary" data-enh-tool="${selTool}" ${ok ? '' : 'disabled'}>강화하기</button></div>`;
       } else detail += '<p class="hint">최대 강화(+10)입니다.</p>';
     } else if (sel) {
       const cost = enhanceCost(sel);
@@ -1882,7 +1891,7 @@ export class Screens {
       const rc = repairCost(sel);
       if (rc) {
         const ok = p.count(rc.ore) >= rc.count && p.data.gold >= rc.gold;
-        detail += `<h3>수리 <small>+${sel.plus} 장비는 ${ITEMS[rc.ore].name}(으)로 고칩니다 · 강화가 높을수록 광석 → 주괴 → 판 → 마력판</small></h3>${costLine(rc.ore, rc.count, rc.gold)}<div class="menu"><button data-repair ${ok ? '' : 'disabled'}>수리하기</button></div>`;
+        detail += `<h3>수리</h3>${costLine(rc.ore, rc.count, rc.gold)}<div class="menu"><button data-repair ${ok ? '' : 'disabled'}>수리하기</button></div>`;
       }
       if (!cost) detail += '<p class="hint">이미 최대 강화(+10)입니다.</p>';
       else {
@@ -1893,7 +1902,6 @@ export class Screens {
           <p class="hint">→ ${equipLine({ ...next, dur: EQUIP_MAX_DUR })}${durability(sel) <= 0 ? " (수리 후)" : ""}</p>
           <p>${inlineGem(cost.item)}${ITEMS[cost.item].name} ${cost.count}개 <span class="${have >= cost.count ? 'dim' : 'bad'}">(보유 ${have})</span></p>
           <p>${cost.gold} G · 성공 확률 <b>${Math.round(cost.rate * 100)}%</b></p>
-          <p class="hint">실패해도 단계가 내려가지 않지만 재료는 사라집니다.</p>
           <div class="menu"><button class="primary" data-enh ${ok ? '' : 'disabled'}>강화하기</button></div>`;
       }
       detail += this.engraveBlock(p, sel);
@@ -1993,10 +2001,9 @@ export class Screens {
         rows += `<div class="eng-line"><span class="stage">${ENGRAVE_STAGE_NAMES[i - 1]}</span><b>${bonusText(l.k, l.v)}</b><small class="dim">(범위 안 ${pct}%)</small><button data-eng="${i}" ${can(i) ? '' : 'disabled'}>다시 굴리기</button></div><div class="eng-line"><small class="dim">${costTxt(i)}</small></div>`;
       } else if (i === lines.length + 1) {
         rows += `<div class="eng-line"><span class="stage">${ENGRAVE_STAGE_NAMES[i - 1]}</span><button class="primary" data-eng="${i}" ${can(i) ? '' : 'disabled'}>${ENGRAVE_STAGE_NAMES[i - 1]} 각인 새기기</button></div><div class="eng-line"><small class="dim">${costTxt(i)}</small></div>`;
-      } else rows += `<div class="eng-line empty"><span class="stage">${ENGRAVE_STAGE_NAMES[i - 1]}</span><small>앞 단계를 먼저 새기세요</small></div>`;
+      } else rows += `<div class="eng-line empty"><span class="stage">${ENGRAVE_STAGE_NAMES[i - 1]}</span><small>🔒</small></div>`;
     }
-    return `<h3>${SPK('anvil', '⚒')} 각인 <small>새길 때마다 옵션이 무작위 (공격력·체력·방어·치명타·공속·재사용·골드·이동·궁극기·MP·경험치)</small></h3>
-      <p class="hint">단계가 높을수록 값이 크고(1단 ×1 → 5단 ×4) 윗 단계 판이 필요합니다. 원하는 옵션이 나올 때까지 다시 굴릴 수 있습니다.</p>${rows}`;
+    return `<h3>${SPK('anvil', '⚒')} 각인</h3>${rows}`;
   }
 
   // ---------------- 교관: 스킬 배우기·강화 ----------------
@@ -2029,7 +2036,7 @@ export class Screens {
         const itemsTxt = cost ? ' · ' + Object.entries(cost.items).map(([id, n]) => `<span class="${p.count(id) >= n ? '' : 'bad'}">${inlineGem(id)}${ITEMS[id].name} ${p.count(id)}/${n}</span>`).join(' · ') : '';
         const req = cost ? `필요 레벨 ${cost.level}${c.level < cost.level ? ' <span class="bad">(부족)</span>' : ''} · <span class="${p.data.gold >= cost.gold ? '' : 'bad'}">${cost.gold} G</span>${itemsTxt}` : '';
         const next = cost ? ` → Lv.${lv + 1}: 위력 ${Math.round(ultPower(lv + 1) * 100)}% · ${ultCooldown(lv + 1)}초` : '';
-        return `<li class="${got ? '' : 'locked'}"><img class="gem ico" src="${skillIconUrl(p.data.currentClass, 6 + i)}" alt=""><div><b>${u.name} ${got ? `<span class="ok">Lv.${lv}</span>` : `<span class="dim">(${u.stone}-10 수호자 처치 시 획득)</span>`}</b>
+        return `<li class="${got ? '' : 'locked'}"><img class="gem ico" src="${skillIconUrl(p.data.currentClass, 6 + i)}" alt=""><div><b>${u.name} ${got ? `<span class="ok">Lv.${lv}</span>` : `<span class="dim">(${u.stone}-10 수호자 · Lv.${u.level})</span>`}</b>
           <small>${u.description} · 위력 ${Math.round(ultPower(lv) * 100)}% · ${ultCooldown(lv)}초${next}</small>
           <small class="dim">${req}</small></div>
           <button data-ult="${i}" ${ok ? '' : 'disabled'}>${!got ? '잠김' : cost ? '강화' : '최대'}</button></li>`;
@@ -2041,7 +2048,7 @@ export class Screens {
          <button class="close">${ICONS.close}</button>
          <h2>교관 카엘의 훈련장 <small>${cls.name} · <span class="gold">${p.data.gold.toLocaleString()} G</span></small></h2>
          ${message ? `<div class="notice">${message}</div>` : ''}
-         <p class="hint">스킬은 직업마다 따로 배웁니다. 강화할 때마다 공격 스킬은 위력 +15%, 방어·보조 스킬은 지속 시간이 늘고, 재사용 대기 -6% (최대 Lv.${MAX_SKILL_LEVEL}). 상위 스킬은 판·마력 금속이 필요합니다. 배운 스킬은 캐릭터 → 스킬에서 퀵슬롯에 놓으세요.</p>
+         
          <ul class="list scroll">${rows}
            <li class="sub-head"><div><b>궁극기 강화</b><small class="dim">${inlineGem('dim_shard')}차원 파편은 5단계 이상 파수꾼·수호자와 차원의 끝에서 모은 차원 가루를 차원집의 차원 응축기로 압축해 만듭니다. 레벨마다 위력 +25%, 재사용 대기 -5초 (최대 Lv.${MAX_ULT_LEVEL}).</small></div></li>
            ${ultRows}</ul>
@@ -2069,7 +2076,6 @@ export class Screens {
       `<div class="panel wide">
          <button class="close">${ICONS.close}</button>
          <h2>직업의 전당</h2>
-         <p class="hint">레벨·스탯·장비는 직업마다 따로, 차원집과 창고는 모두 함께 씁니다.</p>
          <div class="class-grid">${cards}</div>
        </div>`,
       onClose,
@@ -2086,7 +2092,7 @@ export class Screens {
     const speed = b.type === 'generator' ? `전력 ${generatorPower(lv)}` : b.type === 'warehouse' ? `${warehouseSlots(lv)}칸` : `속도 ×${levelSpeed(lv).toFixed(2)} · ${TOOL_TIER_NAMES[lv - 1]} 단계 재료까지`;
     let html = `<div class="level-box"><b>Lv.${lv}</b> <small>${speed}</small>`;
     if (next > MAX_BUILDING_LEVEL) html += ' <small class="ok">최고 레벨</small>';
-    else if (!p.flag(`bp_${b.type}_lv${next}`)) html += `<small class="dim">Lv.${next}: 세라에게서 강화 도면(Lv.${next})을 사야 합니다</small>`;
+    else if (!p.flag(`bp_${b.type}_lv${next}`)) html += `<small class="dim">Lv.${next} 강화 도면 필요 (세라)</small>`;
     else {
       const cost = buildingUpgradeCost(b.type, next);
       const ok = p.hasAll(cost);
@@ -2130,8 +2136,6 @@ export class Screens {
          <button class="close">${ICONS.close}</button>
          <h2>마력 발전기 <button class="tool-sm rot" data-rotate>↻ 방향 돌리기</button></h2>
          ${this.levelBlock(b, p)}
-         <p class="hint">넣어 둔 정수 중 <b>좋은 것부터</b> 탑니다. 좋은 정수일수록 오래 타고, 타는 동안 이 발전기에 이어진 기계가 더 빨리 만듭니다.<br>
-           연료는 <b>돌아가는 기계가 쓰는 전력만큼</b> 줄어듭니다 (기계가 많이 돌수록 빨리 닳고, 쉬는 기계는 전력을 쓰지 않음). 수요가 공급보다 크면 기계들이 그만큼 느려집니다. 발전기 레벨을 올리면 공급 전력이 +15씩 늘어납니다.</p>
          <p>지금 타는 연료: <b>${b.fuel && b.fuel > 0 ? `${ITEMS[b.fuelId ?? 'essence_low'].name} ${Math.ceil(b.fuel)}초 분량` : '없음'}</b> · 생산 속도 <b>×${(net?.boost ?? 1).toFixed(2)}</b><br>
            전력망 공급 ${net?.supply ?? 0} / 수요 ${net?.demand ?? 0} · 연료 소모 ${net && net.supply > 0 ? `<b>${Math.round(Math.min(1, net.demand / net.supply) * 100)}%</b> 속도` : '멈춤'}</p>
          <ul class="list scroll">${rows}</ul>
@@ -2257,7 +2261,7 @@ export class Screens {
             <li>${itemGem(mid)}<div><b>${ITEMS[mid].name} <small class="dim">보유 ${p.count(mid)}</small></b><small>${TOOL_TIER_NAMES[t - 1]} 장비·도구 +6~+10 강화</small><small>${costHtml(m)}</small></div>${btn(`data-item="${mid}:${t}:mplate"`, m)}</li>`;
         })
         .join('');
-      body = `<p class="hint">판 = 주괴 2 + 같은 단계 판자 2 (+1~+5 강화) · 마력판 = 마력 금속 2 + 같은 단계 판자 2 (+6~+10 강화). 완성품은 앞쪽 레일로 나갑니다.</p><ul class="list scroll">${rows}</ul>`;
+      body = `<ul class="list scroll">${rows}</ul>`;
     } else if (tab === 'assemble') {
       const rows = recipesFor('workbench')
         .map((r) => {
@@ -2266,7 +2270,7 @@ export class Screens {
           return `<li class="${locked ? 'locked' : ''}">${itemGem(r.output)}<div><b>${ITEMS[r.output].name}${r.count > 1 ? ` ×${r.count}` : ''} <small class="dim">보유 ${p.count(r.output)}</small>${locked ? ` <small class="dim">(Lv.${r.tier} 필요)</small>` : ''}</b><small>${ITEMS[r.output].description}</small><small>${costHtml(c)}</small></div>${locked ? '' : btn(`data-item="${r.output}:${r.tier}:recipe"`, c)}</li>`;
         })
         .join('');
-      body = `<p class="hint">여러 재료를 조립해 만듭니다. 완성품은 앞쪽 레일로 나갑니다.</p><ul class="list scroll">${rows}</ul>`;
+      body = `<ul class="list scroll">${rows}</ul>`;
     } else if (tab === 'tools') {
       body = (['pickaxe', 'axe'] as ToolKind[])
         .flatMap((k) => {
@@ -2280,7 +2284,7 @@ export class Screens {
             });
         })
         .join('');
-      body = `<p class="hint">지금: ${toolName('pickaxe', p.data.tools.pickaxe)} · ${toolName('axe', p.data.tools.axe)}. 완성되면 지금 도구와 바뀝니다 (강화 단계는 초기화).</p><ul class="list scroll">${body || '<li class="empty">만들 수 있는 더 좋은 도구가 없습니다. 제작대 레벨을 올리세요.</li>'}</ul>`;
+      body = `<p class="hint">지금: ${toolName('pickaxe', p.data.tools.pickaxe)} · ${toolName('axe', p.data.tools.axe)}</p><ul class="list scroll">${body || '<li class="empty">만들 수 있는 더 좋은 도구가 없습니다. 제작대 레벨을 올리세요.</li>'}</ul>`;
     } else if (tab === 'equip') {
       const rows: string[] = [];
       for (let t = lv; t >= 1; t--)
@@ -2290,7 +2294,7 @@ export class Screens {
           const mc = equipManaCraftCost(slot, t);
           rows.push(`<li>${equipGem(e)}<div><b>${equipName(e)}</b><small>${equipLine(e)}</small><small>일반: ${costHtml(c)}</small><small class="mana-line">${SPK('sparkle', '✨')} 마력 제작 (고급 이상): ${costHtml(mc)}</small></div>${btn(`data-eqc="${slot}:${t}"`, c)}<button class="mana-btn" data-eqm="${slot}:${t}" ${can(mc) ? '' : 'disabled'}>${SPK('sparkle', '✨')} 마력</button></li>`);
         }
-      body = `<p class="hint">일반 제작은 일반 등급, <b>${SPK('sparkle', '✨')} 마력 제작</b>(판자 대신 마력 판자)은 고급 이상 (희귀 30% · 영웅 9% · 유니크 2.5% · 전설 0.5%). 차원 등급은 제작할 수 없고 보스에게서만 나옵니다. 완성된 장비는 창고로 들어갑니다. 무기는 지금 직업(${CLASSES[p.data.currentClass].name}) 전용입니다.</p><ul class="list scroll">${rows.join('')}</ul>`;
+      body = `<ul class="list scroll">${rows.join('')}</ul>`;
     } else {
       const c = workbenchUpgradeCost(lv);
       body = c
@@ -2461,7 +2465,7 @@ export class Screens {
       const list = RECIPES.filter((r) => r.machine === b.type)
         .map((r) => `<li class="${r.tier > (b.level ?? 1) ? 'locked' : ''}">${itemGem(r.output)}<div><b>${ITEMS[r.output].name}${r.count > 1 ? ` ×${r.count}` : ''}${r.tier > (b.level ?? 1) ? ` <small class="dim">(Lv.${r.tier} 필요)</small>` : ''}</b><small>${Object.entries(r.inputs).map(([id, n]) => `${ITEMS[id].name}×${n}`).join(' + ')} · ${r.time}초</small></div></li>`)
         .join('');
-      body += `<h3>레시피 <small>들어오는 재료에 따라 자동</small></h3><ul class="list">${list}</ul>`;
+      body += `<h3>레시피</h3><ul class="list">${list}</ul>`;
     }
     const net = f.networkInfo(b);
     const statusText = { working: '가동 중', 'no-power': '전력 부족 (발전기 연료 확인)', idle: '재료 대기', blocked: '출구 막힘', 'no-recipe': '설계 선택 필요' }[f.status(b)];
