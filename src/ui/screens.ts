@@ -29,7 +29,7 @@ import { BESTIARY, BESTIARY_BY_ID, COLLECTION_MILESTONES, isStageMaster, killMil
 import { BOSS_SPECIES, DEBUFF_INFO, TRAIT_TEXT, type Faction } from '../data/species';
 import { endLock, AFFIXES, ALLOY, ALLOY2, RIFT_ALLOY2_FROM, riftEntry, rushEntry, formatClock, riftAffixes, riftMult, riftReward, RIFT_ALLOY, RIFT_TIME, rushReward, RUSH_DAILY, RUSH_DIFFS, RUSH_EXTRA_ALLOY, SHARD, DUST, DUST_PER_SHARD, END_NAMES, type EndContent, readTrialCode, trialCode, trialGrade, TRIAL_GRADES, TRIAL_HP, trialScoreText, trialSpec, TRIAL_TIME, weekKey, towerBoss, towerDaily, towerFirstClear, towerMult, rushFights, type RushDiff } from '../data/endgame';
 import { BONUS_NAMES, bonusText, TRANSCEND_STATS, transcendCost, transcendExp, engraveCost, engraveRange, ENGRAVE_STAGES, ENGRAVE_STAGE_NAMES, rollEngrave, TITLES, type BonusKey } from '../data/bonus';
-import { Rng } from '../core/rng';
+import { mathRng, Rng } from '../core/rng';
 import { TRIAL_RAGE, type Archetype } from '../data/monsters';
 
 const FACTION_NAME: Record<Faction, string> = { beast: '야수', undead: '언데드', orc: '오크족', elf: '다크엘프', construct: '구조물', elemental: '정령', void: '공허', demon: '악마' };
@@ -445,7 +445,7 @@ export class Screens {
           <span>이번 주 <b>${tr?.best ? trialScoreText(tr.best) : '기록 없음'}</b> ${g >= 0 ? `<b style="color:${hex(TRIAL_GRADES[g].color)}">${TRIAL_GRADES[g].name}</b>` : ''}</span></div>
         <div class="trial-boss"><img src="${monsterIconUrl(tb, spec.tier, true)}" alt=""><div><b>${tb.name}</b><small class="dim">${THEMES[spec.tier - 1].name} · 체력 7-10 수호자의 ${TRIAL_HP}배 · ${formatClock(TRIAL_TIME)}</small></div></div>
         <div class="menu row"><button class="primary" data-trial>도전하기</button></div>
-        <h3 class="sub">이번 주 순위</h3>
+        <h3 class="sub">이번 주 순위 <button class="chip rank-refresh" data-rrefresh>🔄 새로고침</button></h3>
         <div class="rank-me"><span>닉네임 <b>${esc(p.data.nickname ?? '')}</b></span><button class="rank-up" data-rup ${tr?.best ? '' : 'disabled'}>내 기록 올리기</button><span data-rup-out class="dim"></span></div>
         <ol class="rank-board" data-tboard><li class="dim">순위를 불러오는 중…</li></ol>
         <h3 class="sub">발밑 오라 ${worn >= 0 ? '<button class="chip" data-taura="-1">끄기</button>' : ''}</h3>
@@ -536,6 +536,10 @@ export class Screens {
       });
     };
     loadBoard();
+    this.on(s, '[data-rrefresh]', () => {
+      if (board) board.innerHTML = '<li class="dim">순위를 불러오는 중…</li>';
+      loadBoard();
+    });
     this.on(s, '[data-rup]', (b) => {
       const name = p.data.nickname ?? '';
       const upOut = s.querySelector<HTMLElement>('[data-rup-out]');
@@ -2189,7 +2193,7 @@ export class Screens {
       if (p.data.gold < cost.gold || !p.hasAll(cost.items)) return;
       p.data.gold -= cost.gold;
       p.takeAll(cost.items);
-      const line = rollEngrave(stage, new Rng((Math.random() * 2 ** 32) >>> 0));
+      const line = rollEngrave(stage, mathRng);
       const old = lines[stage - 1];
       lines[stage - 1] = line;
       onChange();

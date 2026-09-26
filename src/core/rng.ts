@@ -43,3 +43,11 @@ export class Rng {
 export function randomSeed(): number {
   return Math.floor(Math.random() * 0xffffffff) >>> 0;
 }
+
+/** 브라우저 난수(Math.random)를 그대로 쓰는 생성기: 시드가 필요 없는 굴리기(각인 등)에 */
+class MathRng extends Rng {
+  next(): number {
+    return Math.random();
+  }
+}
+export const mathRng: Rng = new MathRng(0);

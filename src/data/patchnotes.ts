@@ -7,6 +7,14 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '8.9.1',
+    date: '2026-09-26',
+    items: [
+      '각인 굴리기를 브라우저 난수로 바로 굴리도록 바꿨다 (5단에서 같은 옵션만 나온다는 제보 대응 · 1~5단 모두 11가지 옵션이 고르게 나오는지 검사 추가)',
+      '주간 시련 순위: [🔄 새로고침] 버튼. 불러오기·올리기가 가끔 HTTP 404로 실패하면 자동으로 몇 번 다시 시도한다',
+    ],
+  },
+  {
     version: '8.9',
     date: '2026-09-26',
     items: [

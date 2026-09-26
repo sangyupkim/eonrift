@@ -60,7 +60,20 @@ export interface BoardRow {
 }
 
 /** 기록 올리기. 이번 주 내 기록보다 좋을 때만 시트가 바꾼다 */
-export async function submitTrial(e: TrialEntry): Promise<{ ok: boolean; reason?: string }> {
+export async function submitTrial(e: TrialEntry, tries = 3): Promise<{ ok: boolean; reason?: string }> {
+  // 같은 기록을 다시 보내도 시트는 더 좋은 기록만 남기므로 다시 보내도 안전하다
+  let last: { ok: boolean; reason?: string } = { ok: false };
+  for (let i = 0; i < tries; i++) {
+    last = await submitTrialOnce(e);
+    // 다시 보냈는데 '너무 자주'라면 앞의 요청이 이미 들어간 것
+    if (i > 0 && last.reason === '잠시 뒤에 다시 올려 주세요') return { ok: true };
+    if (last.ok || !/^HTTP [45]\d\d$|연결 실패/.test(last.reason ?? '')) return last;
+    await new Promise((res) => setTimeout(res, 800 * (i + 1)));
+  }
+  return last;
+}
+
+async function submitTrialOnce(e: TrialEntry): Promise<{ ok: boolean; reason?: string }> {
   const player = deviceId();
   const body = JSON.stringify({ type: 'trial', ...e, player, check: hashStr(`${e.week}|${player}|${e.score}|${e.seconds}`) % 1000003 });
   try {
@@ -76,7 +89,20 @@ export async function submitTrial(e: TrialEntry): Promise<{ ok: boolean; reason?
 }
 
 /** 이번 주 순위 (위에서부터 최대 50명) */
-export async function fetchBoard(week: string): Promise<{ ok: true; rows: BoardRow[] } | { ok: false; reason: string }> {
+export async function fetchBoard(week: string, tries = 3): Promise<{ ok: true; rows: BoardRow[] } | { ok: false; reason: string }> {
+  // 앱스 스크립트가 가끔 404·5xx를 돌려준다: 잠깐 쉬고 몇 번 다시 묻는다
+  let last: { ok: false; reason: string } = { ok: false, reason: '알 수 없음' };
+  for (let i = 0; i < tries; i++) {
+    const r = await fetchBoardOnce(week);
+    if (r.ok) return r;
+    last = r;
+    if (!/^HTTP [45]\d\d$|연결 실패/.test(r.reason)) break;
+    await new Promise((res) => setTimeout(res, 700 * (i + 1)));
+  }
+  return last;
+}
+
+async function fetchBoardOnce(week: string): Promise<{ ok: true; rows: BoardRow[] } | { ok: false; reason: string }> {
   try {
     const res = await fetch(`${FEEDBACK_URL}?action=trial&week=${encodeURIComponent(week)}&player=${encodeURIComponent(deviceId())}`, { redirect: 'follow' });
     const j = (await res.json().catch(() => null)) as { ok?: boolean; rows?: BoardRow[]; error?: string } | null;
