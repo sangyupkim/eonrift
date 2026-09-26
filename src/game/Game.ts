@@ -6,7 +6,7 @@ import { BOSS_RESPAWN_MS, BOSS_TIME_LIMIT, FARM_COOLDOWN_MS, FARM_NAMES, goldSca
 import { DEBUFF_INFO, type DebuffId, type DebuffSpec } from '../data/species';
 import { newTool, TOOL_KIND_NAMES, TOOL_TIER_NAMES, toolBonusChance, toolName, toolSpeed, toolWear, type ToolKind } from '../data/tools';
 import { MeshLambertMaterial, OrthographicCamera, PCFShadowMap, Plane, Raycaster, Vector2, Vector3, WebGLRenderer } from 'three';
-import { BAG_SLOTS, CAMERA_OFFSET, GAME_VERSION, PLAYER, SCREEN_UP, TILE, VIEW_HEIGHT } from '../config';
+import { CAMERA_OFFSET, GAME_VERSION, PLAYER, SCREEN_UP, TILE, VIEW_HEIGHT } from '../config';
 import { Audio } from '../core/audio';
 import { Input } from '../core/input';
 import { Rng, randomSeed } from '../core/rng';
@@ -2932,7 +2932,7 @@ export class Game {
       this.hud.setUlt({ name: u.name, icon: skillIconUrl(pl.cls.id, 6 + ui), ratio: this.combat.ultCooldown / this.combat.ultCooldownMax, secs: this.combat.ultCooldown, ready: pl.mp >= u.mp });
     }
     const inv = this.run ? this.run.bag : this.progress.invBag;
-    this.hud.setBagCount(inv.used, BAG_SLOTS);
+    this.hud.setBagCount(inv.used, inv.slots.length);
   }
 
   /** 이름표와 생산 아이콘 */
