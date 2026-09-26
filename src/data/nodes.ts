@@ -47,6 +47,8 @@ const defs: NodeDef[] = [
   { id: 'dimension_cluster', tier: 7, name: '차원 결정', style: 'crystal', itemId: 'dimension_crystal', hp: 6, bonus: 2, radius: 0.65, baseColor: 0x2a2a48, accentColor: 0x6ff4ff },
   // 보물 상자: 부수면 그 단계의 자원이 여러 개 나온다 (itemId는 비워 두고 테마 자원에서 고른다)
   { id: 'chest', tier: 1, name: '보물 상자', style: 'chest', itemId: '', hp: 1, bonus: 5, radius: 0.6, baseColor: 0x7a4a24, accentColor: 0xe8c14a },
+  // 황금 보고의 금화 더미: 세 번 치면 골드가 쏟아진다 (아이템은 없다)
+  { id: 'gold_pile', tier: 1, name: '금화 더미', style: 'chest', itemId: '', hp: 3, bonus: 0, radius: 0.6, baseColor: 0xc9962a, accentColor: 0xffe27a },
 ];
 
 /**

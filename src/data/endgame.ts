@@ -158,7 +158,8 @@ export const RIFT_NODE_MULT = 0.3;
 
 /** 균열 클리어 보상. 시간 안에 깨면 다음 단계가 열린다 */
 export function riftReward(level: number, inTime: boolean): { gold: number; dust: number } {
-  const full = { gold: 3000 + level * 1500, dust: 8 + level * 3 };
+  // 골드: 10단계 한 판 ≈ 12만 G, 20단계 ≈ 28만 G (입장권 노동에 맞게 크게)
+  const full = { gold: Math.round((15000 + level * 8000) * (1 + level * 0.03)), dust: 8 + level * 3 };
   return inTime ? full : { gold: Math.round(full.gold / 2), dust: Math.floor(full.dust / 2) };
 }
 

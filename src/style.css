@@ -3313,3 +3313,6 @@ h3.sub { margin: 10px 0 6px; font-size: 14px; display: flex; align-items: center
 button.awk-opt { cursor: pointer; }
 .awk-opt.on { background: rgba(255, 210, 90, 0.2); border-color: #ffd23a; }
 .awk-opt b, .awk-opt small { white-space: normal; overflow-wrap: anywhere; }
+.farm-row { display: grid !important; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
+.farm-btn.gold { border-color: rgba(255, 210, 58, 0.7); background: linear-gradient(135deg, rgba(255, 210, 58, 0.16), rgba(255, 255, 255, 0.03)); }
+.farm-btn.gold b { color: #ffd87a; }

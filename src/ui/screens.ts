@@ -31,7 +31,7 @@ import { BOSS_SPECIES, DEBUFF_INFO, TRAIT_TEXT, type Faction } from '../data/spe
 import { endLock, AFFIXES, ALLOY, ALLOY2, RIFT_ALLOY2_FROM, riftEntry, rushEntry, formatClock, riftAffixes, riftMult, riftReward, RIFT_ALLOY, RIFT_TIME, rushReward, RUSH_DAILY, RUSH_DIFFS, RUSH_EXTRA_ALLOY, SHARD, DUST, DUST_PER_SHARD, END_NAMES, type EndContent, readTrialCode, trialCode, trialGrade, TRIAL_GRADES, TRIAL_HP, trialScoreText, trialSpec, TRIAL_TIME, weekKey, towerBoss, towerDaily, towerFirstClear, towerMult, rushFights, type RushDiff } from '../data/endgame';
 import { BONUS_NAMES, bonusText, TRANSCEND_STATS, transcendCost, transcendExp, engraveCost, engraveRange, ENGRAVE_STAGES, ENGRAVE_STAGE_NAMES, rollEngrave, TITLES, type BonusKey } from '../data/bonus';
 import { mathRng, Rng } from '../core/rng';
-import { TRIAL_RAGE, type Archetype } from '../data/monsters';
+import { TRIAL_RAGE, vaultPileGold, type Archetype } from '../data/monsters';
 
 const FACTION_NAME: Record<Faction, string> = { beast: '야수', undead: '언데드', orc: '오크족', elf: '다크엘프', construct: '구조물', elemental: '정령', void: '공허', demon: '악마' };
 const ARCH_NAME: Record<Archetype, string> = {
@@ -319,7 +319,7 @@ export class Screens {
   }
 
   // ---------------- 차원문 광장: 단계 → 방 선택 ----------------
-  stageSelect(p: Progress, tier: number, onPick: (tier: number, stage: number) => void, onClose: () => void, onFarm?: (tier: number, kind: 'wood' | 'ore') => void, onEnd?: () => void): void {
+  stageSelect(p: Progress, tier: number, onPick: (tier: number, stage: number) => void, onClose: () => void, onFarm?: (tier: number, kind: 'wood' | 'ore' | 'gold') => void, onEnd?: () => void): void {
     const maxTier = p.maxTier;
     const tiers = THEMES.map((t) => {
       const locked = t.tier > maxTier;
@@ -339,16 +339,16 @@ export class Screens {
           <b>${tier}-${st}</b><small>${sub}</small></button>`;
     }).join('');
     // 채집 특화 맵: 종류마다 30분에 한 번 (어느 단계든 한 곳)
-    const farmBtn = (kind: 'wood' | 'ore') => {
+    const farmBtn = (kind: 'wood' | 'ore' | 'gold') => {
       const wait = p.farmWait(kind);
-      const hasTool = p.flag(kind === 'wood' ? 'tool_axe' : 'tool_pickaxe') > 0;
-      const icon = kind === 'wood' ? itemGem(WOOD_TIERS[tier - 1]) : itemGem(ORE_TIERS[tier - 1]);
+      const hasTool = kind === 'gold' || p.flag(kind === 'wood' ? 'tool_axe' : 'tool_pickaxe') > 0;
+      const icon = kind === 'wood' ? itemGem(WOOD_TIERS[tier - 1]) : kind === 'gold' ? itemGem('gold_ore') : itemGem(ORE_TIERS[tier - 1]);
       const unlocked = p.farmUnlocked(tier);
       const sub = !unlocked ? `${tier}-5 파수꾼 처치 후 열림` : !hasTool ? (kind === 'wood' ? '도끼 필요' : '곡괭이 필요') : wait > 0 ? `${formatWait(wait)} 뒤` : '입장 가능';
       const off = !unlocked || wait > 0 || !hasTool;
-      return `<button class="farm-btn ${off ? 'waiting' : ''}" data-farm="${kind}" ${off ? 'disabled' : ''}>${icon}<span><b>${tier}단계 ${kind === 'wood' ? '벌목지' : '광맥지'}</b><small>${sub}</small></span></button>`;
+      return `<button class="farm-btn ${off ? 'waiting' : ''} ${kind === 'gold' ? 'gold' : ''}" data-farm="${kind}" ${off ? 'disabled' : ''}>${icon}<span><b>${tier}단계 ${kind === 'wood' ? '벌목지' : kind === 'gold' ? '황금 보고' : '광맥지'}</b><small>${sub}${kind === 'gold' && !off ? ` · 약 ${Math.round((vaultPileGold(tier, 0.5) * 40) / 1000)}k G` : ''}</small></span></button>`;
     };
-    const farmRow = onFarm ? `<h3>채집 특화 맵</h3><div class="farm-row">${farmBtn('wood')}${farmBtn('ore')}</div>` : '';
+    const farmRow = onFarm ? `<h3>특화 맵 <small class="dim">종류마다 30분에 한 번</small></h3><div class="farm-row">${farmBtn('wood')}${farmBtn('ore')}${farmBtn('gold')}</div>` : '';
     const s = this.open(
       'select',
       `<div class="panel wide">
@@ -364,7 +364,7 @@ export class Screens {
     this.on(s, '.tier-tab:not(.locked):not(.end-tab)', (b) => this.stageSelect(p, Number(b.dataset.tier), onPick, onClose, onFarm, onEnd));
     this.on(s, '[data-end]', () => onEnd?.());
     this.on(s, '[data-stage]', (b) => onPick(tier, Number(b.dataset.stage)));
-    this.on(s, '[data-farm]', (b) => onFarm?.(tier, b.dataset.farm as 'wood' | 'ore'));
+    this.on(s, '[data-farm]', (b) => onFarm?.(tier, b.dataset.farm as 'wood' | 'ore' | 'gold'));
   }
 
   // ---------------- 차원의 끝 (엔드 콘텐츠) ----------------

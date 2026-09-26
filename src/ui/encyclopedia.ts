@@ -20,7 +20,7 @@ import { enhanceCost, EQUIP_MAX_DUR, EQUIP_SLOTS, GRADES, repairMaterial, SERIES
 import { PRODUCER_CAP, PRODUCER_LIMIT, PRODUCER_MAX_LEVEL, producerTime } from '../data/factory';
 import { BUILD_ORDER, BUILDINGS, ESSENCE_BOOST, ESSENCE_BURN, FACTORY_SIZES, MAX_BUILDING_LEVEL, OFFLINE_CAP_HOURS, RECIPES, generatorPower, type BuildingType } from '../data/factory';
 import { ESSENCE_TIERS, ITEMS, ORE_TIERS, TIER_MANA_PLATE, TIER_PLANK, TIER_PLATE, WOOD_TIERS } from '../data/items';
-import { BOSS_RESPAWN_MS, BOSS_TIME_LIMIT, FARM_COOLDOWN_MS } from '../data/monsters';
+import { BOSS_RESPAWN_MS, BOSS_TIME_LIMIT, FARM_COOLDOWN_MS, vaultPileGold } from '../data/monsters';
 import { BOSS_SPECIES, MIDBOSS_SPECIES } from '../data/species';
 import { THEMES } from '../data/themes';
 import { TIER_INGOT, TOOL_TIER_NAMES } from '../data/tools';
@@ -267,7 +267,7 @@ function stages(): string {
     <li><b>재등장</b> — 쓰러뜨린 파수꾼은 ${min(BOSS_RESPAWN_MS.midboss)}분, 수호자는 ${min(BOSS_RESPAWN_MS.boss) / 60}시간 뒤 다시 나온다 (그동안은 정예가 지킨다).</li>
   </ul>
   <h3>그 밖의 장소</h3>
-  ${card('채집 특화 맵', `<p>차원문에서 <b>벌목지</b>·<b>광맥지</b>를 고르면 나무 또는 광맥만 가득한 맵에 들어간다. 종류마다 ${min(FARM_COOLDOWN_MS)}분에 한 번.</p>`, img(itemIconUrl('wood')))}
+  ${card('특화 맵', `<p>차원문에서 <b>벌목지</b>·<b>광맥지</b>·<b>황금 보고</b>를 고른다. 종류마다 ${min(FARM_COOLDOWN_MS)}분에 한 번 (그 단계 5번 방 파수꾼을 쓰러뜨리면 열림).</p><p><b>황금 보고</b>: 금화 더미를 세 번 치면 골드가 쏟아진다. 더미를 지키는 몬스터가 많고, 이들은 골드를 두 배로 떨어뜨린다. 한 판 약 ${Math.round((vaultPileGold(1, 0.5) * 40) / 1000)}k(1단계) · ${Math.round((vaultPileGold(4, 0.5) * 40) / 1000)}k(4단계) · ${Math.round((vaultPileGold(7, 0.5) * 40) / 1000)}k(7단계) G.</p>`, img(itemIconUrl('wood')))}
   ${card('보물 상자', '<p>던전 곳곳의 상자를 열면 재료·장비가 나온다. 가끔 몬스터가 습격하는데, 막아 내면 더 좋은 보상을 준다.</p>', img(itemIconUrl('gold_plate')))}`;
 }
 

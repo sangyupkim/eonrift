@@ -1,6 +1,7 @@
 import { CLASSES, CLASS_ORDER, ULTIMATES, expToNext, MAX_LEVEL, POINTS_PER_LEVEL, STAT_KEYS, type BaseStats, type ClassId, type StatKey } from '../data/classes';
 import { durability, equipStats, seriesBonus, withSpecials, type Equip, type EquipSlot } from '../data/equipment';
 import type { AwakenBranch } from '../data/awaken';
+import type { FarmKind } from '../dungeon/generator';
 import { specialBonus, specialStats, sumSpecials, type SpecialTotals } from '../data/special';
 import { newTool, type ToolKind, type ToolState } from '../data/tools';
 import { FACTORY_SIZES, RECIPES, RECIPE_RENAMES } from '../data/factory';
@@ -48,7 +49,7 @@ export interface RunCheckpoint {
   start: [string, number][];
   startEquips: string[];
   pouch: string[];
-  farm?: 'wood' | 'ore';
+  farm?: FarmKind;
   bossKilled?: boolean;
 }
 
@@ -92,7 +93,7 @@ export interface SaveData {
   /** 보스가 다시 나타나는 시각 (키: "단계-방", 값: ms) */
   bossReadyAt?: Record<string, number>;
   /** 채집 특화 맵에 다시 들어갈 수 있는 시각 */
-  farmReadyAt?: { wood?: number; ore?: number };
+  farmReadyAt?: { wood?: number; ore?: number; gold?: number };
   /** 몬스터 도감: 종족별 처치 수 */
   bestiary?: Record<string, number>;
   /** 도감: 종족별로 받은 처치 보상 수 */
@@ -799,11 +800,11 @@ export class Progress {
   }
 
   /** 채집 특화 맵에 다시 들어갈 수 있을 때까지 남은 시간(ms) */
-  farmWait(kind: 'wood' | 'ore', now = Date.now()): number {
+  farmWait(kind: FarmKind, now = Date.now()): number {
     return Math.max(0, (this.data.farmReadyAt?.[kind] ?? 0) - now);
   }
 
-  farmEntered(kind: 'wood' | 'ore', cooldownMs: number, now = Date.now()): void {
+  farmEntered(kind: FarmKind, cooldownMs: number, now = Date.now()): void {
     (this.data.farmReadyAt ??= {})[kind] = now + cooldownMs;
   }
 

@@ -2,7 +2,7 @@ import { bustUrl, itemIconUrl, skillIconUrl } from '../ui/itemIcons';
 import { decodeSave, encodeSave } from './saveCode';
 import { makeTestSave } from './testSave';
 import { gearLook } from '../models/items';
-import { BOSS_RESPAWN_MS, BOSS_TIME_LIMIT, FARM_COOLDOWN_MS, FARM_NAMES, goldScale, lowStageExpMult, playerDefK } from '../data/monsters';
+import { BOSS_RESPAWN_MS, BOSS_TIME_LIMIT, FARM_COOLDOWN_MS, FARM_NAMES, goldScale, lowStageExpMult, playerDefK, vaultPileGold } from '../data/monsters';
 import { BOSS_SPECIES, DEBUFF_INFO, type DebuffId, type DebuffSpec } from '../data/species';
 import { newTool, TOOL_KIND_NAMES, TOOL_TIER_NAMES, toolBonusChance, toolName, toolSpeed, toolWear, type ToolKind } from '../data/tools';
 import { MeshLambertMaterial, OrthographicCamera, PCFShadowMap, Plane, Raycaster, Vector2, Vector3, WebGLRenderer } from 'three';
@@ -633,7 +633,7 @@ export class Game {
     this.hud.setVisible(true);
     const note =
       wait > 0 ? ` — ${stage === 10 ? '수호자' : '파수꾼'}는 ${formatWait(wait)} 뒤 다시 나타납니다 (지금은 정예가 지킴)` : stage === 10 ? ' — 차원석을 지닌 수호자가 기다립니다' : stage === 5 ? ' — 파수꾼이 지키고 있습니다' : '';
-    if (farm) this.hud.toast(`${tier}단계 ${FARM_NAMES[farm]} — ${farm === 'wood' ? '나무' : '광맥'}가 가득합니다. 다음 입장은 30분 뒤`, 3500);
+    if (farm) this.hud.toast(`${tier}단계 ${FARM_NAMES[farm]} — ${farm === 'gold' ? '금화 더미를 부수면 골드가 쏟아집니다 (지키는 몬스터 주의)' : `${farm === 'wood' ? '나무' : '광맥'}가 가득합니다`}. 다음 입장은 30분 뒤`, 3500);
     else this.hud.toast(`${tier}-${stage} · ${dungeon.theme.name}${note}`, 3000);
     this.refreshHud();
     // 방에 들어올 때마다 체크포인트 저장
@@ -1919,7 +1919,9 @@ export class Game {
     this.gainExp(exp);
 
     const bossMult = m.kind === 'boss' ? 25 : m.kind === 'midboss' ? 10 : m.kind === 'elite' ? 4 : 1;
-    const gold = Math.max(1, Math.round((m.kind === 'normal' ? rng.range(0.6, 1.6) : rng.int(2, 5)) * (run.end ? tier * (1 + (run.stage - 1) * 0.15) : goldScale(tier, run.stage)) * bossMult * (1 + this.progress.bonus('gold'))));
+    // 몬스터 골드 (v9.2: +40%). 황금 보고를 지키는 몬스터는 두 배
+    const vault = run.farm === 'gold' ? 2 : 1;
+    const gold = Math.max(1, Math.round((m.kind === 'normal' ? rng.range(0.6, 1.6) : rng.int(2, 5)) * 1.4 * vault * (run.end ? tier * (1 + (run.stage - 1) * 0.15) : goldScale(tier, run.stage)) * bossMult * (1 + this.progress.bonus('gold'))));
     run.gold += gold;
     this.progress.data.gold += gold;
 
@@ -2220,10 +2222,20 @@ export class Game {
         this.gathering = null;
       }
     }
+    // 황금 보고의 금화 더미: 다 부수면 골드가 쏟아진다
+    if (n.def.id === 'gold_pile' && (n.dying > 0 || !n.alive)) {
+      const g = Math.round(vaultPileGold(this.run.tier, Math.random()) * (1 + this.progress.bonus('gold')));
+      this.run.gold += g;
+      this.progress.data.gold += g;
+      this.hud.floatText(s.x, s.y - line * 22, `+${g.toLocaleString()} G`, '#ffd23a', 'crit');
+      this.hud.log(`황금 보고 · <span style="color:#ffd23a">${g.toLocaleString()} G</span>`);
+      this.level.effects.sparks(n.x, 1, n.z, 0xffd23a, 16, { speed: 5, up: true });
+      this.audio.play('coin');
+    }
     this.shakeT = Math.max(this.shakeT, 0.08);
     this.audio.play('gather');
     // 보물 상자는 일정 확률로 '고급 상자': 상자를 지키던 몬스터 무리가 몰려온다. 모두 쓰러뜨리면 큰 보상
-    if (n.def.style === 'chest' && (n.dying > 0 || !n.alive) && !this.ambush && Math.random() < AMBUSH_CHANCE) {
+    if (n.def.id === 'chest' && (n.dying > 0 || !n.alive) && !this.ambush && Math.random() < AMBUSH_CHANCE) {
       const count = 10 + this.run.stage + this.run.tier * 2;
       const wave = this.level.spawnAmbush(n.x, n.z, count);
       this.ambush = { monsters: wave, tier: this.run.tier };
@@ -3059,9 +3071,9 @@ export class Game {
     };
     const chips: string[] = [];
     // 채집 특화 맵은 1-5 파수꾼을 깨야 열린다
-    for (const kind of p.farmUnlocked(1) ? (['wood', 'ore'] as const) : []) {
+    for (const kind of p.farmUnlocked(1) ? (['wood', 'ore', 'gold'] as const) : []) {
       const w = p.farmWait(kind);
-      chips.push(`${img(kind === 'wood' ? 'wood' : 'copper_ore')}${FARM_NAMES[kind]} ${w > 0 ? `<b>${formatWait(w)}</b>` : '<b class="ok">입장 가능</b>'}`);
+      chips.push(`${img(kind === 'wood' ? 'wood' : kind === 'gold' ? 'gold_ore' : 'copper_ore')}${FARM_NAMES[kind]} ${w > 0 ? `<b>${formatWait(w)}</b>` : '<b class="ok">입장 가능</b>'}`);
     }
     const bosses = Object.keys(p.data.bossReadyAt ?? {})
       .map((k) => {

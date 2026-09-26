@@ -97,7 +97,7 @@ export interface GenOptions {
   /** 무한의 탑 층 (generateTowerFloor로 만든다) */
   tower?: boolean;
 }
-export type FarmKind = 'wood' | 'ore';
+export type FarmKind = 'wood' | 'ore' | 'gold';
 
 export function generateDungeon(seed: number, tier: number, stage = 1, opts: GenOptions = {}): DungeonData {
   const rng = new Rng(seed);
@@ -301,7 +301,7 @@ function tryGenerate(rng: Rng, seed: number, tier: number, stage: number, opts: 
     exit: [0, 0],
   };
   if (farm) {
-    nodeCount.resource = [8, 11];
+    nodeCount.resource = farm === 'gold' ? [5, 7] : [8, 11];
     nodeCount.start = [2, 3];
     nodeCount.exit = [2, 4];
   }
@@ -312,7 +312,7 @@ function tryGenerate(rng: Rng, seed: number, tier: number, stage: number, opts: 
       const cell = pickInteriorCell(r, 1);
       if (!cell) break;
       // 채집 특화 맵: 이번 단계 위주(가끔 앞 단계)의 나무 또는 광맥만
-      const nodeId = farm ? `${farm === 'wood' ? 'tree' : 'ore'}_${resourceTier(tier, 10, rng.next())}` : pickResourceNode(tier, stage, theme.special, () => rng.next());
+      const nodeId = farm === 'gold' ? 'gold_pile' : farm ? `${farm === 'wood' ? 'tree' : 'ore'}_${resourceTier(tier, 10, rng.next())}` : pickResourceNode(tier, stage, theme.special, () => rng.next());
       nodes.push({ nodeId, x: cell.x + rng.range(-0.15, 0.15), y: cell.y + rng.range(-0.15, 0.15) });
     }
     if (r.type === 'treasure') {
@@ -325,7 +325,8 @@ function tryGenerate(rng: Rng, seed: number, tier: number, stage: number, opts: 
       // 깊은 방일수록 몬스터가 많다
       // 핵앤슬래시: 방마다 한 무리씩 몰려 있다
       const extra = Math.floor(stage / 3);
-      let count = farm ? rng.int(1, 3) : r.type === 'combat' ? rng.int(9, 12) + extra : rng.int(2, 4) + (stage > 5 ? 1 : 0);
+      // 황금 보고는 금화 더미를 지키는 몬스터가 더 많다
+      let count = farm === 'gold' ? rng.int(3, 5) : farm ? rng.int(1, 3) : r.type === 'combat' ? rng.int(9, 12) + extra : rng.int(2, 4) + (stage > 5 ? 1 : 0);
       // 전투 방 크기에 변화: 가끔 몬스터가 우글거리는 소굴, 가끔 조용한 방
       if (!farm && r.type === 'combat') {
         const roll = rng.next();
