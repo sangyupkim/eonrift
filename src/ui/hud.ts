@@ -110,6 +110,9 @@ export class Hud {
       this.setObjective(this.objectiveText);
     });
     status.appendChild(this.objectiveEl);
+    // 획득 로그 (퀘스트 알림판 아래)
+    this.logEl = el('div', 'loot-log');
+    status.appendChild(this.logEl);
     this.root.appendChild(status);
 
     // 보스 체력바
@@ -369,6 +372,28 @@ export class Hud {
   setBuffs(list: { text: string; bad?: boolean }[]): void {
     const html = list.map((t) => `<span class="${t.bad ? 'bad' : ''}">${t.text}</span>`).join('');
     if (this.buffEl.innerHTML !== html) this.buffEl.innerHTML = html;
+  }
+
+  private logEl!: HTMLDivElement;
+  private logLines: { html: string; at: number }[] = [];
+  private logTimer = 0;
+  /** 획득 로그 한 줄 (최근 5줄, 8초 뒤 흐려지며 사라진다) */
+  log(html: string): void {
+    this.logLines.push({ html, at: performance.now() });
+    if (this.logLines.length > 5) this.logLines.shift();
+    this.renderLog();
+    window.clearTimeout(this.logTimer);
+    this.logTimer = window.setTimeout(() => this.renderLog(), 1000);
+  }
+  private renderLog(): void {
+    const now = performance.now();
+    this.logLines = this.logLines.filter((l) => now - l.at < 9000);
+    this.logEl.innerHTML = this.logLines.map((l) => `<div class="${now - l.at > 7000 ? 'old' : ''}">${l.html}</div>`).join('');
+    if (this.logLines.length) this.logTimer = window.setTimeout(() => this.renderLog(), 1000);
+  }
+  clearLog(): void {
+    this.logLines = [];
+    this.logEl.innerHTML = '';
   }
 
   /** 퀘스트 알림판 접힘 (눌러서 접고 편다) */

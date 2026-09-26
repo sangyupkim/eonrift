@@ -3203,3 +3203,10 @@ h3.sub { margin: 10px 0 6px; font-size: 14px; display: flex; align-items: center
 .prod-pick:disabled { opacity: 0.4; }
 .prod-bar { height: 10px; border-radius: 6px; background: #0c0b1a; border: 1px solid var(--gold-line); overflow: hidden; box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.6); }
 .prod-bar i { display: block; height: 100%; background: linear-gradient(90deg, #5ee0ff, #b67cff); }
+/* 획득 로그 */
+.loot-log { grid-column: 1 / 3; max-width: min(340px, 44vw); display: flex; flex-direction: column; gap: 1px; margin-top: 4px; font-size: 11px; line-height: 1.35; pointer-events: none; }
+.loot-log > div { background: linear-gradient(90deg, rgba(10, 9, 22, 0.6), transparent); padding: 1px 8px; border-radius: 0 6px 6px 0; color: #dfe4f6; text-shadow: 0 1px 2px #000; transition: opacity 1.5s; overflow-wrap: anywhere; }
+.loot-log > div.old { opacity: 0.35; }
+.hud[data-mode='dungeon'] .loot-log { font-size: 10.5px; }
+.list li.done-q { padding-left: 12px; }
+.list li.done-q button.small { flex: 0 0 auto; padding: 5px 10px; font-size: 12px; font-weight: 800; border-radius: 8px; }

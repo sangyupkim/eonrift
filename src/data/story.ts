@@ -140,3 +140,20 @@ export const SCRIPTS: Record<string, Step[]> = {
 export interface Objective {
   text: string;
 }
+
+/**
+ * 퀘스트 탭에서 다시 볼 수 있는 이야기 장면 (순서대로).
+ * 본 적이 있으면(seen_ 플래그) 보이고, 그 전 저장은 진행 상황으로 짐작한다
+ */
+export const STORY_REPLAY: { id: string; title: string; seen: (p: { flag(f: string): number; data: { unlockedClasses: string[] } }) => boolean }[] = [
+  { id: 'prologue', title: '프롤로그 · 떨어진 자', seen: (p) => p.flag('intro') > 0 },
+  { id: 'legend', title: '마을의 전설', seen: (p) => p.flag('stone1Talk') > 0 || p.data.unlockedClasses.includes('mage') },
+  { id: 'stone1', title: '첫 번째 차원석', seen: (p) => p.flag('stone1Talk') > 0 },
+  { id: 'home_unlock', title: '차원집의 문', seen: (p) => p.flag('home') > 0 },
+  { id: 'ch2', title: '잠든 마법사의 기억', seen: (p) => p.data.unlockedClasses.includes('mage') },
+  { id: 'smith_ch3', title: '고른의 두려움', seen: (p) => p.flag('smith3') > 0 },
+  { id: 'secret', title: '수상한 인물', seen: (p) => p.data.unlockedClasses.includes('archer') },
+  { id: 'engineer_final', title: '공명 장치', seen: (p) => p.flag('resonatorHint') > 0 },
+  { id: 'final', title: '마지막 선택', seen: (p) => p.flag('endgame') > 0 },
+  { id: 'endgame', title: '차원의 끝', seen: (p) => p.flag('endgame') > 0 },
+];

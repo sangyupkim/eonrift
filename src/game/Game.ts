@@ -197,6 +197,11 @@ export class Game {
   private setProgress(p: Progress): void {
     this.progress = p;
     this.hud.timersOpen = p.data.settings.timersOpen !== false;
+    // 퀘스트 탭의 [다시 보기]
+    this.screens.onReplay = (steps, back) => {
+      this.screens.close();
+      this.playSteps(steps, () => this.openMenu(back));
+    };
     this.hud.objectiveOpen = p.data.settings.questsOpen !== false;
     this.hud.onObjectiveToggle = (open) => {
       p.data.settings.questsOpen = open;
@@ -1219,6 +1224,7 @@ export class Game {
 
   // =============== 스토리 ===============
   private playScript(id: string, after?: () => void): void {
+    this.progress.setFlag(`seen_${id}`);
     this.playSteps(null, after, id);
   }
 
@@ -1785,7 +1791,13 @@ export class Game {
 
     const s = this.toScreen(m.x, 1.8, m.z);
     let line = 0;
-    const loot = (text: string, color: string) => this.hud.floatText(s.x, s.y - 22 * line++, text, color, 'small');
+    // 획득 로그: 처치 하나당 한 줄로 모아서 남긴다
+    const parts: string[] = [`<b>${m.name}</b>`, `경험치 +${exp}`];
+    queueMicrotask(() => this.hud.log(parts.join(' · ')));
+    const loot = (text: string, color: string) => {
+      this.hud.floatText(s.x, s.y - 22 * line++, text, color, 'small');
+      parts.push(`<span style="color:${color}">${text.replace(/^\+/, '')}</span>`);
+    };
     loot(`+${gold} G`, '#ffd23a');
     // 보스 러시: 보상은 완주했을 때 한꺼번에 (보스 전리품 없음)
     if (run.end?.kind === 'rush') {
@@ -2066,6 +2078,7 @@ export class Game {
       const item = ITEMS[drop.itemId];
       if (added > 0) {
         this.hud.floatText(s.x, s.y - line++ * 22, `+${added} ${item.name}`, hex(item.color), 'small');
+        this.hud.log(`채집 · <span style="color:${hex(item.color)}">${item.name} ×${added}</span>`);
         this.quests.event({ type: 'gather', item: drop.itemId, count: added });
       }
       if (added < drop.count) {

@@ -1,5 +1,6 @@
 import { BUILD_ID, GAME_VERSION } from '../config';
 import { encyclopediaPages } from './encyclopedia';
+import { SCRIPTS, STORY_REPLAY, type Step } from '../data/story';
 import { FEEDBACK_KINDS, FEEDBACK_MAX, FEEDBACK_NAME_MAX, feedbackWait, savedFeedbackName, sendFeedback, type FeedbackInfo } from '../core/feedback';
 import { PATCH_NOTES } from '../data/patchnotes';
 import { applyUpdate, fetchRemoteVersion, isNewer, type RemoteVersion } from './update';
@@ -11,7 +12,7 @@ import { durability, EQUIP_SLOTS, SERIES, seriesBonus, EQUIP_MAX_DUR, enhanceCos
 import { PRODUCER_CAP, PRODUCER_LIMIT, PRODUCER_MAX_LEVEL, PRODUCER_TYPES, PRODUCER_UNLOCK, producerOutputs, producerTime, producerUpgradeCost, type ProducerType } from '../data/factory';
 import { BUILDINGS, BUILD_ORDER, buildingUpgradeCost, ESSENCE_BOOST, ESSENCE_BURN, FACTORY_SIZES, generatorPower, levelSpeed, MAX_BUILDING_LEVEL, RECIPES, UPGRADABLE, upgradeBlueprintCost, type BuildingType } from '../data/factory';
 import { ITEMS, ITEM_LIST, ORE_TIERS, TIER_PLATE, WOOD_TIERS } from '../data/items';
-import type { QuestDef } from '../data/quests';
+import { QUEST_BY_ID, type QuestDef } from '../data/quests';
 import { THEMES } from '../data/themes';
 import { canEnqueue, enqueueJob, WORKBENCH_OUT_MAX, WORKBENCH_QUEUE_MAX, BOX_CAPACITY, boxTotal, producerStock, producerTarget, ESSENCES, MACHINE_TYPES, RECIPE_BY_ID, recipesFor, type BuildingState, type Factory, type WorkJob } from '../factory/sim';
 import type { Bag, Slot } from '../game/Bag';
@@ -183,6 +184,9 @@ export class Screens {
     cb?.();
   }
 
+  /** 이야기 다시 보기 (게임이 대화창으로 틀어 준다) */
+  onReplay?: (steps: Step[], back: () => void) => void;
+
   private open(className: string, html: string, onClose?: () => void): HTMLElement {
     const scroll = this.current?.querySelector('.scroll')?.scrollTop ?? 0;
     const sameKind = this.current?.dataset.kind === className;
@@ -211,7 +215,7 @@ export class Screens {
         downOnBg = e.target === s && performance.now() - openedAt > 400;
       });
       s.addEventListener('pointerup', (e) => {
-        if (downOnBg && e.target === s && className !== 'ask') this.close();
+        if (downOnBg && e.target === s && className !== 'ask' && className !== 'feedback') this.close();
         downOnBg = false;
       });
     }
@@ -1079,7 +1083,21 @@ export class Screens {
           return `<li class="quest daily ${d.claimed ? 'claimed' : ''}">${d.claimed ? '' : track(`daily:${d.id}`)}<div><b>[일일] ${d.title}</b><small>${objectiveText(d.objective)} ${Math.min(cur, need)}/${need}</small>${d.claimed ? '<small class="dim">보상 받음</small>' : cur >= need ? '<small class="ok">✔ 촌장 에단에게 보고</small>' : ''}</div></li>`;
         })
         .join('');
-      body = `<ul class="list scroll">${ql.map(row).join('')}${daily}${!ql.length && !daily ? '<li class="empty">진행 중인 퀘스트 없음</li>' : ''}</ul>`;
+      // 완료한 퀘스트: 메인(이야기 다시 보기)과 서브를 나눠서
+      const doneIds = quests.state.done.filter((id) => QUEST_BY_ID[id]);
+      const doneMain = doneIds.map((id) => QUEST_BY_ID[id]).filter((q) => q.kind === 'main');
+      const doneSub = doneIds.map((id) => QUEST_BY_ID[id]).filter((q) => q.kind === 'sub');
+      const seen = STORY_REPLAY.filter((r) => p.flag(`seen_${r.id}`) > 0 || r.seen(p));
+      const mainRows = [
+        ...seen.map((r) => `<li class="quest main done-q"><div><b>${r.title}</b></div><button class="small" data-replay="script:${r.id}">▶ 다시 보기</button></li>`),
+        ...doneMain.map((q) => `<li class="quest main done-q"><div><b>${q.title}</b><small>${npcName(q.npc)}</small></div><button class="small" data-replay="quest:${q.id}">▶ 다시 보기</button></li>`),
+      ].join('');
+      const subRows = doneSub.map((q) => `<li class="quest sub done-q"><div><b>${q.title}</b><small>${npcName(q.npc)}</small></div></li>`).join('');
+      body = `<div class="scroll">
+        <h3>진행 중</h3><ul class="list">${ql.map(row).join('')}${daily}${!ql.length && !daily ? '<li class="empty">진행 중인 퀘스트 없음</li>' : ''}</ul>
+        <h3>완료한 메인 <small>${seen.length + doneMain.length}</small></h3><ul class="list">${mainRows || '<li class="empty">없음</li>'}</ul>
+        <h3>완료한 서브 <small>${doneSub.length}</small></h3><ul class="list">${subRows || '<li class="empty">없음</li>'}</ul>
+      </div>`;
     }
     const s = this.open(
       'inventory',
@@ -1116,6 +1134,13 @@ export class Screens {
       again(tab, selSlot);
     });
     this.on(s, '[data-tab]', (b) => again(b.dataset.tab as typeof tab, undefined));
+    this.on(s, '[data-replay]', (b) => {
+      const [kind, id] = b.dataset.replay!.split(':');
+      const steps = kind === 'script' ? SCRIPTS[id] : [...QUEST_BY_ID[id].offer, ...QUEST_BY_ID[id].complete];
+      // 대사·장면 제목만 다시 본다 (선택지·보상·플래그는 건너뛴다)
+      const replay = (steps ?? []).filter((x) => 't' in x || 'title' in x || 'fx' in x);
+      this.onReplay?.(replay, () => again('quest', undefined));
+    });
     s.querySelectorAll<HTMLInputElement>('[data-track]').forEach((el) =>
       el.addEventListener('change', () => {
         const id = el.dataset.track!;
