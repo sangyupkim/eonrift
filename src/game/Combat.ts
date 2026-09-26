@@ -239,7 +239,7 @@ export class Combat {
    */
   backstep(move: { x: number; y: number }): boolean {
     const player = this.host.player;
-    if (player.buff('stun') || player.rollCooldown > 0 || player.state === 'dash' || !player.alive) return false;
+    if (player.buff('stun') || !player.canDodge || player.state === 'dash' || !player.alive) return false;
     const p = player.position;
     const d = this.host.dungeon();
     const target = this.findTarget(12);
@@ -253,7 +253,7 @@ export class Combat {
     player.startDash({ dirX: dir.x, dirZ: dir.z, speed: 14, duration: 0.35, pose: 'leap', invuln: true });
     // 뒤로 뛸 때는 적(또는 원래 방향)을 계속 바라본다
     if (!input) player.facing = away ?? face;
-    player.rollCooldown = player.dodgeMax = PLAYER.backstepCooldown;
+    player.useDodge(PLAYER.backstepCooldown);
     this.host.sfx('dash');
     if (d) {
       const tx = p.x;

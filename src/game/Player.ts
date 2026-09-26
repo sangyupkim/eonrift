@@ -80,7 +80,20 @@ export class Player {
   private time = 0;
   private action: (ActionSpec & { t: number; done: boolean }) | null = null;
   private dash: (DashSpec & { t: number }) | null = null;
+  /** 다음 회피 충전까지 남은 시간 (충전이 가득이면 0) */
   rollCooldown = 0;
+  /** 회피 충전 횟수 (장화 특수 옵션으로 늘어난다)와 지금 남은 충전 */
+  dodgeCharges = 1;
+  dodgeStock = 1;
+  get canDodge(): boolean {
+    return this.dodgeStock >= 1;
+  }
+  /** 회피를 한 번 쓴다: 충전 하나를 쓰고, 충전 중이 아니면 재충전을 시작한다 */
+  useDodge(cooldown: number): void {
+    this.dodgeStock = Math.max(0, this.dodgeStock - 1);
+    if (this.rollCooldown <= 0) this.rollCooldown = this.dodgeMax = cooldown;
+    else this.dodgeMax = Math.max(this.dodgeMax, cooldown);
+  }
   /** 걸려 있는 버프 (방어·보조 스킬) */
   buffs: Buff[] = [];
   /** 마지막으로 싸운 뒤 지난 시간 */
@@ -190,19 +203,19 @@ export class Player {
 
   /** 마법사 블링크: 정해진 거리를 한순간에 이동한다. 무적은 없다 */
   startBlink(move: { x: number; y: number }, onEnd: () => void): boolean {
-    if (this.buff('stun') || this.rollCooldown > 0 || this.state === 'dash' || !this.alive) return false;
+    if (this.buff('stun') || !this.canDodge || this.state === 'dash' || !this.alive) return false;
     const dir = this.dodgeDir(move);
     this.startDash({ dirX: dir.x, dirZ: dir.z, speed: PLAYER.blinkDist / 0.1, duration: 0.1, pose: 'lunge', invuln: false, onEnd });
-    this.rollCooldown = this.dodgeMax = PLAYER.blinkCooldown;
+    this.useDodge(PLAYER.blinkCooldown);
     return true;
   }
 
   startRoll(move: { x: number; y: number }): boolean {
-    if (this.buff('stun') || this.rollCooldown > 0 || this.state === 'dash' || !this.alive) return false;
+    if (this.buff('stun') || !this.canDodge || this.state === 'dash' || !this.alive) return false;
     const d = Player.worldDir(move);
     const dir = d.len > 0.1 ? { x: d.x / d.len, z: d.z / d.len } : { x: Math.sin(this.facing), z: Math.cos(this.facing) };
     this.startDash({ dirX: dir.x, dirZ: dir.z, speed: PLAYER.rollSpeed, duration: PLAYER.rollTime, pose: 'roll', invuln: true });
-    this.rollCooldown = this.dodgeMax = PLAYER.rollCooldown + PLAYER.rollTime;
+    this.useDodge(PLAYER.rollCooldown + PLAYER.rollTime);
     return true;
   }
 
@@ -328,7 +341,16 @@ export class Player {
     this.time += dt;
     for (const b of this.buffs) b.t -= dt;
     this.buffs = this.buffs.filter((b) => b.t > 0 && (b.stacks === undefined || b.stacks > 0));
-    this.rollCooldown = Math.max(0, this.rollCooldown - dt);
+    // 회피 충전: 하나씩 차례로 찬다
+    if (this.dodgeStock > this.dodgeCharges) this.dodgeStock = this.dodgeCharges;
+    if (this.dodgeStock < this.dodgeCharges) {
+      if (this.rollCooldown <= 0) this.rollCooldown = this.dodgeMax || 1;
+      this.rollCooldown -= dt;
+      if (this.rollCooldown <= 0) {
+        this.dodgeStock++;
+        this.rollCooldown = this.dodgeStock < this.dodgeCharges ? this.dodgeMax : 0;
+      }
+    } else this.rollCooldown = 0;
     this.invuln = Math.max(0, this.invuln - dt);
     // MP는 전투 중에는 차지 않는다: 3초 동안 때리지도 맞지도 않아야 회복된다
     this.combatT += dt;
@@ -382,7 +404,7 @@ export class Player {
       const targetSpeed = mag > 0.12 ? PLAYER.walkSpeed * (1 + this.moveBonus) * mag * (this.buff('windwalk') ? 1.4 : 1) * (this.buff('swift') ? 1.2 : 1) * (this.buff('slow') ? 0.6 : 1) : 0;
       this.speed += (targetSpeed - this.speed) * Math.min(1, dt * 14);
       if (mag > 0.12) {
-        this.facing = lerpAngle(this.facing, Math.atan2(d.x, d.z), Math.min(1, dt * 16));
+        this.facing = lerpAngle(this.facing, Math.atan2(d.x, d.z), Math.min(1, dt * 34));
         ctx.applyMove((d.x / d.len) * this.speed * dt, (d.z / d.len) * this.speed * dt);
         this.state = 'move';
       } else {

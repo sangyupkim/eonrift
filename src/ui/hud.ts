@@ -113,6 +113,21 @@ export class Hud {
     // 획득 로그 (퀘스트 알림판 아래)
     this.logEl = el('div', 'loot-log');
     status.appendChild(this.logEl);
+    // 지난 로그 전부 보기 (채팅창처럼)
+    this.logBtn = el('button', 'log-btn');
+    this.logBtn.textContent = '💬 기록';
+    const openLog = (e: Event) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.toggleLogPanel();
+    };
+    this.logBtn.addEventListener('pointerdown', openLog);
+    this.logEl.addEventListener('pointerdown', openLog);
+    status.appendChild(this.logBtn);
+    this.logPanel = el('div', 'log-panel hidden');
+    this.logPanel.addEventListener('pointerdown', (e) => e.stopPropagation());
+    this.logPanel.addEventListener('wheel', (e) => e.stopPropagation(), { passive: true });
+    this.root.appendChild(this.logPanel);
     this.root.appendChild(status);
 
     // 보스 체력바
@@ -176,6 +191,8 @@ export class Hud {
     this.dodgeBtn = dodge;
     this.dodgeShade = el('div', 'cooldown');
     dodge.appendChild(this.dodgeShade);
+    this.dodgeCount = el('span', 'dodge-count hidden');
+    dodge.appendChild(this.dodgeCount);
 
     for (let i = 0; i < 3; i++) {
       const b = this.button(`act skill s${i + 1}`, '', `skill${i + 1}` as Action);
@@ -378,7 +395,33 @@ export class Hud {
   private logLines: { html: string; at: number }[] = [];
   private logTimer = 0;
   /** 획득 로그 한 줄 (최근 5줄, 8초 뒤 흐려지며 사라진다) */
+  private logBtn!: HTMLButtonElement;
+  private logPanel!: HTMLDivElement;
+  /** 지난 로그 (최대 200줄) */
+  private logHistory: { html: string; time: string }[] = [];
+  toggleLogPanel(open = this.logPanel.classList.contains('hidden')): void {
+    this.logPanel.classList.toggle('hidden', !open);
+    if (!open) return;
+    const rows = this.logHistory.map((l) => `<div><small>${l.time}</small> ${l.html}</div>`).join('') || '<div class="dim">아직 기록이 없습니다</div>';
+    this.logPanel.innerHTML = `<div class="log-head"><b>지난 기록</b><small>${this.logHistory.length}줄</small><button class="log-x">✕</button></div><div class="log-body">${rows}</div>`;
+    this.logPanel.querySelector('.log-x')!.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      this.toggleLogPanel(false);
+    });
+    const body = this.logPanel.querySelector<HTMLElement>('.log-body')!;
+    body.scrollTop = body.scrollHeight;
+  }
   log(html: string): void {
+    const d = new Date();
+    this.logHistory.push({ html, time: `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}` });
+    if (this.logHistory.length > 200) this.logHistory.shift();
+    if (!this.logPanel.classList.contains('hidden')) {
+      const body = this.logPanel.querySelector<HTMLElement>('.log-body');
+      const atEnd = body ? body.scrollHeight - body.scrollTop - body.clientHeight < 30 : true;
+      this.toggleLogPanel(true);
+      const nb = this.logPanel.querySelector<HTMLElement>('.log-body');
+      if (nb && !atEnd && body) nb.scrollTop = body.scrollTop;
+    }
     this.logLines.push({ html, at: performance.now() });
     if (this.logLines.length > 5) this.logLines.shift();
     this.renderLog();
@@ -506,8 +549,13 @@ export class Hud {
     this.dodgeBtn.classList.toggle('custom', !!url);
   }
 
-  setDodgeCooldown(ratio: number): void {
+  private dodgeCount!: HTMLSpanElement;
+  /** 회피 재사용 대기. charges ≥ 0 이면 남은 충전 수를 작은 숫자로 */
+  setDodgeCooldown(ratio: number, charges = -1): void {
     this.dodgeShade.style.transform = `scaleY(${ratio})`;
+    this.dodgeCount.classList.toggle('hidden', charges < 0);
+    const t = String(charges);
+    if (charges >= 0 && this.dodgeCount.textContent !== t) this.dodgeCount.textContent = t;
   }
 
   private ultBtn!: HTMLButtonElement;
@@ -660,14 +708,54 @@ export class Hud {
     this.toastTimer = window.setTimeout(() => this.toastEl.classList.remove('show'), ms);
   }
 
-  floatText(x: number, y: number, text: string, color: string, kind: 'normal' | 'crit' | 'hurt' | 'small' = 'normal'): void {
-    if (this.floatLayer.childElementCount > 40) this.floatLayer.firstElementChild?.remove();
+  /** 떠오르는 숫자: 세계에 고정 (카메라가 움직이면 같이 밀린다). dir: 날아갈 화면 방향 (공격한 쪽의 반대) */
+  private floats: { el: HTMLDivElement; x: number; y: number; t: number; dx: number; dy: number; big: number }[] = [];
+
+  floatText(x: number, y: number, text: string, color: string, kind: 'normal' | 'crit' | 'hurt' | 'small' = 'normal', dir?: { x: number; y: number }): void {
+    if (this.floats.length > 40) this.floats.shift()!.el.remove();
     const f = el('div', `float-text ${kind}`);
     f.textContent = text;
-    f.style.left = `${x + (Math.random() - 0.5) * 20}px`;
-    f.style.top = `${y}px`;
     f.style.color = color;
-    f.addEventListener('animationend', () => f.remove());
+    const len = dir ? Math.hypot(dir.x, dir.y) : 0;
+    // 방향이 없으면 위로, 있으면 그 방향 (조금 위로 치우치게)
+    const dx = len > 0.001 ? dir!.x / len : (Math.random() - 0.5) * 0.4;
+    const dy = len > 0.001 ? dir!.y / len - 0.35 : -1;
+    const n = Math.hypot(dx, dy) || 1;
+    this.floats.push({ el: f, x: x + (Math.random() - 0.5) * 16, y, t: 0, dx: dx / n, dy: dy / n, big: kind === 'small' ? 2 : 3 });
     this.floatLayer.appendChild(f);
+    this.tickFloats(0, 0, 0);
   }
+
+  /** 매 프레임: 등장(3배 → 1배, 0.15초) → 잠깐 머묾 → 공격 반대쪽으로 밀려나며 사라짐. shift: 카메라 이동으로 밀린 화면 거리 */
+  tickFloats(dt: number, shiftX: number, shiftY: number): void {
+    const POP = 0.15;
+    const HOLD = 0.35;
+    const END = 0.95;
+    for (let i = this.floats.length - 1; i >= 0; i--) {
+      const f = this.floats[i];
+      f.t += dt;
+      f.x += shiftX;
+      f.y += shiftY;
+      if (f.t >= END) {
+        f.el.remove();
+        this.floats.splice(i, 1);
+        continue;
+      }
+      let scale = 1;
+      if (f.t < POP) {
+        const k = f.t / POP;
+        scale = f.big - (f.big - 1) * (1 - (1 - k) * (1 - k));
+      }
+      let off = 0;
+      let alpha = 1;
+      if (f.t > HOLD) {
+        const k = (f.t - HOLD) / (END - HOLD);
+        off = 46 * (1 - (1 - k) * (1 - k));
+        alpha = 1 - k * k;
+      }
+      f.el.style.transform = `translate(${(f.x + f.dx * off).toFixed(1)}px, ${(f.y + f.dy * off).toFixed(1)}px) translate(-50%, -50%) scale(${scale.toFixed(3)})`;
+      f.el.style.opacity = alpha.toFixed(3);
+    }
+  }
+
 }

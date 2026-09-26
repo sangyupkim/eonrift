@@ -10,6 +10,8 @@ export interface MapMarker {
   z: number;
   color: string;
   size: number;
+  /** 어두운 테두리 (몬스터 점) */
+  outline?: boolean;
   label?: string;
 }
 
@@ -114,6 +116,11 @@ export class Minimap {
       ctx.beginPath();
       ctx.arc(tx, ty, m.size * (big ? 1.2 : 1), 0, Math.PI * 2);
       ctx.fill();
+      if (m.outline) {
+        ctx.strokeStyle = 'rgba(40, 0, 0, 0.9)';
+        ctx.lineWidth = 0.25;
+        ctx.stroke();
+      }
       if (big && m.label) labels.push({ x: tx, y: ty, text: m.label });
     }
 

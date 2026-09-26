@@ -81,7 +81,7 @@ const REF_ASPECT = 2.2;
 const POTION_KINDS: [string, number][] = [
   ['potion_high', 1],
   ['potion_mid', 0.7],
-  ['potion', 0.4],
+  ['potion', 0.3],
 ];
 const POTION_POUCH = 10;
 /** 보물 상자가 고급 상자일 확률 */
@@ -815,6 +815,7 @@ export class Game {
     this.player.moveBonus = this.progress.bonus('move');
     this.player.mpRegenBonus = this.progress.bonus('mpRegen');
     this.player.hpRegenBonus = (this.progress.specials().regen ?? 0) / 100;
+    this.player.dodgeCharges = 1 + Math.round(this.progress.specials().dodgeCharge ?? 0);
   }
 
   private gearKey = '';
@@ -845,6 +846,8 @@ export class Game {
     // 버프·재사용 대기·보너스도 그대로 옮긴다 (예전엔 장비를 바꾸면 사라졌다)
     next.buffs = prev.buffs;
     next.rollCooldown = prev.rollCooldown;
+    next.dodgeCharges = prev.dodgeCharges;
+    next.dodgeStock = prev.dodgeStock;
     next.dodgeMax = prev.dodgeMax;
     next.moveBonus = prev.moveBonus;
     next.mpRegenBonus = prev.mpRegenBonus;
@@ -986,9 +989,8 @@ export class Game {
     }
     for (const x of q.activeFor(ref).filter((x) => q.canComplete(x)))
       opts.push({ label: `보고하기: ${x.title}`, kind: 'report', pick: run(() => this.playSteps(x.complete, () => this.completeQuest(x, back))) });
-    // 메인 퀘스트는 언제나, 서브 퀘스트는 그 NPC의 서브를 진행 중이 아닐 때
-    const busySub = q.activeFor(ref).some((x) => x.kind === 'sub');
-    for (const x of q.available(ref).filter((x) => x.kind === 'main' || !busySub))
+    // 받을 수 있는 퀘스트는 모두 (서브 퀘스트 여러 개를 함께 진행할 수 있다)
+    for (const x of q.available(ref))
       opts.push({ label: `${x.kind === 'main' ? '[메인] ' : '[서브] '}${x.title}`, kind: 'offer', pick: run(() => this.playSteps(x.offer, () => this.offerQuest(x, back))) });
     for (const x of q.activeFor(ref).filter((x) => !q.canComplete(x) && x.pending))
       opts.push({ label: `${x.title} (진행 중)`, kind: 'pending', pick: run(() => this.playSteps(x.pending!, back)) });
@@ -1597,7 +1599,10 @@ export class Game {
     const dmg = Math.max(1, Math.round(raw * (40 / (40 + m.defense))));
     let killed = m.damage(dmg, fx, fz, knock);
     const s = this.toScreen(m.x, m.rig.height * m.rig.root.scale.y + 0.3, m.z);
-    this.hud.floatText(s.x, s.y, String(dmg), crit ? '#ffd23a' : '#ffffff', crit ? 'crit' : 'normal');
+    // 숫자는 공격한 쪽의 반대로 밀려난다
+    const from = this.toScreen(fx, m.rig.height * m.rig.root.scale.y + 0.3, fz);
+    const away = { x: s.x - from.x, y: s.y - from.y };
+    this.hud.floatText(s.x, s.y, String(dmg), crit ? '#ffd23a' : '#ffffff', crit ? 'crit' : 'normal', away);
     this.level.particles.burst(m.x, 0.8, m.z, 0xffffff, crit ? 8 : 4, 0.8);
     this.audio.play(crit ? 'crit' : 'hit');
     if (!this.progress.trial) killed = this.onHitSpecials(m, dmg, sp, s, killed, fx, fz);
@@ -1708,7 +1713,8 @@ export class Game {
       if (armor.length) this.wearEquip(armor[Math.floor(Math.random() * armor.length)]);
     }
     const s = this.toScreen(pl.position.x, 2, pl.position.z);
-    this.hud.floatText(s.x, s.y, `-${final}`, '#ff5a5a', 'hurt');
+    const hitFrom = this.toScreen(fx, 2, fz);
+    this.hud.floatText(s.x, s.y, `-${final}`, '#ff5a5a', 'hurt', { x: s.x - hitFrom.x, y: s.y - hitFrom.y });
     this.shakeT = Math.max(this.shakeT, 0.25);
     this.audio.play('hurt');
     const lv = this.level;
@@ -2647,6 +2653,10 @@ export class Game {
     }
 
     this.updateCamera(dt);
+    // 떠오르는 숫자는 세계에 고정: 카메라가 움직인 만큼 화면에서 밀어 준다
+    const ref = this.toScreen(0, 0, 0);
+    this.hud.tickFloats(dt, this.floatRef ? ref.x - this.floatRef.x : 0, this.floatRef ? ref.y - this.floatRef.y : 0);
+    this.floatRef = ref;
     this.updateLabels();
     this.renderer.render(this.level.scene, this.camera);
   }
@@ -2849,7 +2859,7 @@ export class Game {
     const markers: MapMarker[] = [];
     if (level instanceof DungeonScene) {
       for (const n of level.nodes) if (n.alive) markers.push({ x: n.x, z: n.z, color: hex(n.def.accentColor), size: 0.45 });
-      for (const m of level.monsters) if (m.alive) markers.push({ x: m.x, z: m.z, color: m.isBoss ? '#ff3030' : '#ff7a7a', size: m.isBoss ? 1 : 0.4, label: m.isBoss ? m.name : undefined });
+      for (const m of level.monsters) if (m.alive) markers.push({ x: m.x, z: m.z, color: m.isBoss ? '#ff1a1a' : m.kind === 'elite' ? '#ffb020' : '#ff3030', size: m.isBoss ? 1.2 : m.kind === 'elite' ? 0.85 : 0.7, label: m.isBoss ? m.name : undefined, outline: true });
       const exit = level.portals.find((p) => p.kind === 'exit')!;
       markers.push({ x: exit.x, z: exit.z, color: level.exitOpen ? hex(level.theme.portalColor) : '#777', size: 1.1, label: '워프 게이트' });
     } else {
@@ -2966,7 +2976,7 @@ export class Game {
     }
     this.hud.setBuffs(pl.buffs.map((b) => ({ text: `${b.name}${b.stacks !== undefined ? ` ${b.stacks}회` : ''} ${Math.ceil(b.t)}s`, bad: b.bad })));
     this.hud.setPotions(this.run && this.level instanceof DungeonScene ? this.run.pouch.length : POTION_KINDS.reduce((a, [k]) => a + p.count(k), 0), this.potionCd / POTION_COOLDOWN);
-    this.hud.setDodgeCooldown(pl.dodgeMax > 0 ? pl.rollCooldown / pl.dodgeMax : 0);
+    this.hud.setDodgeCooldown(pl.dodgeStock < 1 && pl.dodgeMax > 0 ? pl.rollCooldown / pl.dodgeMax : 0, pl.dodgeCharges > 1 ? pl.dodgeStock : -1);
     this.hud.setDodgeIcon(pl.cls.id === 'mage' ? skillIconUrl('mage', 8) : pl.cls.id === 'archer' ? skillIconUrl('archer', 8) : null, pl.cls.id === 'mage' ? '블링크' : pl.cls.id === 'archer' ? '후방 도약' : '');
     const skills = pl.cls.skills;
     const quick = p.cls.quick.map((i) => (i >= 0 && (p.cls.skills[i] ?? 0) > 0 ? i : -1));
@@ -3054,6 +3064,7 @@ export class Game {
     } else this.hud.setBubbles([]);
   }
 
+  private floatRef: { x: number; y: number } | null = null;
   private toScreen(x: number, y: number, z: number): { x: number; y: number } {
     const v = new Vector3(x, y, z).project(this.camera);
     return { x: ((v.x + 1) / 2) * this.container.clientWidth, y: ((1 - v.y) / 2) * this.container.clientHeight };

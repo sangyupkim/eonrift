@@ -18,7 +18,7 @@ export type SpecialKey =
   // 활
   | 'hasteOnHit' | 'swiftOnHit'
   // 방어구
-  | 'hp' | 'def' | 'dmgReduce' | 'dodge' | 'mp' | 'cdr' | 'lowGuard' | 'hitHeal' | 'regen' | 'mpRegen' | 'move' | 'speed'
+  | 'hp' | 'def' | 'dmgReduce' | 'dodge' | 'mp' | 'cdr' | 'lowGuard' | 'hitHeal' | 'regen' | 'mpRegen' | 'move' | 'speed' | 'dodgeCharge'
   // 장신구
   | 'str' | 'int' | 'dex' | 'vit' | 'mag' | 'atk' | 'crit' | 'ult';
 
@@ -37,6 +37,8 @@ interface SpecialDef {
   tierScaled?: boolean;
   /** 값을 정수로 */
   int?: boolean;
+  /** 등급과 관계없이 같은 값 */
+  fixed?: boolean;
 }
 
 const pct = (v: number) => `${Math.round(v * 10) / 10}%`;
@@ -66,6 +68,7 @@ export const SPECIALS: Record<SpecialKey, SpecialDef> = {
   mpRegen: { min: 0.1, max: 0.3, text: (v) => `전투 중에도 초당 최대 MP ${pct(v)} 재생` },
   move: { min: 2, max: 5, text: (v) => `이동 속도 +${pct(v)}` },
   speed: { min: 2, max: 5, text: (v) => `공격 속도 +${pct(v)}` },
+  dodgeCharge: { min: 1, max: 1, int: true, fixed: true, text: (v) => `회피(구르기·블링크·도약) 충전 +${v}회` },
   str: { min: 3, max: 6, tierScaled: true, int: true, text: (v) => `힘 +${v}` },
   int: { min: 3, max: 6, tierScaled: true, int: true, text: (v) => `지능 +${v}` },
   dex: { min: 3, max: 6, tierScaled: true, int: true, text: (v) => `민첩 +${v}` },
@@ -93,7 +96,7 @@ export function specialPool(slot: string, cls?: ClassId): SpecialKey[] {
     case 'pants':
       return [...ARMOR_SHARED, 'regen', 'mpRegen'];
     case 'boots':
-      return [...ARMOR_SHARED, 'move', 'speed'];
+      return [...ARMOR_SHARED, 'move', 'dodgeCharge'];
     case 'ring':
       return [...ACC_SHARED, 'atk', 'crit'];
     case 'necklace':
@@ -112,6 +115,7 @@ const GRADE_MULT = [1, 1.2, 1.4];
 /** 이 장비(등급·단계)에서 나올 수 있는 값 범위 */
 export function specialRange(k: SpecialKey, grade: number, tier: number): [number, number] {
   const d = SPECIALS[k];
+  if (d.fixed) return [d.min, d.max];
   const g = GRADE_MULT[Math.max(0, Math.min(2, grade - 4))];
   const t = d.tierScaled ? 1 + (tier - 1) * 0.5 : 1;
   return [d.min * g * t, d.max * g * t];
@@ -169,6 +173,7 @@ export function sumSpecials(lines: SpecialLine[]): SpecialTotals {
   cap('dmgReduce', 20);
   cap('double', 40);
   cap('lowGuard', 40);
+  cap('dodgeCharge', 1);
   return t;
 }
 

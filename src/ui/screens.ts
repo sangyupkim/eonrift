@@ -125,7 +125,8 @@ const workJobIcon = (j: WorkJob) => {
   return url ? `<img class="wb-ico" src="${url}" alt="">` : '';
 };
 
-export function equipLine(e: Equip): string {
+/** 기본 능력치 한 줄 (공격·방어·HP·MP·치명). 망가졌으면 빈 문자열 */
+function equipBase(e: Equip): string {
   const s = equipStats(e);
   const parts = [];
   if (s.atk) parts.push(`공격 ${s.atk}`);
@@ -133,16 +134,32 @@ export function equipLine(e: Equip): string {
   if (s.hp) parts.push(`HP ${s.hp}`);
   if (s.mp) parts.push(`MP ${s.mp}`);
   if (s.crit) parts.push(`치명 ${s.crit}%`);
-  // 계열 옵션 (수호·비전·사냥)
-  if (parts.length && e.series) {
-    const sb = seriesBonus(e);
-    parts.push(`<span class="ser" style="color:${hex(SERIES[e.series].color)}">${SERIES[e.series].name}(${CLASSES[SERIES[e.series].fits].name} 추천) ${(Object.entries(sb) as [BonusKey, number][]).map(([k, v]) => bonusText(k, v)).join(', ')}</span>`);
-  }
-  // 각인 (망가진 장비는 빈 문자열 그대로 두어 '망가짐'으로 보이게)
-  if (parts.length && e.eng?.length) parts.push(`<span class="eng">각인 ${e.eng.map((l) => bonusText(l.k, l.v)).join(', ')}</span>`);
-  // 특수 옵션 (유니크 이상)
-  if (parts.length && e.sp?.length) parts.push(`<span class="spo">${e.sp.map((l) => `◆ ${specialText(l)}`).join(' ')}</span>`);
   return parts.join(' · ');
+}
+
+/** 목록용 요약: 기본 능력치 + 계열 · 각인 줄 수 · 특수 옵션 줄 수 */
+export function equipLine(e: Equip): string {
+  const base = equipBase(e);
+  if (!base) return '';
+  const tags = [base];
+  if (e.series) tags.push(`<span class="ser" style="color:${hex(SERIES[e.series].color)}">${SERIES[e.series].name}</span>`);
+  if (e.eng?.length) tags.push(`<span class="eng">각인 ${e.eng.length}</span>`);
+  if (e.sp?.length) tags.push(`<span class="spo">◆특수 ${e.sp.length}</span>`);
+  return tags.join(' · ');
+}
+
+/** 상세 보기: 기본 능력치 한 줄 + 옵션을 한 줄에 하나씩 */
+export function equipDetail(e: Equip): string {
+  const base = equipBase(e);
+  if (!base) return '<span class="bad">망가짐 — 대장간에서 수리하세요</span>';
+  const lines = [`<div class="opt-base">${base}</div>`];
+  if (e.series) {
+    const sr = SERIES[e.series];
+    for (const [k, v] of Object.entries(seriesBonus(e)) as [BonusKey, number][]) lines.push(`<div class="opt ser" style="color:${hex(sr.color)}">${sr.name} · ${bonusText(k, v)}</div>`);
+  }
+  (e.eng ?? []).forEach((l, i) => lines.push(`<div class="opt eng">각인 ${i + 1}단 · ${bonusText(l.k, l.v)}</div>`));
+  for (const l of e.sp ?? []) lines.push(`<div class="opt spo">◆ ${specialText(l)}</div>`);
+  return `<div class="opt-list">${lines.join('')}</div>`;
 }
 
 function equipTitle(e: Equip): string {
@@ -155,7 +172,7 @@ const KIND_NAMES = { material: '재료', essence: '마력 정수', processed: '�
 function slotInfo(s: Slot): string {
   if (s.equip) {
     const e = s.equip;
-    return `${equipTitle(e)} <span class="dim">· ${slotName(e.slot, e.cls)}${e.cls ? ` (${CLASSES[e.cls].name} 전용)` : ''}</span><br>${equipLine(e)} · 판매가 ${equipValue(e)} G`;
+    return `${equipTitle(e)} <span class="dim">· ${slotName(e.slot, e.cls)}${e.cls ? ` (${CLASSES[e.cls].name} 전용)` : ''}</span>${equipDetail(e)}<small class="dim">판매가 ${equipValue(e)} G</small>`;
   }
   const it = ITEMS[s.itemId];
   return `<b style="color:${hex(it.color)}">${it.name}</b> <span class="dim">· ${KIND_NAMES[it.kind]} · ${s.count}개 · 개당 ${it.value} G</span><br>${it.description}`;
@@ -1020,7 +1037,7 @@ export class Screens {
       };
       const sel = selSlot ? c.equipment[selSlot] : undefined;
       const info = sel
-        ? `${equipTitle(sel)}<br><small>${equipLine(sel) || '<span class="bad">망가짐 — 대장간에서 수리하세요</span>'} · 내구도 ${durability(sel)}/${EQUIP_MAX_DUR}</small> <button data-un="${selSlot}">해제</button>`
+        ? `${equipTitle(sel)} <button data-un="${selSlot}">해제</button>${equipDetail(sel)}<small class="dim">내구도 ${durability(sel)}/${EQUIP_MAX_DUR}</small>`
         : selSlot
           ? `<span class="dim">${slotName(selSlot, p.data.currentClass)} 칸이 비어 있습니다. 아래 목록에서 장착하세요.</span>`
           : '';
@@ -1817,7 +1834,13 @@ export class Screens {
       const eqs = [...p.data.equips, ...bagEquips]
         .map((e) => `<li>${equipGem(e)}<div>${equipTitle(e)}<small>${bagEquips.includes(e) ? '<span class="ok">[가방]</span> ' : '<span class="dim">[창고]</span> '}${equipLine(e)}</small></div><button data-selleq="${e.uid}">${equipValue(e)} G</button></li>`)
         .join('');
-      body = `<ul class="list scroll">${items}${eqs}${!items && !eqs ? '<li class="empty">팔 물건이 없습니다</li>' : ''}</ul>`;
+      // 등급별로 장비 한꺼번에 팔기 (두 번 눌러 확인)
+      const all = [...p.data.equips, ...bagEquips];
+      const byGrade = GRADES.map((g, gi) => ({ g, gi, list: all.filter((e) => e.grade === gi) })).filter((x) => x.list.length);
+      const gradeRow = byGrade.length
+        ? `<div class="sell-grades">${byGrade.map((x) => `<button data-sellgr="${x.gi}" style="--c:${hex(x.g.color)}"><b style="color:${hex(x.g.color)}">${x.g.name}</b> 모두 팔기<small>${x.list.length}개 · ${x.list.reduce((a, e) => a + equipValue(e), 0).toLocaleString()} G</small></button>`).join('')}</div>`
+        : '';
+      body = `${gradeRow}<ul class="list scroll">${items}${eqs}${!items && !eqs ? '<li class="empty">팔 물건이 없습니다</li>' : ''}</ul>`;
     }
     const s = this.open(
       'shop',
@@ -1855,6 +1878,31 @@ export class Screens {
         if (n > 0 && p.take(id, n)) p.data.gold += ITEMS[id].value * n;
         again(tab, `${ITEMS[id].name} ${n}개 판매 +${ITEMS[id].value * n} G`);
       } });
+    });
+    this.on(s, '[data-sellgr]', (b) => {
+      const gi = Number(b.dataset.sellgr);
+      if (!b.classList.contains('confirm')) {
+        b.classList.add('confirm');
+        const sm = b.querySelector('small');
+        if (sm) sm.textContent = '한 번 더 누르면 판매';
+        return;
+      }
+      let n = 0;
+      let gold = 0;
+      const sell = (e: Equip) => {
+        n++;
+        gold += equipValue(e);
+      };
+      p.data.equips = p.data.equips.filter((e) => (e.grade === gi ? (sell(e), false) : true));
+      for (const bag of [p.invBag, p.dimBagObj])
+        bag.slots.forEach((x, i) => {
+          if (x?.equip && x.equip.grade === gi) {
+            sell(x.equip);
+            bag.slots[i] = null;
+          }
+        });
+      p.data.gold += gold;
+      again(tab, `${GRADES[gi].name} 장비 ${n}개 판매 +${gold.toLocaleString()} G`);
     });
     this.on(s, '[data-selleq]', (b) => {
       const uid = b.dataset.selleq;
@@ -1969,7 +2017,7 @@ export class Screens {
       } else detail += '<p class="hint">최대 강화(+10)입니다.</p>';
     } else if (sel) {
       const cost = enhanceCost(sel);
-      detail = `<p>${equipTitle(sel)}</p><p class="hint">${equipLine(sel) || '<span class="bad">망가짐</span>'} · 내구도 ${durability(sel)}/${EQUIP_MAX_DUR}</p>`;
+      detail = `<p>${equipTitle(sel)}</p>${equipDetail(sel)}<p class="hint">내구도 ${durability(sel)}/${EQUIP_MAX_DUR}</p>`;
       const rc = repairCost(sel);
       if (rc) {
         const ok = p.count(rc.ore) >= rc.count && p.data.gold >= rc.gold;
@@ -1981,7 +2029,7 @@ export class Screens {
         const have = p.count(cost.item);
         const ok = have >= cost.count && p.data.gold >= cost.gold;
         detail += `<h3>강화 → +${next.plus}</h3>
-          <p class="hint">→ ${equipLine({ ...next, dur: EQUIP_MAX_DUR })}${durability(sel) <= 0 ? " (수리 후)" : ""}</p>
+          <p class="hint">→ ${equipBase({ ...next, dur: EQUIP_MAX_DUR })}${durability(sel) <= 0 ? " (수리 후)" : ""}</p>
           <p>${inlineGem(cost.item)}${ITEMS[cost.item].name} ${cost.count}개 <span class="${have >= cost.count ? 'dim' : 'bad'}">(보유 ${have})</span></p>
           <p>${cost.gold} G · 성공 확률 <b>${Math.round(cost.rate * 100)}%</b></p>
           <div class="menu"><button class="primary" data-enh ${ok ? '' : 'disabled'}>강화하기</button></div>`;
@@ -2095,7 +2143,7 @@ export class Screens {
         const pctIn = hi > lo ? Math.round(((l.v - lo) / (hi - lo)) * 100) : 100;
         const on = locks.has(i);
         const lockBtn = canLock && p.flag('endgame') ? `<button class="sp-lock ${on ? 'on' : ''}" data-splock="${i}" ${!on && locks.size >= e.sp!.length - 1 ? 'disabled' : ''}>${on ? '🔒 고정' : '🔓'}</button>` : '';
-        return `<div class="eng-line"><span class="stage">◆</span><b>${specialText(l)}</b><small class="dim">(범위 안 ${Math.max(0, Math.min(100, pctIn))}%)</small>${lockBtn}</div>`;
+        return `<div class="sp-row ${on ? 'locked' : ''}"><span><b>◆ ${specialText(l)}</b> <small class="dim">범위 안 ${Math.max(0, Math.min(100, pctIn))}%</small></span>${lockBtn}</div>`;
       })
       .join('');
     let reroll = '';
