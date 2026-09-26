@@ -7,6 +7,11 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '8.3.2',
+    date: '2026-09-26',
+    items: ['해골 궁수 등 몬스터 화살이 빙글빙글 돌지 않고 화살촉을 앞으로 똑바로 날아간다', '몬스터 화살 속도를 약 40% 줄였다 (보고 피할 수 있게)'],
+  },
+  {
     version: '8.3.1',
     date: '2026-09-26',
     items: [

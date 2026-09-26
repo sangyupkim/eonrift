@@ -99,7 +99,7 @@ export class Projectiles {
       p.x += p.vx * dt;
       p.z += p.vz * dt;
       p.mesh.position.set(p.x, p.y, p.z);
-      if (!p.fromPlayer) p.mesh.rotation.x += dt * 8;
+      if (!p.fromPlayer) { if (p.kind !== 'arrow') p.mesh.rotation.x += dt * 8; }
       else host.trail?.(p.x, p.y, p.z, p.color, p.kind !== 'arrow');
       let end = p.life <= 0;
 
