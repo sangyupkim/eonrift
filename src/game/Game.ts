@@ -30,7 +30,7 @@ import { Bag } from './Bag';
 import { Combat } from './Combat';
 import type { Monster } from './Monster';
 import type { SpecialTotals } from '../data/special';
-import { AWAKEN_HOLD, awakenCost, SKILL_AWAKEN, ULT_AWAKEN } from '../data/awaken';
+import { AWAKEN_HOLD, awakenCost, awakenHolds, SKILL_AWAKEN, STORM_RESUME, ULT_AWAKEN } from '../data/awaken';
 import { rememberNickname, submitTrial } from '../core/leaderboard';
 import { saveControls } from '../core/controls';
 import { Player } from './Player';
@@ -1649,7 +1649,11 @@ export class Game {
     let spMult = 1;
     if (sp.bossDmg && (m.kind === 'boss' || m.kind === 'midboss')) spMult *= 1 + sp.bossDmg / 100;
     if (sp.execute && m.hp < m.maxHp * 0.3) spMult *= 1 + sp.execute / 100;
-    const raw = st.atk * mult * spMult * (0.9 + Math.random() * 0.2) * (crit ? 1.6 + (sp.critDmg ?? 0) / 100 : 1);
+    // 사냥 표적: 표식이 남은 적은 +40%
+    if (m.marked > 0) spMult *= 1.4;
+    // 약점 포착: 치명타 피해 +50%
+    const critMul = 1.6 + (sp.critDmg ?? 0) / 100 + (this.player.buff('hunt2') ? 0.5 : 0);
+    const raw = st.atk * mult * spMult * (0.9 + Math.random() * 0.2) * (crit ? critMul : 1);
     const dmg = Math.max(1, Math.round(raw * (40 / (40 + m.defense))));
     let killed = m.damage(dmg, fx, fz, knock);
     const s = this.toScreen(m.x, m.rig.height * m.rig.root.scale.y + 0.3, m.z);
@@ -1668,6 +1672,8 @@ export class Game {
     const pl = this.player;
     const chance = (v?: number) => !!v && Math.random() * 100 < v;
     if (sp.lifesteal && pl.hp < pl.maxHp) pl.hp = Math.min(pl.maxHp, pl.hp + Math.min(dmg * sp.lifesteal / 100, pl.maxHp * 0.03));
+    // 피의 함성: 준 피해의 4% 흡수 (한 번에 최대 HP의 3%까지)
+    if (pl.buff('bloodcry') && pl.hp < pl.maxHp) pl.hp = Math.min(pl.maxHp, pl.hp + Math.min(dmg * 0.04, pl.maxHp * 0.03));
     if (sp.mpOnHit) pl.mp = Math.min(pl.maxMp, pl.mp + pl.maxMp * sp.mpOnHit / 100);
     if (chance(sp.cdOnHit)) {
       const cds = this.combat.cooldowns;
@@ -1721,6 +1727,8 @@ export class Game {
     if (block && block.stacks) {
       block.stacks--;
       pl.invulnFor(0.3);
+      // 반격 방패: 막을 때마다 주변을 벤다
+      if (pl.buff('counter')) this.combat.counter();
       this.hud.floatText(head.x, head.y, '막음!', '#ffe07a', 'small');
       this.level.effects.ring(pl.position.x, pl.position.z, 1.4, 0xffe07a, 0.3);
       this.audio.play('hit');
@@ -1752,11 +1760,25 @@ export class Game {
       if (absorb > 0) this.hud.floatText(head.x + 24, head.y, `-${absorb} MP`, '#7fb4ff', 'small');
       if (final <= 0) {
         pl.invulnFor(0.3);
+        if (pl.buff('manareflect')) this.combat.manaZap();
         return 0;
       }
     }
+    // 불굴: 쓰러질 피해를 한 번 버티고 HP 30% 회복
+    const undying = pl.buff('undying');
+    if (undying && final >= pl.hp) {
+      final = Math.max(0, Math.floor(pl.hp) - 1);
+      undying.t = 0;
+      pl.hp = Math.min(pl.maxHp, pl.hp + pl.maxHp * 0.3);
+      pl.invulnFor(1);
+      this.hud.floatText(head.x, head.y - 20, '불굴!', '#ffd84a', 'crit');
+      this.level.effects.pillar(pl.position.x, pl.position.z, 0xffd84a, 3);
+    }
     pl.hurt(final);
     this.gathering = null;
+    // 가시 갑옷 · 반사 실드: 맞으면 되돌려 준다
+    if (pl.buff('thorns')) this.combat.thorns();
+    if (pl.buff('manareflect')) this.combat.manaZap();
     if (hsp.hitHeal && pl.hp > 0 && Math.random() * 100 < hsp.hitHeal) {
       pl.hp = Math.min(pl.maxHp, pl.hp + pl.maxHp * 0.04);
       this.hud.floatText(head.x - 24, head.y, '회복', '#8aff9a', 'small');
@@ -2759,6 +2781,8 @@ export class Game {
     const pl = this.player;
     this.combat.update(dt);
     this.potionCd = Math.max(0, this.potionCd - dt);
+    // 재생 실드: 초마다 최대 HP 2%
+    if (pl.buff('shieldregen') && pl.alive) pl.hp = Math.min(pl.maxHp, pl.hp + pl.maxHp * 0.02 * dt);
     if (this.run) this.run.time += dt;
 
     let move = this.building ? { x: 0, y: 0 } : input.getMove();
@@ -2828,7 +2852,7 @@ export class Game {
       if (input.consume(`skill${i + 1}` as 'skill1')) {
         const idx = this.progress.cls.quick[i] ?? -1;
         if (idx < 0) this.hud.toast('스킬 칸이 비어 있습니다 (캐릭터 → 스킬에서 배치)');
-        else if (this.progress.awakenOf(`s${idx}`) === 'B') {
+        else if (awakenHolds(SKILL_AWAKEN[this.progress.data.currentClass][idx], this.progress.awakenOf(`s${idx}`))) {
           // 집중형 각성: 누르고 있는 동안 힘을 모은다
           const b = this.combat.skillBlock(idx);
           if (b) this.hud.toast(b);
@@ -2842,11 +2866,13 @@ export class Game {
     }
     if (input.consume('ult')) {
       const ui = this.progress.ultIndex;
-      const block = ui < 0 ? '궁극기는 1-10 수호자를 처음 쓰러뜨리면 얻습니다' : this.combat.ultBlock(ui);
-      if (block) this.hud.toast(block);
-      else if (block === null && this.progress.awakenOf(`u${ui}`) === 'B') {
-        if (!this.charging) this.charging = { slot: -1, ult: true, index: ui, t: 0, fx: 0 };
-      } else if (block === null) this.fireUlt(ui, 0);
+      // 천검난무 B(검무 보류): 도는 중에 다시 누르면 멈추고, 멈춘 뒤 다시 누르면 이어서
+      if (this.combat.toggleStorm()) this.hud.toast(this.combat.storm?.paused ? '검무 보류 — 10초 안에 다시 누르면 이어서 돈다' : '검무 재개!', 1400);
+      else {
+        const block = ui < 0 ? '궁극기는 1-10 수호자를 처음 쓰러뜨리면 얻습니다' : this.combat.ultBlock(ui);
+        if (block) this.hud.toast(block);
+        else if (block === null) this.fireUlt(ui, 0);
+      }
     }
     if (this.charging) {
       move = { x: move.x * 0.5, y: move.y * 0.5 };
@@ -3091,16 +3117,17 @@ export class Game {
     if (ui < 0) this.hud.setUlt({ name: '궁극기', icon: '', ratio: 0, secs: 0, ready: true, lockedMsg: '궁극기는 1-10 수호자를 처음 쓰러뜨리면 얻습니다 (4-10 수호자를 쓰러뜨리면 하나 더)' });
     else {
       const u = ULTIMATES[pl.cls.id][ui];
-      const ultA = p.awakenOf(`u${ui}`) === 'A';
       const empty = this.combat.ultStock < 1;
+      const storm = this.combat.storm;
       this.hud.setUlt({
         name: u.name,
         icon: skillIconUrl(pl.cls.id, 6 + ui),
         ratio: empty ? this.combat.ultCooldown / this.combat.ultCooldownMax : 0,
         secs: empty ? this.combat.ultCooldown : 0,
         ready: pl.mp >= u.mp,
-        stock: ultA ? this.combat.ultStock : -1,
-        charge: this.charging?.ult ? Math.min(1, this.charging.t / AWAKEN_HOLD) : -1,
+        stock: -1,
+        // 검무 보류: 멈춰 있는 동안 이어 쓸 수 있는 남은 시간을 둘레로
+        charge: storm?.paused ? storm.resumeLeft / STORM_RESUME : -1,
       });
     }
     const inv = this.run ? this.run.bag : this.progress.invBag;
@@ -3273,7 +3300,7 @@ export class Game {
   private charging: { slot: number; ult: boolean; index: number; t: number; fx: number } | null = null;
 
   private fireUlt(ui: number, charge: number): void {
-    const msg = this.combat.useUlt(ui, this.progress.ultLevel(ui), charge);
+    const msg = this.combat.useUlt(ui, this.progress.ultLevel(ui));
     if (msg) this.hud.toast(msg);
     else {
       this.gathering = null;
@@ -3308,7 +3335,7 @@ export class Game {
     const action = c.ult ? 'ult' : (`skill${c.slot + 1}` as 'skill1');
     if (this.input.held(action) && c.t < AWAKEN_HOLD + 0.6) return;
     this.charging = null;
-    if (c.ult) this.fireUlt(c.index, k);
+    if (c.ult) this.fireUlt(c.index, 0);
     else {
       const msg = this.combat.useSkill(c.index, k);
       if (msg) this.hud.toast(msg);

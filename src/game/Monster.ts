@@ -240,6 +240,8 @@ export class Monster {
   private summoned: Monster[] = [];
   /** 격노 (광전사: 체력이 절반 아래) */
   private enraged = false;
+  /** 사냥 표적 (궁수 각성): 남은 초. 그동안 플레이어 공격에 피해 +40% */
+  marked = 0;
   /** 주간 시련 보스와 격노 단계 (체력 10%마다 +1, 최대 9) */
   trialBoss = false;
   rage = 0;
@@ -715,6 +717,7 @@ export class Monster {
 
   update(dt: number, world: MonsterWorld, cameraQuat: Quaternion): void {
     this.t += dt;
+    if (this.marked > 0) this.marked = Math.max(0, this.marked - dt);
     if (this.trialBoss && this.alive) this.updateRage(world);
     this.hpBar.quaternion.copy(cameraQuat);
 

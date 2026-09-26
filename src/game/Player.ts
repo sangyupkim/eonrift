@@ -19,7 +19,7 @@ export interface ActionSpec {
   tool?: 'pickaxe' | 'axe';
 }
 
-export type BuffId = 'ironwall' | 'block' | 'warcry' | 'manashield' | 'focus' | 'windwalk' | 'smoke' | 'hunter' | 'haste' | 'swift' | DebuffId;
+export type BuffId = 'ironwall' | 'block' | 'warcry' | 'manashield' | 'focus' | 'windwalk' | 'smoke' | 'hunter' | 'haste' | 'swift' | 'thorns' | 'undying' | 'counter' | 'bloodcry' | 'manareflect' | 'shieldregen' | 'windblade' | 'hunt2' | DebuffId;
 export interface Buff {
   id: BuffId;
   name: string;

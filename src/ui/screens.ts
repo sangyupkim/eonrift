@@ -24,7 +24,7 @@ import { ICONS, mico, richText } from './icons';
 import { buildingThumb } from './thumbs';
 import { gearLook } from '../models/items';
 import { equipIconUrl, heroPortraitUrl, itemIconUrl, monsterIconUrl, skillIconUrl, toolIconUrl } from './itemIcons';
-import { AWAKEN_HOLD, awakenCost, effectTier, SKILL_AWAKEN, ULT_AWAKEN, type AwakenBranch, type AwakenDef } from '../data/awaken';
+import { awakenCost, effectTier, SKILL_AWAKEN, ULT_AWAKEN, type AwakenBranch, type AwakenDef } from '../data/awaken';
 import { rollSpecials, specialRange, specialRerollCost, specialText } from '../data/special';
 import { BESTIARY, BESTIARY_BY_ID, COLLECTION_MILESTONES, isStageMaster, killMilestones, MASTER_ALL_GAIN, milestoneReward, RESEARCH_BONUS, SPECIES_STAT_KILLS, statMilestone, type BestiaryReward } from '../data/bestiary';
 import { BOSS_SPECIES, DEBUFF_INFO, TRAIT_TEXT, type Faction } from '../data/species';
@@ -2348,7 +2348,7 @@ export class Screens {
          <h2>교관 카엘의 훈련장 <small>${cls.name} · <span class="gold">${p.data.gold.toLocaleString()} G</span></small></h2>
          ${message ? `<div class="notice">${message}</div>` : ''}
          
-         <p class="hint">스킬 Lv.${MAX_SKILL_LEVEL}·궁극기 Lv.${MAX_ULT_LEVEL}이면 최고급 재료로 <b>각성</b>: A 충전형(2번까지 모아 쓰기) 또는 B 집중형(꾹 눌러 최대 ${AWAKEN_HOLD}초 모으기). 효과는 Lv.4·Lv.7에서 더 화려해집니다.</p>
+         <p class="hint">스킬 Lv.${MAX_SKILL_LEVEL}·궁극기 Lv.${MAX_ULT_LEVEL}이면 최고급 재료로 <b>각성</b>. 스킬마다 성격이 다른 두 갈래(A·B)가 있고, 각성한 뒤에는 여기서 언제든 무료로 바꿉니다. 효과는 Lv.4·Lv.7에서 더 화려해집니다.</p>
          <ul class="list scroll">${rows}
            <li class="sub-head"><div><b>궁극기 강화</b><small class="dim">${inlineGem('dim_shard')}차원 파편은 5단계 이상 파수꾼·수호자와 차원의 끝에서 모은 차원 가루를 차원집의 차원 응축기로 압축해 만듭니다. 레벨마다 위력 +25%, 재사용 대기 -5초 (최대 Lv.${MAX_ULT_LEVEL}).</small></div></li>
            ${ultRows}</ul>
