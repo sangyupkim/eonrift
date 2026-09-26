@@ -3316,3 +3316,14 @@ button.awk-opt { cursor: pointer; }
 .farm-row { display: grid !important; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
 .farm-btn.gold { border-color: rgba(255, 210, 58, 0.7); background: linear-gradient(135deg, rgba(255, 210, 58, 0.16), rgba(255, 255, 255, 0.03)); }
 .farm-btn.gold b { color: #ffd87a; }
+
+/* v10: 무한 러쉬 축복 고르기 */
+.bless-panel { max-width: 720px; text-align: center; }
+.bless-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 8px; }
+.bless-card { flex: 1 1 180px; max-width: 220px; min-height: 120px; display: flex; flex-direction: column; gap: 6px; align-items: center; justify-content: center; padding: 12px 10px; border-radius: 14px; border: 2px solid var(--c, #8a8aff); background: radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--c, #8a8aff) 28%, transparent), rgba(10, 10, 24, 0.85)); color: var(--ink); font-size: 13px; line-height: 1.35; cursor: pointer; }
+.bless-card b { font-size: 16px; }
+.bless-card:hover, .bless-card:focus { transform: translateY(-2px); box-shadow: 0 0 18px color-mix(in srgb, var(--c, #8a8aff) 60%, transparent); }
+
+/* v10: 8장 '칠흑' 규칙 — 플레이어 둘레만 보인다 */
+.ch8-vignette { position: absolute; inset: 0; pointer-events: none; display: none; background: radial-gradient(circle at 50% 52%, transparent 14%, rgba(4, 0, 12, 0.7) 32%, rgba(2, 0, 8, 0.96) 55%); }
+body.ch8-dark .ch8-vignette { display: block; }

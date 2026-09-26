@@ -30,6 +30,14 @@ import { BAG_SLOTS } from '../config';
 import { NPCS } from '../game/scenes/VillageScene';
 import { bustUrl, equipIconUrl, heroPortraitUrl, itemIconUrl, monsterIconUrl, skillIconUrl, toolIconUrl, weaponIconUrl } from './itemIcons';
 import { buildingThumb } from './thumbs';
+import { ACHIEVEMENTS } from '../data/achievements';
+import { BLESS_IDS, BLESSINGS, HORDE_MILESTONES, raidDayMarks, trialDayMarks, VOW_IDS, VOWS } from '../data/endgame';
+import { EXCHANGE, rankMarks } from '../data/marks';
+import { RELIC_CRAFT_GOLD, RELIC_CRAFT_SHARDS, RELIC_GRADES, RELIC_SLOTS, RELICS, relicRange } from '../data/relics';
+import { SET_IDS, SET_STAT_MULT, SETS } from '../data/sets';
+import { specialText } from '../data/special';
+import { CH8_RULES, CH8_SET_DROP, CH8_STAGES, ch8Mult } from '../data/chapter8';
+import { PACT_AWAKEN_KILLS, PACT_KILLS } from '../game/Progress';
 
 /**
  * 종합 백과사전: 게임 규칙을 항목별로 쉽게 정리한다.
@@ -121,7 +129,7 @@ function basics(): string {
 function classes(): string {
   const cls = (id: ClassId) => {
     const c = CLASSES[id];
-    const dodge = id === 'sword' ? '구르기' : id === 'mage' ? '블링크(순간이동)' : '후방 도약';
+    const dodge = id === 'sword' ? '구르기' : id === 'mage' ? '블링크(순간이동)' : id === 'summoner' ? '차원 도약 (곁의 소환수가 함께 따라온다)' : '후방 도약';
     const skills = c.skills.map((s, i) => `<li>${img(skillIconUrl(id, i), 'enc-ico')}<b>${s.name}</b> <small>MP ${s.mp} · ${s.cooldown}초 · Lv.${SKILL_LEARN[i].level}부터</small><br><small class="dim">${s.description}</small></li>`).join('');
     const ults = ULTIMATES[id].map((u) => `<li><b>${u.name}</b> <small>MP ${u.mp} · ${u.stone}단계 차원석 + Lv.${u.level}에 해금</small><br><small class="dim">${u.description}</small></li>`).join('');
     return card(
@@ -355,11 +363,11 @@ function endgame(): string {
   return `
   <p>7단계 수호자를 쓰러뜨리고 이야기를 마치면 마을 남쪽에 <b>차원의 끝</b> 구역이 열린다. 건물에 닿으면 들어간다.</p>
   <h3>해금 순서</h3>
-  ${flow(['🗼 무한의 탑', '(10층) 💀 보스 러시', '(일반 완주) 🌀 심연 균열', '(3단계) 🏆 주간 차원 시련'])}
+  ${flow(['🗼 무한의 탑', '(10층) 💀 보스 러시', '(일반 완주) 🌀 심연 균열', '(3단계) 🏆 일일 차원 시련', '(5단계) 🐉 주간 차원 레이드'])}
   ${card('🗼 무한의 탑', `<p>둥근 단에서 웨이브 3번을 버티면 한 층을 오른다. 5층마다 파수꾼, 10층마다 수호자. 1~10층은 층마다 +5%, 11층부터는 10층마다 한 번에 +15% 강해진다.</p><p>처음 깬 층 보상 (예: 10층 ${towerFirstClear(10).gold} G + ${it('dim_dust', towerFirstClear(10).dust)}). 하루 한 번 최고 층 기준 소탕 보상.</p>`)}
   ${card('💀 보스 러시', `${table(['난이도', '내용', 'S등급 보상'], RUSH_DIFFS.map((d, i) => [d.name, d.desc, `${rushReward(i as 0 | 1 | 2, 'S').gold.toLocaleString()} G + ${it('dim_dust', rushReward(i as 0 | 1 | 2, 'S').dust)}`]))}<p>걸린 시간으로 S(10분)·A(15분)·B(20분)·C 등급. 하루 ${RUSH_DAILY}번 무료, 그 뒤는 ${it('dim_alloy', 2)}. 지옥은 매번 ${it('dim_alloy2', 1)}.</p>`)}
   ${card('🌀 심연 균열', `<p>${Math.round(RIFT_TIME / 60)}분 안에 깨면 다음 단계가 열린다. 단계마다 몬스터 +12%, 변이가 붙는다(그날은 같은 변이). 입장: 1~10단계 ${it('dim_alloy', 1)}, 11단계부터 ${it('dim_alloy2', 1)}. 보상 예) 5단계 ${riftReward(5, true).gold.toLocaleString()} G + ${it('dim_dust', riftReward(5, true).dust)}, 좋은 장비 확률 증가.</p>${table(['변이', '효과'], AFFIX_IDS.map((a) => [`<span style="color:${hex(AFFIXES[a].color)}">${AFFIXES[a].name}</span>`, AFFIXES[a].text]))}`)}
-  ${card('🏆 주간 차원 시련', `<p>매주 무작위 수호자 한 마리와 <b>${TRIAL_TIME / 60}분</b> 동안 싸운다. 내 장비·능력치 그대로. 체력이 7-10 수호자의 ${TRIAL_HP}배라 <b>깎은 체력 비율</b>이 기록이고, 쓰러뜨리면 <b>걸린 시간</b>이 기록. 체력 10%마다 격노 단계가 올라 공격·속도가 오르고 패턴이 강해진다.</p>${table(['등급', '기준', '보상 (발밑 오라)'], TRIAL_GRADES.map((g) => [`<span style="color:${hex(g.color)}">${g.name}</span>`, g.min >= 10000 ? '처치' : `체력 ${g.min / 100}%`, g.aura]))}`)}
+  ${card('🏆 일일 차원 시련', `<p>매일 무작위 수호자 한 마리와 <b>${TRIAL_TIME / 60}분</b> 동안 싸운다. 내 장비·능력치 그대로. 체력이 7-10 수호자의 ${TRIAL_HP}배라 <b>깎은 체력 비율</b>이 기록이고, 쓰러뜨리면 <b>걸린 시간</b>이 기록. 체력 10%마다 격노 단계가 올라 공격·속도가 오르고 패턴이 강해진다.</p>${table(['등급', '기준', '보상 (발밑 오라)'], TRIAL_GRADES.map((g) => [`<span style="color:${hex(g.color)}">${g.name}</span>`, g.min >= 10000 ? '처치' : `체력 ${g.min / 100}%`, g.aura]))}`)}
   <h3>차원 재료</h3>
   ${flow([it('dim_dust'), `차원 응축기 (가루 8 + ${it('essence_high')} + ${it('titanium_plate')}) → ${it('dim_shard')}`])}
   ${flow([it('dim_dust'), `차원 응축기 (가루 4 + ${it('essence_supreme')} + ${it('orichalcum_ingot')}) → ${it('essence_dim')}`])}
@@ -394,5 +402,37 @@ export function encyclopediaPages(p: Progress): EncyPage[] {
     { id: 'storage', name: '가방·창고', icon: itemIconUrl('bag_kit'), html: storage },
     { id: 'village', name: '마을', icon: itemIconUrl('potion'), html: village },
     { id: 'end', name: '차원의 끝', icon: itemIconUrl('dim_dust'), locked: endOpen ? undefined : '모든 스테이지(7-10 수호자)를 클리어하고 이야기를 마치면 열립니다', html: endgame },
+    { id: 'v10', name: '8장·새 콘텐츠', icon: itemIconUrl('eon_mark'), locked: endOpen ? undefined : '이야기를 모두 마치면 열립니다', html: () => v10Page(p) },
   ];
+}
+
+
+// ---------------- v10: 8장 · 차원 소환사 · 증표 콘텐츠 ----------------
+function v10Page(p: Progress): string {
+  const vowRows = VOW_IDS.map((v) => [`<span style="color:${hex(VOWS[v].color)}">${VOWS[v].name}</span>`, VOWS[v].text, `+${Math.round(VOWS[v].bonus * 100)}%`]);
+  const blessRows = BLESS_IDS.map((b) => [`<span style="color:${hex(BLESSINGS[b].color)}">${BLESSINGS[b].name}</span>`, BLESSINGS[b].text, `최대 ${BLESSINGS[b].max}`]);
+  const setRows = SET_IDS.map((id) => [`<span style="color:${hex(SETS[id].color)}">${SETS[id].name}</span> <small>${SETS[id].role}</small>`, SETS[id].tiers.map((t) => `${t.n}세트: ${t.lines.map(specialText).join(', ')}`).join('<br>')]);
+  const relicRows = RELICS.map((r) => [`<span style="color:${hex(r.color)}">${r.name}</span>`, r.keys.map((k) => SPECIALS[k].text(Math.round(relicRange(k, 4)[1] * 10) / 10)).join(' · ')]);
+  const ruleRows = CH8_STAGES.map((st) => [`8-${st.stage}`, st.name, st.rules.map((r) => `<span style="color:${hex(CH8_RULES[r].color)}">${CH8_RULES[r].name}</span> ${CH8_RULES[r].text}`).join('<br>'), `×${ch8Mult(st.stage).toFixed(1)}`]);
+  return `
+  <p>이야기를 마친 뒤 마을 남서쪽의 <b>???</b>에게 말을 걸면 <b>8장 「갈라진 차원」</b>이 열린다. 8장의 수문장을 쓰러뜨리면 새 직업 <b>차원 소환사</b>가 합류한다. 새 콘텐츠는 모두 <b>영겁의 증표</b>를 주고, 증표는 ???에게서 유물 파편·세트 문장으로 바꾼다.</p>
+  <h3>8장 · 갈라진 차원</h3>
+  ${card('🌀 차원 규칙', `<p>차원문 광장의 8번 문. 방마다 세계의 규칙이 다르다. 새 재료는 없고 전리품은 7단계 것 (좋은 등급이 잘 나온다). 파수꾼(8-5)·수문장(8-10)·정예는 <b>세트 장비</b>를 떨어뜨리기도 한다 (파수꾼 ${Math.round(CH8_SET_DROP.midboss * 100)}% · 수문장 ${Math.round(CH8_SET_DROP.boss * 100)}%). 보스는 보통 보스처럼 다시 나타나기까지 기다린다.</p>${table(['방', '이름', '규칙', '몬스터'], ruleRows)}`)}
+  <h3>차원 소환사</h3>
+  ${card('🔮 계약과 소환', `<p>도감에서 <b>${PACT_KILLS}마리</b> 이상 잡은 종족과 계약해 불러낸다 (몬스터 연구자 노아 → 차원 계약, 셋까지). <b>${PACT_AWAKEN_KILLS}마리</b>면 각성 계약 (위력 ×1.5). 계약할 수 있는 종족 하나마다 소환수 위력 +1% (최대 +60%). 지금 계약 가능한 종족 <b>${p.pactEligible().length}</b>.</p><p>소환수는 피해를 받지 않고 시간이 지나면 사라진다. 기본 공격(차원 구체)으로 맞힌 적을 먼저 노린다. 방어구 계열 <b>계약</b>(계약자의)은 소환수 위력을 올린다.</p>`)}
+  ${card('🌱 새 직업 성장 돕기', `<p><b>성장 가속</b>: 가장 높은 직업 레벨의 70%에 못 미치는 직업은 경험치 ×3. <b>원정대 보너스</b>: 열린 직업들의 레벨 합 25마다 모든 능력치 +1 (지금 +${p.rosterBonus}). 골드·재료·창고·도감·칭호·유물은 모든 직업이 함께 쓴다.</p>`)}
+  <h3>영겁의 증표 콘텐츠</h3>
+  ${table(['콘텐츠', '어디서', '증표'], [
+    ['📅 일일 차원 시련', '시련장 (매일 바뀌는 수호자)', `오늘 기록 등급만큼 (최대 ${trialDayMarks(10000)}) + 어제 순위 보상 (1위 ${rankMarks(1, 10)})`],
+    ['🐉 주간 차원 레이드', '시련장 → 레이드 탭', `오늘 기록만큼 (처치 ${raidDayMarks(10000)}+) + 지난주 순위 보상 (1위 ${rankMarks(1, 10, true)}) · 세트 장비`],
+    ['♾ 무한 러쉬', '해골 전투장 → 무한 러쉬 탭', `처치 수 첫 달성 보상 (최대 ${HORDE_MILESTONES.reduce((a, m) => a + m.marks, 0)}) + 하루 한 번 최고 기록 보상`],
+    ['🏆 업적', '메뉴 → 업적', `${ACHIEVEMENTS.length}개 · 모두 합쳐 ${ACHIEVEMENTS.reduce((a, x) => a + x.marks, 0)}`],
+  ])}
+  ${card('??? · 증표 교환', table(['받는 것', '증표'], EXCHANGE.map((o) => [`${it(o.item, o.n)} <small class="dim">${o.note}</small>`, String(o.cost)])))}
+  ${card('♾ 무한 러쉬 축복', `<p>처치 수가 목표를 넘을 때마다 셋 중 하나를 고른다. 1분 30초마다 보스, 1분마다 몬스터 +18%.</p>${table(['축복', '효과', '단계'], blessRows)}`)}
+  ${card('🌀 균열 서약', `<p>심연 균열에 들어가기 전에 스스로 제약을 건다. 건 서약의 보너스를 모두 더한 만큼 골드·차원 가루가 는다.</p>${table(['서약', '제약', '보상'], vowRows)}`)}
+  <h3>유물 · 세트 장비</h3>
+  ${card('💠 유물', `<p>유물 파편 ${RELIC_CRAFT_SHARDS}개 + ${RELIC_CRAFT_GOLD.toLocaleString()} G → 노아가 무작위 유물로 복원. 등급 ${RELIC_GRADES.map((g) => `<span style="color:${hex(g.color)}">${g.name} ${g.weight}%</span>`).join(' · ')}. 직업마다 ${RELIC_SLOTS}개 장착 (같은 종류는 하나), 분해하면 파편 일부를 돌려받는다. (값은 신화 최대)</p>${table(['유물', '효과'], relicRows)}`)}
+  ${card('◈ 세트 장비', `<p>7단계보다 한 단계 위 능력치(×${SET_STAT_MULT})에 세트 효과. 대장간 → 세트 장비: <b>문장 3개</b>로 원하는 세트·부위를 만들거나, 7단계 <b>유니크 이상 3개를 합성</b>해 무작위 세트를 얻는다. 8장·레이드 보스도 떨어뜨린다.</p>${table(['세트', '효과'], setRows)}`)}
+  `;
 }

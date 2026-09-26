@@ -40,6 +40,8 @@ function hashStr(s: string): number {
 }
 
 export interface TrialEntry {
+  /** 순위표 종류 (없으면 시련). v10: 시련은 날짜 키, 레이드는 주 키, 러쉬는 날짜 키 */
+  board?: 'trial' | 'raid' | 'horde';
   week: string;
   name: string;
   cls: string;
@@ -75,25 +77,34 @@ export async function submitTrial(e: TrialEntry, tries = 3): Promise<{ ok: boole
 
 async function submitTrialOnce(e: TrialEntry): Promise<{ ok: boolean; reason?: string }> {
   const player = deviceId();
-  const body = JSON.stringify({ type: 'trial', ...e, player, check: hashStr(`${e.week}|${player}|${e.score}|${e.seconds}`) % 1000003 });
+  const body = JSON.stringify({ type: 'trial', board: e.board ?? 'trial', ...e, player, check: hashStr(`${e.week}|${player}|${e.score}|${e.seconds}`) % 1000003 });
   try {
     const res = await fetch(FEEDBACK_URL, { method: 'POST', body, headers: { 'Content-Type': 'text/plain;charset=utf-8' }, redirect: 'follow' });
     const j = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
     if (j?.ok) return { ok: true };
     if (j?.error === 'too_fast') return { ok: false, reason: '잠시 뒤에 다시 올려 주세요' };
     if (j?.error === 'unknown_type' || j?.error === 'empty') return { ok: false, reason: '시트 스크립트가 순위를 아직 모릅니다 (스크립트 업데이트 필요)' };
+    if (j?.error === 'bad_data' || j?.error === 'bad_score') return { ok: false, reason: '시트 스크립트를 v10으로 업데이트해야 합니다' };
     return { ok: false, reason: j?.error ?? `HTTP ${res.status}` };
   } catch (err) {
     return { ok: false, reason: `연결 실패 (${String((err as Error)?.message ?? err)})` };
   }
 }
 
+/** 내 순위 (1부터, 없으면 0)와 참가자 수 */
+export async function myRank(board: 'trial' | 'raid' | 'horde', key: string): Promise<{ ok: true; rank: number; total: number } | { ok: false; reason: string }> {
+  const r = await fetchBoard(key, 2, board);
+  if (!r.ok) return r;
+  const i = r.rows.findIndex((x) => x.me);
+  return { ok: true, rank: i + 1, total: r.rows.length };
+}
+
 /** 이번 주 순위 (위에서부터 최대 50명) */
-export async function fetchBoard(week: string, tries = 3): Promise<{ ok: true; rows: BoardRow[] } | { ok: false; reason: string }> {
+export async function fetchBoard(week: string, tries = 3, board: 'trial' | 'raid' | 'horde' = 'trial'): Promise<{ ok: true; rows: BoardRow[] } | { ok: false; reason: string }> {
   // 앱스 스크립트가 가끔 404·5xx를 돌려준다: 잠깐 쉬고 몇 번 다시 묻는다
   let last: { ok: false; reason: string } = { ok: false, reason: '알 수 없음' };
   for (let i = 0; i < tries; i++) {
-    const r = await fetchBoardOnce(week);
+    const r = await fetchBoardOnce(week, board);
     if (r.ok) return r;
     last = r;
     if (!/^HTTP [45]\d\d$|연결 실패/.test(r.reason)) break;
@@ -102,12 +113,13 @@ export async function fetchBoard(week: string, tries = 3): Promise<{ ok: true; r
   return last;
 }
 
-async function fetchBoardOnce(week: string): Promise<{ ok: true; rows: BoardRow[] } | { ok: false; reason: string }> {
+async function fetchBoardOnce(week: string, board: string): Promise<{ ok: true; rows: BoardRow[] } | { ok: false; reason: string }> {
   try {
-    const res = await fetch(`${FEEDBACK_URL}?action=trial&week=${encodeURIComponent(week)}&player=${encodeURIComponent(deviceId())}`, { redirect: 'follow' });
+    const res = await fetch(`${FEEDBACK_URL}?action=trial&board=${board}&week=${encodeURIComponent(week)}&player=${encodeURIComponent(deviceId())}`, { redirect: 'follow' });
     const j = (await res.json().catch(() => null)) as { ok?: boolean; rows?: BoardRow[]; error?: string } | null;
     if (j?.ok && Array.isArray(j.rows)) return { ok: true, rows: j.rows };
     if (j?.ok) return { ok: false, reason: '시트 스크립트가 순위를 아직 모릅니다 (스크립트 업데이트 필요)' };
+    if (j?.error === 'bad_week') return { ok: false, reason: '시트 스크립트를 v10으로 업데이트해야 합니다' };
     return { ok: false, reason: j?.error ?? `HTTP ${res.status}` };
   } catch (err) {
     return { ok: false, reason: `연결 실패 (${String((err as Error)?.message ?? err)})` };

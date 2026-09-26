@@ -50,9 +50,18 @@ export function makeTestSave(): SaveData {
     potion_high: 30,
     potion_mid: 20,
     return_stone: 10,
+    // v10
+    eon_mark: 500,
+    relic_shard: 60,
+    set_breaker: 20,
+    set_guard: 20,
+    set_swift: 20,
+    set_pact: 20,
   });
   d.storage = st;
-  const flags = ['intro', 'returned', 'home', 'factoryBuilt', 'tool_pickaxe', 'tool_axe', 'legend', 'endgame', 'endingA', 'smith3', 'resonatorHint', 'stone1Talk', 'stoneTalk3', 'stoneTalk4', 'stoneTalk5', 'stoneTalk6', 'stoneTalk7'];
+  const flags = ['intro', 'returned', 'home', 'factoryBuilt', 'tool_pickaxe', 'tool_axe', 'legend', 'endgame', 'endingA', 'smith3', 'resonatorHint', 'stone1Talk', 'stoneTalk3', 'stoneTalk4', 'stoneTalk5', 'stoneTalk6', 'stoneTalk7', 'ch8'];
+  // v10: 차원 소환사 계약을 시험할 수 있게 도감 몇 종족
+  d.bestiary = { t7_melee: 1200, void_knight: 400, void_witch: 300, skel_archer: 150, orc_berserker: 120 };
   for (const f of flags) d.flags[f] = 1;
   for (const t of Object.values(BUILDINGS)) if (t.blueprint) d.flags[`bp_${t.type}`] = 1;
   for (const t of UPGRADABLE) for (let lv = 2; lv <= MAX_BUILDING_LEVEL; lv++) d.flags[`bp_${t}_lv${lv}`] = 1;

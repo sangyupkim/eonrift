@@ -1,12 +1,13 @@
 import type { Rng } from '../core/rng';
 import type { EndgameState } from './endgame';
+import { ACH_BY_ID } from './achievements';
 import { TIER_MANA_PLATE, TIER_PLATE } from './items';
 
 /**
  * 엔딩 이후 성장: 각인 · 칭호 · 초월 · 음식. 모두 같은 '보너스' 이름표로 능력치에 더해진다.
  * % 보너스는 비율(0.03 = 3%), 치명타만 %p.
  */
-export type BonusKey = 'atk' | 'hp' | 'def' | 'crit' | 'speed' | 'cdr' | 'gold' | 'move' | 'ult' | 'mp' | 'exp' | 'mpRegen';
+export type BonusKey = 'atk' | 'hp' | 'def' | 'crit' | 'speed' | 'cdr' | 'gold' | 'move' | 'ult' | 'mp' | 'exp' | 'mpRegen' | 'summon';
 export type Bonus = Partial<Record<BonusKey, number>>;
 
 export const BONUS_NAMES: Record<BonusKey, string> = {
@@ -22,6 +23,7 @@ export const BONUS_NAMES: Record<BonusKey, string> = {
   mp: '최대 MP',
   exp: '경험치',
   mpRegen: 'MP 재생',
+  summon: '소환수 위력',
 };
 
 /** 보너스 한도 (각인·칭호·음식을 모두 더한 값) */
@@ -112,6 +114,8 @@ export interface TitleCtx {
   /** 주간 시련: 가장 높았던 등급 번호, 기록을 남긴 주 수 */
   trialTop?: number;
   trialWeeks?: number;
+  /** 보상을 받은 업적 (v10) */
+  ach?: string[];
 }
 
 export interface TitleDef {
@@ -136,10 +140,25 @@ export const TITLES: TitleDef[] = [
   { id: 'rift20', name: '심연의 주인', cond: '심연 균열 20단계 돌파', bonus: { atk: 0.04 }, check: (c) => c.end.riftBest >= 20 },
   { id: 'trans10', name: '초월자', cond: '초월 레벨 10', bonus: { crit: 1 }, check: (c) => c.transcend >= 10 },
   { id: 'trans50', name: '경지를 넘은 자', cond: '초월 레벨 50', bonus: { atk: 0.03 }, check: (c) => c.transcend >= 50 },
-  { id: 'trial_gold', name: '시련의 강자', cond: '주간 차원 시련 골드 등급', bonus: { hp: 0.02 }, check: (c) => (c.trialTop ?? -1) >= 2 },
-  { id: 'trial_dim', name: '차원 시련의 정점', cond: '주간 차원 시련 차원 등급', bonus: { atk: 0.03 }, check: (c) => (c.trialTop ?? -1) >= 4 },
-  { id: 'trial_5', name: '꾸준한 도전자', cond: '주간 차원 시련 5주 참여', bonus: { gold: 0.1 }, check: (c) => (c.trialWeeks ?? 0) >= 5 },
+  { id: 'trial_gold', name: '시련의 강자', cond: '차원 시련 골드 등급', bonus: { hp: 0.02 }, check: (c) => (c.trialTop ?? -1) >= 2 },
+  { id: 'trial_dim', name: '차원 시련의 정점', cond: '차원 시련 차원 등급', bonus: { atk: 0.03 }, check: (c) => (c.trialTop ?? -1) >= 4 },
+  { id: 'trial_5', name: '꾸준한 도전자', cond: '차원 시련 5번 참여 (날짜별)', bonus: { gold: 0.1 }, check: (c) => (c.trialWeeks ?? 0) >= 5 },
   { id: 'engrave5', name: '각인 장인', cond: '5단 각인 새기기', bonus: { def: 0.03 }, check: (c) => c.engrave5 >= 1 },
+  // v10: 업적 칭호
+  ...(
+    [
+      ['kill4', { atk: 0.02 }],
+      ['boss3', { atk: 0.02, hp: 0.02 }],
+      ['dodge3', { move: 0.03 }],
+      ['gold3', { gold: 0.1 }],
+      ['relic3', { hp: 0.03 }],
+      ['mythic1', { crit: 1.5 }],
+      ['raid2', { atk: 0.03 }],
+      ['rush4', { atk: 0.02, hp: 0.04 }],
+      ['ch8', { atk: 0.03, hp: 0.03 }],
+      ['classes', { exp: 0.1, atk: 0.02 }],
+    ] as [string, Bonus][]
+  ).map(([id, bonus]) => ({ id: `ach_${id}`, name: ACH_BY_ID[id]?.title ?? id, cond: `업적 「${ACH_BY_ID[id]?.name ?? id}」`, bonus, check: (c: TitleCtx) => !!c.ach?.includes(id) })),
 ];
 
 // ---------------- 초월 ----------------

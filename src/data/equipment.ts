@@ -3,6 +3,7 @@ import { TIER_MANA_PLATE, TIER_PLATE } from './items';
 import { CLASS_ORDER, CLASSES, type ClassId } from './classes';
 import type { BonusKey, EngraveLine } from './bonus';
 import { rollSpecials, type SpecialLine } from './special';
+import { SET_STAT_MULT, SETS, type SetId } from './sets';
 
 export type EquipSlot = 'weapon' | 'helmet' | 'armor' | 'pants' | 'boots' | 'ring' | 'necklace';
 
@@ -33,9 +34,11 @@ export interface Equip {
   series?: SeriesId;
   /** 특수 옵션 (유니크 1줄 · 전설 2줄 · 차원 3줄) */
   sp?: SpecialLine[];
+  /** 세트 장비 (v10): 7단계보다 한 단계 위 능력치(×1.4) + 세트 효과 */
+  set?: SetId;
 }
 
-export type SeriesId = 'guard' | 'arcane' | 'hunter';
+export type SeriesId = 'guard' | 'arcane' | 'hunter' | 'pact';
 /**
  * 방어구·장신구 계열. 한 부위마다 기본 옵션이 붙고 등급·강화·단계가 높을수록 커진다.
  * 수호(검사에게 어울림): 방어·체력 · 비전(마법사): 재사용 감소·전투 중 MP 재생·MP · 사냥(궁수): 공격 속도·치명타·이동
@@ -44,6 +47,7 @@ export const SERIES: Record<SeriesId, { name: string; prefix: string; fits: Clas
   guard: { name: '수호', prefix: '수호자의', fits: 'sword', color: 0x6ab0ff, bonus: { def: 0.02, hp: 0.02 } },
   arcane: { name: '비전', prefix: '현자의', fits: 'mage', color: 0xc08aff, bonus: { cdr: 0.008, mpRegen: 0.003, mp: 0.03 } },
   hunter: { name: '사냥', prefix: '사냥꾼의', fits: 'archer', color: 0x7aff9a, bonus: { speed: 0.012, crit: 0.6, move: 0.006 } },
+  pact: { name: '계약', prefix: '계약자의', fits: 'summoner', color: 0xff8ae0, bonus: { summon: 0.03, mp: 0.02, cdr: 0.004 } },
 };
 export const SERIES_IDS = Object.keys(SERIES) as SeriesId[];
 
@@ -80,6 +84,7 @@ export function slotName(slot: EquipSlot, cls?: ClassId): string {
 }
 
 export function equipName(e: Equip): string {
+  if (e.set) return `${SETS[e.set].name}의 ${slotName(e.slot, e.cls)}${e.plus > 0 ? ` +${e.plus}` : ''}`;
   return `${e.series ? `${SERIES[e.series].prefix} ` : ''}${MATERIAL[e.tier - 1]} ${slotName(e.slot, e.cls)}${e.plus > 0 ? ` +${e.plus}` : ''}`;
 }
 
@@ -93,7 +98,7 @@ export interface EquipStats {
 
 export function equipStats(e: Equip): EquipStats {
   if (durability(e) <= 0) return { atk: 0, def: 0, hp: 0, mp: 0, crit: 0 };
-  const m = GRADES[e.grade].mult * (1 + e.plus * 0.12);
+  const m = GRADES[e.grade].mult * (1 + e.plus * 0.12) * (e.set ? SET_STAT_MULT : 1);
   // 단계마다 방어구 ×1.9 (1, 1.9, 3.6, 6.9, 13, 25, 47)
   const t = Math.pow(1.9, e.tier - 1);
   const s: EquipStats = { atk: 0, def: 0, hp: 0, mp: 0, crit: 0 };
@@ -160,10 +165,11 @@ export function rollGrade(r: number, bonus: number, dimChance = 0): number {
 }
 
 /** 드롭 장비: 무기는 모든 직업 것이 나오고, 방어구·장신구는 계열(수호·비전·사냥)이 붙는다 */
-export function rollEquip(rng: Rng, tier: number, _cls: ClassId, bonus: number, dimChance = 0): Equip {
+export function rollEquip(rng: Rng, tier: number, _cls: ClassId, bonus: number, dimChance = 0, classes: ClassId[] = CLASS_ORDER): Equip {
   const grade = rollGrade(rng.next(), bonus, dimChance);
   const slot = rng.next() < 0.3 ? 'weapon' : rng.pick(EQUIP_SLOTS.slice(1));
-  const cls = slot === 'weapon' ? rng.pick(CLASS_ORDER) : undefined;
+  // 무기는 열린 직업의 것만 나온다
+  const cls = slot === 'weapon' ? rng.pick(classes.length ? classes : CLASS_ORDER) : undefined;
   const e: Equip = { uid: newUid(), slot, cls, tier, grade, plus: 0, series: rollSeries(slot, rng.next()) };
   return withSpecials(e, () => rng.next());
 }
@@ -175,7 +181,7 @@ export function withSpecials(e: Equip, rand: () => number = Math.random): Equip 
 }
 
 export function equipValue(e: Equip): number {
-  return Math.round(20 * e.tier * GRADES[e.grade].mult * (1 + e.plus * 0.3));
+  return Math.round(20 * e.tier * GRADES[e.grade].mult * (1 + e.plus * 0.3) * (e.set ? 3 : 1));
 }
 
 /** 높은 단계일수록 사냥 골드가 더 빠르게 늘어나므로 강화·수리 골드도 단계마다 5%씩 더 든다 (7단계 ×1.3) */

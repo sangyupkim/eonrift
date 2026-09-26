@@ -84,14 +84,19 @@ describe('장비 계열 (수호·비전·사냥)', () => {
     const p = new Progress(newSave());
     p.cls.equipment.boots = { uid: 'b', slot: 'boots', tier: 3, grade: 2, plus: 0, series: 'hunter' };
     expect(p.bonus('speed')).toBeGreaterThan(0);
-    // 드롭 무기는 모든 직업 것이 나온다
+    // 드롭 무기는 모든 직업 것이 나온다 (v10: 열린 직업만 넘기면 그 직업 것만)
     const rng = new Rng(3);
     const classes = new Set<string>();
+    const opened = new Set<string>();
     for (let i = 0; i < 300; i++) {
       const e = rollEquip(rng, 3, 'sword', 0);
       if (e.slot === 'weapon') classes.add(e.cls!);
       else expect(e.series).toBeDefined();
+      const o = rollEquip(rng, 3, 'sword', 0, 0, ['sword', 'mage', 'archer']);
+      if (o.slot === 'weapon') opened.add(o.cls!);
     }
-    expect(classes.size).toBe(3);
+    expect(classes.size).toBe(4);
+    expect(opened.has('summoner')).toBe(false);
+    expect(opened.size).toBe(3);
   });
 });

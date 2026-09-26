@@ -96,6 +96,10 @@ export interface GenOptions {
   nodeMult?: number;
   /** 무한의 탑 층 (generateTowerFloor로 만든다) */
   tower?: boolean;
+  /** 레이드 투기장 (탑 층보다 넓다) */
+  arena?: 'raid';
+  /** 무한 러쉬 벌판 */
+  horde?: boolean;
 }
 export type FarmKind = 'wood' | 'ore' | 'gold';
 
@@ -395,11 +399,9 @@ function tryGenerate(rng: Rng, seed: number, tier: number, stage: number, opts: 
  * 무한의 탑 한 층: 둥근 단 하나. 가장자리는 탑의 벽, 가운데에 위층으로 오르는 문.
  * 몬스터는 배치하지 않는다 (웨이브로 나온다)
  */
-export function generateTowerFloor(seed: number, tier: number): DungeonData {
+export function generateTowerFloor(seed: number, tier: number, size = 21, r = 8.6): DungeonData {
   const rng = new Rng(seed);
-  const size = 21;
   const c = (size - 1) / 2;
-  const r = 8.6;
   const cells = new Uint8Array(size * size);
   const roomIndex = new Int16Array(size * size).fill(-1);
   for (let y = 0; y < size; y++)
@@ -410,7 +412,7 @@ export function generateTowerFloor(seed: number, tier: number): DungeonData {
       }
   const theme = themeForTier(tier);
   const decor: DecorSpawn[] = [];
-  for (let i = 0; i < 26; i++) {
+  for (let i = 0; i < Math.round(26 * (r / 8.6) ** 2); i++) {
     const a = rng.range(0, Math.PI * 2);
     const d = rng.range(2.5, r - 0.8);
     const dk = rng.pick(theme.decor);
@@ -418,6 +420,50 @@ export function generateTowerFloor(seed: number, tier: number): DungeonData {
   }
   const room: Room = { id: 0, x: 1, y: 1, w: size - 2, h: size - 2, type: 'exit' };
   return { seed, tier, stage: 1, width: size, height: size, cells, rooms: [room], roomIndex, start: { x: c, y: c + 6 }, exit: { x: c, y: c }, nodes: [], monsters: [], decor, tower: true };
+}
+
+/**
+ * 무한 러쉬 벌판 (v10): 한 화면에 다 보이지 않는 넓은 들판. 가장자리는 둥글게 깎고,
+ * 군데군데 작은 바위섬(구멍)을 둬서 몬스터를 따돌릴 길목을 만든다. 가운데에서 시작한다.
+ */
+export function generateHordeField(seed: number, tier: number): DungeonData {
+  const rng = new Rng(seed);
+  const size = 56;
+  const c = (size - 1) / 2;
+  const cells = new Uint8Array(size * size);
+  const roomIndex = new Int16Array(size * size).fill(-1);
+  for (let y = 0; y < size; y++)
+    for (let x = 0; x < size; x++) {
+      // 둥근 사각형 들판 (가장자리가 조금씩 들쭉날쭉)
+      const dx = Math.max(0, Math.abs(x - c) - 16);
+      const dy = Math.max(0, Math.abs(y - c) - 16);
+      if (Math.hypot(dx, dy) <= 9.5 + Math.sin(x * 0.7 + y * 0.3) * 0.6) {
+        cells[y * size + x] = CELL_FLOOR;
+        roomIndex[y * size + x] = 0;
+      }
+    }
+  // 바위섬: 가운데(시작 지점)에서 떨어진 곳에 2~3칸짜리 구멍
+  for (let i = 0; i < 16; i++) {
+    const a = rng.range(0, Math.PI * 2);
+    const d = rng.range(7, 20);
+    const bx = Math.round(c + Math.cos(a) * d);
+    const by = Math.round(c + Math.sin(a) * d);
+    const w = rng.int(2, 3);
+    const h = rng.int(2, 3);
+    for (let y = by; y < by + h; y++) for (let x = bx; x < bx + w; x++) if (x > 1 && y > 1 && x < size - 2 && y < size - 2) cells[y * size + x] = CELL_VOID;
+  }
+  const theme = themeForTier(tier);
+  const decor: DecorSpawn[] = [];
+  for (let i = 0; i < 260; i++) {
+    const x = rng.range(2, size - 2);
+    const y = rng.range(2, size - 2);
+    if (cells[Math.floor(y) * size + Math.floor(x)] !== CELL_FLOOR) continue;
+    const dk = rng.pick(theme.decor);
+    decor.push({ kind: dk.kind, color: dk.color, x, y, rotation: rng.range(0, Math.PI * 2), scale: rng.range(0.7, 1.3) });
+  }
+  const room: Room = { id: 0, x: 1, y: 1, w: size - 2, h: size - 2, type: 'combat' };
+  const ci = Math.round(c);
+  return { seed, tier, stage: 1, width: size, height: size, cells, rooms: [room], roomIndex, start: { x: ci, y: ci + 1 }, exit: { x: ci, y: ci - 3 }, nodes: [], monsters: [], decor };
 }
 
 /** 격자 위의 최단 거리 (4방향). 도달할 수 없는 칸은 -1 */

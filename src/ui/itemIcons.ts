@@ -76,7 +76,7 @@ export function monsterIconUrl(sp: SpeciesDef, tier: number, crowned = false): s
   const key = `m:${sp.id}`;
   const hit = cache.get(key);
   if (hit !== undefined) return hit;
-  const rig = buildMonster(material, sp.model, sp.colors ?? MONSTER_COLORS[tier - 1], crowned, sp.glow);
+  const rig = buildMonster(material, sp.model, sp.colors ?? MONSTER_COLORS[Math.min(MONSTER_COLORS.length, Math.max(1, tier)) - 1], crowned, sp.glow);
   rig.root.rotation.y = 0.2;
   const h = rig.height;
   const url = snap(rig.root, 120, 120, Math.max(1.05, h * 0.62), h * 0.42);
@@ -108,7 +108,7 @@ export function toolIconUrl(kind: 'pickaxe' | 'axe', tier: number): string {
 }
 
 export function equipIconUrl(e: Equip): string {
-  return geoIcon(`e:${e.slot}:${e.cls ?? ''}:${e.tier}:${e.grade}:${e.series ?? ''}`, () => buildEquipGeometry(e));
+  return geoIcon(`e:${e.slot}:${e.cls ?? ''}:${e.tier}:${e.grade}:${e.series ?? ''}:${e.set ?? ''}`, () => buildEquipGeometry(e));
 }
 
 /** 대화창 초상화: 허리 위부터 크게 */

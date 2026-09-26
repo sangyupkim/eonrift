@@ -85,6 +85,13 @@ const defs: ItemDef[] = [
   { id: 'potion_high', name: '상급 치유 물약', color: 0xd04aff, kind: 'consumable', value: 160, description: 'HP·MP를 모두 회복한다. 연금 솥: 중급 치유 물약 + 상급 마력 정수.' },
   { id: 'return_stone', name: '귀환석', color: 0x7affc0, kind: 'consumable', value: 30, description: '던전에서 언제든 전리품을 가지고 마을로 돌아간다.' },
   { id: 'bag_kit', name: '차원가방 확장 키트', color: 0xb07aff, kind: 'consumable', value: 120, description: '차원가방을 한 칸 늘린다 (최대 12칸). 제작대 조립: 마공 합금 + 톱니 부품 + 마력 철.' },
+  // v10: 영겁의 증표 (차원 시련·차원 레이드·무한 러쉬·업적 보상) → ??? 에게 가져가 교환
+  { id: 'eon_mark', name: '영겁의 증표', color: 0xffd86a, kind: 'key', value: 0, description: '일일 차원 시련·주간 차원 레이드·무한 러쉬·업적에서 얻는 증표. 마을 남서쪽의 ???에게 가져가면 유물 파편이나 세트 문장으로 바꿔 준다.' },
+  { id: 'relic_shard', name: '유물 파편', color: 0xe8b0ff, kind: 'key', value: 0, description: '오래된 유물의 조각. 몬스터 연구자 노아에게 5개를 가져가면 무작위 유물로 복원해 준다 (종류·등급 모두 무작위).' },
+  { id: 'set_breaker', name: '파괴자의 문장', color: 0xff6a4a, kind: 'key', value: 0, description: '「균열 파괴자」 세트 장비를 만드는 문장. 대장간(고른)의 세트 제작에서 3개를 쓴다.' },
+  { id: 'set_guard', name: '수호자의 문장', color: 0x6ab0ff, kind: 'key', value: 0, description: '「영겁 수호」 세트 장비를 만드는 문장. 대장간(고른)의 세트 제작에서 3개를 쓴다.' },
+  { id: 'set_swift', name: '질주자의 문장', color: 0x7affb0, kind: 'key', value: 0, description: '「차원 질주」 세트 장비를 만드는 문장. 대장간(고른)의 세트 제작에서 3개를 쓴다.' },
+  { id: 'set_pact', name: '계약자의 문장', color: 0xc08aff, kind: 'key', value: 0, description: '「계약의 서약」 세트 장비를 만드는 문장. 대장간(고른)의 세트 제작에서 3개를 쓴다.' },
   { id: 'resonator', name: '차원석 공명 장치', color: 0x5ef0ff, kind: 'key', value: 0, description: '일곱 차원석의 힘을 하나로 모으는 장치.' },
 ];
 

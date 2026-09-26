@@ -20,7 +20,9 @@ export type SpecialKey =
   // 방어구
   | 'hp' | 'def' | 'dmgReduce' | 'dodge' | 'mp' | 'cdr' | 'lowGuard' | 'hitHeal' | 'regen' | 'mpRegen' | 'move' | 'speed' | 'dodgeCharge'
   // 장신구
-  | 'str' | 'int' | 'dex' | 'vit' | 'mag' | 'atk' | 'crit' | 'ult';
+  | 'str' | 'int' | 'dex' | 'vit' | 'mag' | 'atk' | 'crit' | 'ult'
+  // 세트 효과·유물 전용 (장비 특수 옵션으로는 나오지 않는다)
+  | 'skillDmg' | 'summonDmg' | 'summonCount' | 'dodgeBuff';
 
 export interface SpecialLine {
   k: SpecialKey;
@@ -77,6 +79,10 @@ export const SPECIALS: Record<SpecialKey, SpecialDef> = {
   atk: { min: 1.5, max: 4, text: (v) => `공격력 +${pct(v)}` },
   crit: { min: 1, max: 3, text: (v) => `치명타 확률 +${pct(v)}` },
   ult: { min: 3, max: 8, text: (v) => `궁극기 위력 +${pct(v)}` },
+  skillDmg: { min: 5, max: 12, text: (v) => `스킬 피해 +${pct(v)}` },
+  summonDmg: { min: 6, max: 15, text: (v) => `소환수 피해 +${pct(v)}` },
+  summonCount: { min: 1, max: 1, int: true, fixed: true, text: (v) => `소환수 수 +${v}` },
+  dodgeBuff: { min: 10, max: 30, text: (v) => `회피한 뒤 3초 동안 공격력 +${pct(v)}` },
 };
 
 const ARMOR_SHARED: SpecialKey[] = ['hp', 'def', 'dmgReduce', 'dodge'];
@@ -88,6 +94,7 @@ export function specialPool(slot: string, cls?: ClassId): SpecialKey[] {
     case 'weapon':
       if (cls === 'mage') return ['mpOnHit', 'cdOnHit', 'arcBurst', 'killMp', 'bossDmg', 'critDmg'];
       if (cls === 'archer') return ['hasteOnHit', 'double', 'swiftOnHit', 'critDmg', 'execute', 'bossDmg'];
+      if (cls === 'summoner') return ['summonDmg', 'mpOnHit', 'cdOnHit', 'killMp', 'bossDmg', 'critDmg'];
       return ['lifesteal', 'double', 'killHeal', 'execute', 'bossDmg', 'critDmg'];
     case 'helmet':
       return [...ARMOR_SHARED, 'mp', 'cdr'];
@@ -173,7 +180,8 @@ export function sumSpecials(lines: SpecialLine[]): SpecialTotals {
   cap('dmgReduce', 20);
   cap('double', 40);
   cap('lowGuard', 40);
-  cap('dodgeCharge', 1);
+  cap('dodgeCharge', 2);
+  cap('summonCount', 2);
   return t;
 }
 

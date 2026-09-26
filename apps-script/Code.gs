@@ -39,7 +39,7 @@ function scoreText(score) {
 function doGet(e) {
   try {
     const p = (e && e.parameter) || {};
-    if (p.action === 'trial') return out(trialBoard(String(p.week || ''), String(p.player || '')));
+    if (p.action === 'trial') return out(trialBoard(String(p.week || ''), String(p.player || ''), String(p.board || 'trial')));
     return out({ ok: true, sheet: book().getName() });
   } catch (err) {
     return out({ ok: false, error: String(err) });
@@ -74,41 +74,64 @@ function feedback(d) {
   return { ok: true };
 }
 
-// ---------------- 주간 시련 순위 ----------------
-// 열: 주 | 기기 | 이름 | 직업 | 레벨 | 점수 | 기록 | 걸린 시간(초) | 보스 | 버전 | 올린 시각
-function rankSheet() {
+// ---------------- 순위 (v10: 일일 차원 시련 · 주간 차원 레이드 · 무한 러쉬) ----------------
+// 열: 날짜/주 | 기기 | 이름 | 직업 | 레벨 | 점수 | 기록 | 걸린 시간(초) | 보스 | 버전 | 올린 시각
+// 순위표마다 시트가 따로 있다. 예전(주간 시련) 기록은 '시련 순위' 시트에 그대로 남는다.
+const BOARDS = {
+  trial: { sheet: RANK_SHEET, maxScore: 10000 + TRIAL_TIME * 10, maxSec: TRIAL_TIME, text: scoreText },
+  raid: { sheet: '레이드 순위', maxScore: 10000 + 300 * 10, maxSec: 300, text: (sc) => (sc >= 10000 ? '처치 ' + fmt(300 - (sc - 10000) / 10) : (sc / 100).toFixed(2) + '%') },
+  horde: { sheet: '무한 러쉬 순위', maxScore: 1000000, maxSec: 36000, text: (sc) => sc + '마리' },
+};
+
+function fmt(t) {
+  t = Math.max(0, Math.round(t));
+  return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0');
+}
+
+function boardOf(name) {
+  return BOARDS[name] || BOARDS.trial;
+}
+
+function rankSheet(board) {
   const ss = book();
-  const sh = ss.getSheetByName(RANK_SHEET) || ss.insertSheet(RANK_SHEET);
+  const name = boardOf(board).sheet;
+  const sh = ss.getSheetByName(name) || ss.insertSheet(name);
   if (sh.getLastRow() === 0) {
-    sh.appendRow(['주', '기기', '이름', '직업', '레벨', '점수', '기록', '걸린 시간(초)', '보스', '버전', '올린 시각']);
+    sh.appendRow(['날짜/주', '기기', '이름', '직업', '레벨', '점수', '기록', '걸린 시간(초)', '보스', '버전', '올린 시각']);
     sh.setFrozenRows(1);
   }
   return sh;
 }
 
+// 주 키(2026-W39) 또는 날짜 키(2026-09-26)
+const KEY_RE = /^\d{4}-(W\d{2}|\d{2}-\d{2})$/;
+
 function trialSubmit(d) {
+  const board = String(d.board || 'trial');
+  const B = boardOf(board);
   const week = String(d.week || '');
   const player = String(d.player || '').slice(0, 60);
   const name = String(d.name || '').trim().slice(0, 12);
   const score = Math.floor(Number(d.score));
   const seconds = Math.floor(Number(d.seconds));
-  if (!/^\d{4}-W\d{2}$/.test(week) || !player || !name) return { ok: false, error: 'bad_data' };
-  if (!(score >= 0 && score <= 10000 + TRIAL_TIME * 10) || !(seconds >= 0 && seconds <= TRIAL_TIME)) return { ok: false, error: 'bad_score' };
+  if (!KEY_RE.test(week) || !player || !name) return { ok: false, error: 'bad_data' };
+  if (!(score >= 0 && score <= B.maxScore) || !(seconds >= 0 && seconds <= B.maxSec)) return { ok: false, error: 'bad_score' };
   if (Number(d.check) !== hashStr(week + '|' + player + '|' + score + '|' + seconds) % 1000003) return { ok: false, error: 'bad_check' };
   const cache = CacheService.getScriptCache();
-  const key = 't_' + player;
+  const key = 't_' + board + '_' + player;
   if (cache.get(key)) return { ok: false, error: 'too_fast' };
   cache.put(key, '1', 10);
 
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
-    const sh = rankSheet();
+    const sh = rankSheet(board);
     const rows = sh.getLastRow() > 1 ? sh.getRange(2, 1, sh.getLastRow() - 1, 6).getValues() : [];
-    const row = [week, player, safe(name, 12), safe(d.cls, 10), Number(d.level) || 1, score, scoreText(score), seconds, safe(d.boss, 20), safe(d.version, 10), new Date()];
+    // 날짜 키는 시트가 날짜로 바꾸지 않게 글자로 넣는다
+    const row = ["'" + week, player, safe(name, 12), safe(d.cls, 10), Number(d.level) || 1, score, B.text(score), seconds, safe(d.boss, 20), safe(d.version, 10), new Date()];
     for (let i = 0; i < rows.length; i++) {
-      if (String(rows[i][0]) === week && String(rows[i][1]) === player) {
-        // 같은 주·같은 기기: 더 좋은 기록일 때만 바꾸고, 이름은 늘 새로
+      if (keyOf(rows[i][0]) === week && String(rows[i][1]) === player) {
+        // 같은 날(주)·같은 기기: 더 좋은 기록일 때만 바꾸고, 이름은 늘 새로
         if (score > Number(rows[i][5])) sh.getRange(i + 2, 1, 1, row.length).setValues([row]);
         else sh.getRange(i + 2, 3).setValue(row[2]);
         return { ok: true };
@@ -121,16 +144,22 @@ function trialSubmit(d) {
   }
 }
 
-function trialBoard(week, player) {
-  if (!/^\d{4}-W\d{2}$/.test(week)) return { ok: false, error: 'bad_week' };
-  const sh = rankSheet();
+function trialBoard(week, player, board) {
+  if (!KEY_RE.test(week)) return { ok: false, error: 'bad_week' };
+  const sh = rankSheet(board);
   if (sh.getLastRow() <= 1) return { ok: true, rows: [] };
   const rows = sh
     .getRange(2, 1, sh.getLastRow() - 1, 8)
     .getValues()
-    .filter((r) => String(r[0]) === week)
+    // 시트가 날짜 칸을 날짜로 바꿔 버린 경우도 같은 키로 본다
+    .filter((r) => keyOf(r[0]) === week)
     .map((r) => ({ name: String(r[2]).replace(/^'/, ''), cls: String(r[3]), level: Number(r[4]) || 1, score: Number(r[5]) || 0, seconds: Number(r[7]) || 0, me: String(r[1]) === player }))
     .sort((a, b) => b.score - a.score)
     .slice(0, 50);
   return { ok: true, rows };
+}
+
+function keyOf(v) {
+  if (v instanceof Date) return Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  return String(v);
 }

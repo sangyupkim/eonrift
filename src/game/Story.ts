@@ -22,6 +22,9 @@ export function objective(p: Progress, quests: Quests): string {
   if (stones >= 3 && !f('smith3')) return '대장장이 고른과 이야기하자';
   if (stones >= 4 && !p.data.unlockedClasses.includes('archer')) return '마을 남서쪽의 수상한 인물을 찾아가자';
   if (stones < 7) return `${stones + 1}-10의 수호자를 쓰러뜨리자 (차원석 ${stones}/7)`;
+  if (f('endgame') && !f('ch8')) return '마을 남서쪽의 ???에게 차원 포탈 이야기를 듣자';
+  if (f('ch8Boss') && !p.data.unlockedClasses.includes('summoner')) return '???와 이야기하자 (포탈에서 풀려난 사람)';
+  if (f('ch8') && (p.data.ch8?.cleared ?? 0) < 10) return `8장 갈라진 차원: 8-${(p.data.ch8?.cleared ?? 0) + 1}에 도전하자 (차원문 광장 8번 문)`;
   if (f('endgame')) return '차원의 끝에 도전하자';
   if (!f('resonatorHint')) return '마공학자 세라와 이야기하자';
   if (p.count('resonator') === 0) return '차원집 제작대(조립 탭)에서 차원석 공명 장치를 만들자';
@@ -46,6 +49,8 @@ export function scriptFor(npc: NpcId, p: Progress): string {
       return 'smith_idle';
     case 'stranger':
       if (!p.data.unlockedClasses.includes('archer')) return 'secret';
+      if (f('endgame') && !f('ch8')) return 'ch8_intro';
+      if (f('ch8Boss') && !p.data.unlockedClasses.includes('summoner')) return 'ch8_join';
       return 'stranger_idle';
     case 'guide':
       return stones >= 1 ? 'guide_after_stone' : 'guide_idle';

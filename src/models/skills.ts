@@ -147,6 +147,34 @@ export function buildSkillGeometry(cls: ClassId, index: number): BufferGeometry 
     case 'archer:7': // 용의 사격: 황금빛 거대한 화살
       g = [...arrow(-0.8, 0, 0, 0xffd04a, 1.1), part(new TorusGeometry(0.26, 0.05, 5, 16), 0xffc04a, { rot: [0, Math.PI / 2, 0.8] }), part(new TorusGeometry(0.38, 0.03, 5, 18), 0xfff0a0, { rot: [0, Math.PI / 2, 0.8], pos: [-0.15, -0.15, 0] })];
       break;
+    // ---- 차원 소환사 (v10) ----
+    case 'summoner:0': // 계약 소환: 문장 고리 + 짐승 머리
+      g = [part(new TorusGeometry(0.42, 0.04, 5, 20), 0xff5ae0, { rot: [1.2, 0, 0], pos: [0, -0.25, 0] }), part(new ConeGeometry(0.2, 0.5, 4), 0x8a5ad0, { pos: [0, 0.1, 0], rot: [0, 0, Math.PI / 2] }), part(new ConeGeometry(0.07, 0.2, 4), 0xffffff, { pos: [-0.12, 0.3, 0] }), part(new ConeGeometry(0.07, 0.2, 4), 0xffffff, { pos: [0.08, 0.3, 0] })];
+      break;
+    case 'summoner:1': // 차원 정령: 두 구슬
+      g = [part(new OctahedronGeometry(0.2), 0x5ef0ff, { pos: [-0.22, 0.05, 0] }), part(new OctahedronGeometry(0.2), 0xff8ae0, { pos: [0.24, -0.08, 0] }), part(new TorusGeometry(0.4, 0.03, 4, 16), 0xe0d0ff, { rot: [1.3, 0, 0] })];
+      break;
+    case 'summoner:2': // 차원문: 소용돌이 고리
+      g = [part(new TorusGeometry(0.4, 0.07, 6, 20), 0xb67cff), part(new TorusGeometry(0.26, 0.05, 6, 16), 0xff5ae0), part(new SphereGeometry(0.12, 8, 6), 0x1a0a2a)];
+      break;
+    case 'summoner:3': // 영혼 결속: 이어진 두 고리
+      g = [part(new TorusGeometry(0.26, 0.05, 5, 14), 0xff5ae0, { pos: [-0.16, 0, 0] }), part(new TorusGeometry(0.26, 0.05, 5, 14), 0x5ef0ff, { pos: [0.16, 0, 0], rot: [0, Math.PI / 2, 0] })];
+      break;
+    case 'summoner:4': // 희생: 터지는 수정
+      g = [part(new OctahedronGeometry(0.22), 0xff5ae0), ...[0, 1, 2, 3, 4, 5].map((i) => part(new ConeGeometry(0.06, 0.3, 4), 0xffc0f0, { pos: [Math.cos(i) * 0.4, Math.sin(i) * 0.4, 0], rot: [0, 0, i - Math.PI / 2] }))];
+      break;
+    case 'summoner:5': // 차원 보호막: 육각 방패
+      g = [part(new CylinderGeometry(0.42, 0.42, 0.08, 6), 0x6a4aaa, { rot: [Math.PI / 2, 0, 0] }), part(new CylinderGeometry(0.3, 0.3, 0.1, 6), 0xb67cff, { rot: [Math.PI / 2, 0, 0], pos: [0, 0, 0.03] }), part(new OctahedronGeometry(0.1), 0x5ef0ff, { pos: [0, 0, 0.1] })];
+      break;
+    case 'summoner:6': // 차원 군단: 여러 짐승 머리
+      g = [-0.3, 0, 0.3].flatMap((x, i) => [part(new ConeGeometry(0.14, 0.34, 4), [0x8a5ad0, 0xff5ae0, 0x5ef0ff][i], { pos: [x, i === 1 ? 0.1 : -0.05, 0], rot: [0, 0, Math.PI / 2] })]);
+      break;
+    case 'summoner:7': // 수문장 강림: 뿔 달린 투구
+      g = [part(new BoxGeometry(0.5, 0.45, 0.4), 0x3a2a6a), part(new ConeGeometry(0.08, 0.36, 4), 0xff4af0, { pos: [-0.22, 0.35, 0], rot: [0, 0, 0.5] }), part(new ConeGeometry(0.08, 0.36, 4), 0xff4af0, { pos: [0.22, 0.35, 0], rot: [0, 0, -0.5] }), part(new BoxGeometry(0.32, 0.06, 0.05), 0x5ef0ff, { pos: [0, 0.02, 0.21] })];
+      break;
+    case 'summoner:8': // 차원 도약: 분홍 잔상 고리
+      g = [part(new TorusGeometry(0.36, 0.05, 5, 18), 0xff8ae0, { rot: [1.3, 0, 0], pos: [-0.2, 0, 0] }), part(new TorusGeometry(0.26, 0.04, 5, 16), 0x5ef0ff, { rot: [1.3, 0, 0], pos: [0.2, 0.1, 0] })];
+      break;
     case 'archer:5': // 사냥꾼의 집중: 과녁
     default:
       g = [

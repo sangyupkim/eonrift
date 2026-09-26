@@ -1,4 +1,4 @@
-import { BoxGeometry, ConeGeometry, CylinderGeometry, Group, Material, Mesh, OctahedronGeometry } from 'three';
+import { BoxGeometry, ConeGeometry, CylinderGeometry, Group, Material, Mesh, OctahedronGeometry, TorusGeometry } from 'three';
 import { merge, part } from './util';
 
 /** 사람형 캐릭터(주인공, NPC)의 관절 구조. 애니메이션은 관절 그룹을 회전시켜 만든다 */
@@ -23,7 +23,7 @@ export interface HeroRig {
 
 export type GlowPart = 'weapon' | 'helmet' | 'armor' | 'pants' | 'boots';
 
-export type WeaponKind = 'sword' | 'staff' | 'bow' | 'hammer' | 'none';
+export type WeaponKind = 'sword' | 'staff' | 'bow' | 'hammer' | 'orb' | 'none';
 
 export interface HeroLook {
   tunic: number;
@@ -172,7 +172,7 @@ export function buildHero(material: Material, look: HeroLook): HeroRig {
   const blade = gear.weapon?.metal ?? C.steel;
   const bladeDark = gear.weapon ? darken(gear.weapon.metal) : C.steelDark;
   const bootColor = gear.boots ?? C.boot;
-  const classStyle: GearStyle = look.weapon === 'staff' ? 'cloth' : look.weapon === 'bow' ? 'leather' : 'plate';
+  const classStyle: GearStyle = look.weapon === 'staff' || look.weapon === 'orb' ? 'cloth' : look.weapon === 'bow' ? 'leather' : 'plate';
   const styleOf = (slot: 'helmet' | 'armor' | 'pants' | 'boots') => gear.style?.[slot] ?? classStyle;
   const mesh = (parts: Parameters<typeof merge>[0]) => {
     const m = new Mesh(merge(parts), material);
@@ -270,6 +270,12 @@ export function buildHero(material: Material, look: HeroLook): HeroRig {
     // 긴 로브 자락
     torsoParts.push(part(new BoxGeometry(0.6, 0.34, 0.4), look.tunicDark, { pos: [0, -0.2, 0] }));
     torsoParts.push(part(new BoxGeometry(0.06, 0.4, 0.03), C.gold, { pos: [0, 0.25, 0.165] }));
+  } else if (look.weapon === 'orb') {
+    // 소환사: 짧은 로브 + 가슴의 차원 문양, 어깨에 떠 있는 작은 수정
+    torsoParts.push(part(new BoxGeometry(0.58, 0.26, 0.38), look.tunicDark, { pos: [0, -0.16, 0] }));
+    torsoParts.push(part(new OctahedronGeometry(0.07), 0xff5ae0, { pos: [0, 0.3, 0.17] }));
+    torsoParts.push(part(new OctahedronGeometry(0.05), 0x5ef0ff, { pos: [0.34, 0.66, -0.05] }));
+    torsoParts.push(part(new OctahedronGeometry(0.05), 0x5ef0ff, { pos: [-0.34, 0.66, -0.05] }));
   } else if (look.weapon === 'bow') {
     torsoParts.push(part(new BoxGeometry(0.08, 0.6, 0.05), C.belt, { pos: [0, 0.27, 0.17], rot: [0, 0, 0.7] }));
     // 등 뒤 화살통
@@ -373,6 +379,17 @@ export function buildHero(material: Material, look: HeroLook): HeroRig {
           part(new BoxGeometry(0.06, 0.08, 0.07), blade, { pos: [0, 0.48, -0.05] }),
           part(new BoxGeometry(0.06, 0.08, 0.07), blade, { pos: [0, -0.48, -0.05] }),
           ...(gear.weapon ? [part(new OctahedronGeometry(0.04), gear.weapon.gem, { pos: [0, 0, 0.13] })] : []),
+        ]),
+      );
+      break;
+    case 'orb':
+      // 손 위에 떠 있는 차원 구체와 두 고리
+      weapon.add(
+        mesh([
+          part(new BoxGeometry(0.06, 0.12, 0.06), C.belt, { pos: [0, 0.02, 0] }),
+          part(new OctahedronGeometry(0.16), gear.weapon?.gem ?? 0xff5ae0, { pos: [0, -0.2, 0.12] }),
+          part(new TorusGeometry(0.22, 0.02, 4, 14), gear.weapon?.metal ?? 0x5ef0ff, { pos: [0, -0.2, 0.12], rot: [0.4, 0, 0] }),
+          part(new TorusGeometry(0.19, 0.02, 4, 14), gear.weapon?.metal ?? 0x5ef0ff, { pos: [0, -0.2, 0.12], rot: [0, 0.9, 0.5] }),
         ]),
       );
       break;

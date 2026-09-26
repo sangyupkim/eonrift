@@ -3,9 +3,12 @@ import { PLAYER, TILE } from '../config';
 import { isFloor } from '../dungeon/generator';
 import { buildProjectileMesh } from '../models/monsters';
 import type { BonusKey } from '../data/bonus';
+import type { SpecialKey } from '../data/special';
 import { awakenCharges, AWAKEN_HOLD_POWER, effectTier, SKILL_AWAKEN, STORM_RESUME, type AwakenBranch } from '../data/awaken';
 import { ultCooldown, ultPower, ULT_COOLDOWN, ULTIMATES, type ClassId } from '../data/classes';
 import type { Monster } from './Monster';
+import { Minions, type MinionSpec } from './Minions';
+import { CH8_BOSS, type SpeciesDef } from '../data/species';
 import type { Player } from './Player';
 import type { Stats } from './Progress';
 import type { Projectile } from './Projectiles';
@@ -30,12 +33,24 @@ export interface CombatHost {
   autoAim: () => boolean;
   /** 각성 방향 ('s0'~'s5' 스킬, 'u0'·'u1' 궁극기). 각성하지 않았으면 null */
   awaken: (key: string) => AwakenBranch | null;
+  /** 특수 옵션·세트·유물 합계 (스킬 피해·소환수) */
+  special: (k: SpecialKey) => number;
+  /** 차원 소환사: 계약한 종족 (도감 처치 수로 맺는다). awakened = 1000마리 넘긴 각성 계약 */
+  pacts: () => { species: SpeciesDef; awakened: boolean }[];
+  /** 소환수 위력 배율 (소환수 위력 보너스·특수 옵션·계약 수) */
+  summonPower: () => number;
 }
+
+/** 소환사가 계약 없이 부르는 기본 소환수와 차원 정령 */
+const SUMMON_BEAST: SpeciesDef = { id: 'summon_beast', name: '차원 늑대', arch: 'melee', faction: 'void', model: { kind: 'wolf' }, colors: { main: 0x8a5ad0, dark: 0x3a2a6a, accent: 0xff8ae0 }, hidden: true };
+const SUMMON_SPIRIT: SpeciesDef = { id: 'summon_spirit', name: '차원 정령', arch: 'ranged', faction: 'void', model: { kind: 'spirit' }, colors: { main: 0xff8ae0, dark: 0x5a2a7a, accent: 0x5ef0ff }, hidden: true };
+/** 원거리로 싸우는 행동 유형 (소환수가 마력탄을 쏜다) */
+const RANGED_ARCH = new Set(['ranged', 'archer', 'caster', 'necro', 'shaman', 'spitter']);
 
 type Target = { kind: 'monster'; m: Monster; x: number; z: number };
 
 /** 직업별 기본 효과 색: 검사=푸른 강철, 마법사=보랏빛 마력, 궁수=초록 바람 */
-const COLORS: Record<ClassId, number> = { sword: 0x4aa8ff, mage: 0xa070ff, archer: 0x5aff8a };
+const COLORS: Record<ClassId, number> = { sword: 0x4aa8ff, mage: 0xa070ff, archer: 0x5aff8a, summoner: 0xff5ae0 };
 
 /** 공격과 스킬의 실제 판정 */
 export class Combat {
@@ -64,7 +79,57 @@ export class Combat {
   /** 시간이 걸리는 공격 (칼날 폭풍·화살비 등): 같은 던전에 있을 때만 이어진다 */
   private timers: { at: number; every: number; left: number; d: DungeonScene; fn: () => void }[] = [];
 
+  /** 차원 소환사의 소환수와 노리는 적 (기본 공격으로 맞힌 적) */
+  readonly minions = new Minions();
+  focus: Monster | null = null;
+  private pactIdx = 0;
+
   constructor(private host: CombatHost) {}
+
+  /** 소환수 한 마리의 설계 (계약 종족 · 위력 · 시간) */
+  private pactSpec(power: number, duration: number, extra = false): MinionSpec {
+    const pacts = this.host.pacts();
+    const p = pacts.length ? pacts[this.pactIdx++ % pacts.length] : null;
+    const species = p?.species ?? SUMMON_BEAST;
+    return { species, ranged: RANGED_ARCH.has(species.arch), power: power * (p?.awakened ? 1.5 : 1), duration, size: p?.awakened ? 1.25 : 1, extra, color: 0xff5ae0 };
+  }
+
+  /** 소환수 업데이트 (던전 안에서만) */
+  private updateMinions(dt: number): void {
+    const d = this.host.dungeon();
+    const pl = this.host.player;
+    if (!d || pl.cls.id !== 'summoner') {
+      this.minions.update(dt, null);
+      return;
+    }
+    const sp = this.host.summonPower();
+    this.minions.update(
+      dt,
+      {
+        level: d,
+        player: pl.position,
+        focus: this.focus && this.focus.targetable ? this.focus : null,
+        damage: (m, mult, knock, fx, fz) => {
+          this.host.damageMonster(m, mult * sp, knock, fx, fz);
+          // 피의 계약: 소환수가 준 피해의 3% 회복 (한 번에 최대 HP 1%까지)
+          if (pl.buff('bondblood') && pl.hp < pl.maxHp) pl.hp = Math.min(pl.maxHp, pl.hp + Math.min(this.host.stats().atk * mult * sp * 0.03, pl.maxHp * 0.01));
+        },
+        haste: pl.buff('bondfrenzy') ? 1.7 : 1,
+        boost: (pl.buff('bond') ? 1.4 : 1) * (pl.buff('portalmarch') ? 1.6 : 1),
+      },
+      (m) => {
+        // 포탈 붕괴: 수문장이 돌아갈 때 거대한 폭발
+        if (m.spec.finale) {
+          d.effects.explosion(m.x, m.z, 7, 0xff4af0);
+          d.effects.ring(m.x, m.z, 7.5, 0xffffff, 0.5, 1.4);
+          d.effects.pillar(m.x, m.z, 0xff4af0, 6);
+          this.host.shake(0.6);
+          this.host.sfx('boom');
+          for (const t of d.monsters) if (t.targetable && Math.hypot(t.x - m.x, t.z - m.z) < 7 + t.radius) this.host.damageMonster(t, m.spec.finale * sp, 2, m.x, m.z);
+        }
+      },
+    );
+  }
 
   update(dt: number): void {
     this.comboTimer = Math.max(0, this.comboTimer - dt);
@@ -93,6 +158,7 @@ export class Combat {
     }
     this.thornT = Math.max(0, this.thornT - dt);
     this.updateStorm(dt);
+    this.updateMinions(dt);
     // 바람의 칼날: 바람 걸음 동안 0.45초마다 몸 주위 적을 벤다
     const d = this.host.dungeon();
     const pl = this.host.player;
@@ -464,6 +530,47 @@ export class Combat {
         if (fire) this.repeat(d, 3.3, 1, 1, () => this.burnZone(d, center.x, center.z, 4.2, 3, 0.9 * pow, 0xff6a20));
         break;
       }
+      case 'summoner:0': {
+        // 차원 군단 (A 끝없는 군단 · B 정예 군단)
+        player.startAction({ pose: 'cast', duration: 0.6, hitAt: 0.5, onHit: () => {} }, aim);
+        player.invulnFor(0.6);
+        d.effects.glyph(p.x, p.z, 3.2, 0xff5ae0, 1);
+        d.effects.pillar(p.x, p.z, 0xff5ae0, 4);
+        const at = (i: number, n: number) => ({ x: p.x + Math.cos((i / n) * Math.PI * 2) * 2.4, z: p.z + Math.sin((i / n) * Math.PI * 2) * 2.4 });
+        if (aw === 'B') {
+          for (let i = 0; i < 3; i++) {
+            const q = at(i, 3);
+            const spec = this.pactSpec(2.2 * pow, 12, true);
+            this.minions.spawn(d, { ...spec, size: (spec.size ?? 1) * 1.5 }, q.x, q.z);
+          }
+        } else {
+          const first = aw === 'A' ? 2 : 6;
+          for (let i = 0; i < first; i++) {
+            const q = at(i, first);
+            this.minions.spawn(d, this.pactSpec(pow, 12, true), q.x, q.z);
+          }
+          if (aw === 'A')
+            this.repeat(d, 2, 2, 5, () => {
+              const q = { x: player.position.x + (Math.random() - 0.5) * 4, z: player.position.z + (Math.random() - 0.5) * 4 };
+              this.minions.spawn(d, this.pactSpec(pow, 12, true), q.x, q.z);
+            });
+        }
+        this.host.sfx('level');
+        break;
+      }
+      case 'summoner:1': {
+        // 수문장 강림 (A 분노한 수문장 · B 포탈 붕괴)
+        player.startAction({ pose: 'cast', duration: 0.7, hitAt: 0.5, onHit: () => {} }, aim);
+        player.invulnFor(0.7);
+        const x = p.x + Math.sin(aim) * 2.6;
+        const z = p.z + Math.cos(aim) * 2.6;
+        d.effects.glyph(x, z, 3, 0xff4af0, 1.2);
+        d.effects.explosion(x, z, 3.5, 0xff4af0);
+        this.host.shake(0.5);
+        this.minions.spawn(d, { species: CH8_BOSS, ranged: false, power: pow, duration: aw === 'A' ? 14 : 10, slam: true, extra: true, rate: aw === 'A' ? 0.7 : 1, finale: aw === 'B' ? 8 : 0, color: 0xff4af0 }, x, z);
+        this.host.sfx('boom');
+        break;
+      }
       case 'archer:1':
       default: {
         // 용의 사격 (A 쌍룡 사격 · B 용의 숨결)
@@ -519,7 +626,7 @@ export class Combat {
     else if (away !== null) dir = { x: -Math.sin(away), z: -Math.cos(away) };
     else dir = { x: -Math.sin(player.facing), z: -Math.cos(player.facing) };
     const face = player.facing;
-    player.startDash({ dirX: dir.x, dirZ: dir.z, speed: 14, duration: 0.35, pose: 'leap', invuln: true });
+    player.startDash({ dirX: dir.x, dirZ: dir.z, speed: 14 * player.dashMult, duration: 0.35, pose: 'leap', invuln: true });
     // 뒤로 뛸 때는 적(또는 원래 방향)을 계속 바라본다
     if (!input) player.facing = away ?? face;
     player.useDodge(PLAYER.backstepCooldown);
@@ -599,6 +706,7 @@ export class Combat {
     if (!player.canAct) return;
     const cls = player.cls.id;
     const ranged = cls !== 'sword';
+    const orbCls = cls === 'mage' || cls === 'summoner';
     const target = this.findTarget(ranged ? 11 : 4.5);
     const level = this.host.level();
     const color = COLORS[cls];
@@ -632,7 +740,7 @@ export class Combat {
     // 마을·차원집: 맞힐 적은 없지만 던전과 똑같은 마탄·화살이 날아간다 (보기만)
     const d = this.host.dungeon();
     if (!d) {
-      const mage = cls === 'mage';
+      const mage = orbCls;
       player.startAction(
         {
           pose: mage ? 'cast' : 'shoot',
@@ -649,7 +757,35 @@ export class Combat {
     }
 
     const aim = this.angleTo(target) ?? player.facing;
-    if (cls === 'mage') {
+    if (cls === 'summoner') {
+      // 차원 구체: 맞힌 적을 소환수가 먼저 노린다
+      player.startAction(
+        {
+          pose: 'cast',
+          duration: player.cls.attackTime / speed,
+          hitAt: 0.5,
+          onHit: () => {
+            this.host.sfx('magic');
+            d.spawnPlayerProjectile({
+              x: player.position.x,
+              z: player.position.z,
+              angle: player.facing,
+              speed: 16,
+              damage: 0.85,
+              color,
+              kind: 'orb',
+              radius: 0.35,
+              y: 1.2,
+              onEnd: (x, z) => {
+                const hit = d.monsters.find((m) => m.targetable && Math.hypot(m.x - x, m.z - z) < m.radius + 1);
+                if (hit) this.focus = hit;
+              },
+            });
+          },
+        },
+        aim,
+      );
+    } else if (cls === 'mage') {
       player.startAction(
         {
           pose: 'cast',
@@ -723,6 +859,7 @@ export class Combat {
     if (this.stock[index] < 1) return '';
     if (!player.canAct && player.state !== 'dash') return '';
     if (player.mp < skill.mp) return 'MP가 부족합니다';
+    if (player.cls.id === 'summoner' && index === 4 && this.minions.count() === 0) return '희생할 소환수가 없습니다';
     return null;
   }
 
@@ -762,7 +899,7 @@ export class Combat {
     const c = Math.max(0, Math.min(1, charge));
     const full = c >= 0.99;
     // 스킬 레벨마다 위력 +15%. 모으는 스킬은 모은 만큼 위력 최대 3배
-    const k = (1 + (lv - 1) * 0.15) * (1 + (AWAKEN_HOLD_POWER - 1) * c);
+    const k = (1 + (lv - 1) * 0.15) * (1 + (AWAKEN_HOLD_POWER - 1) * c) * (1 + this.host.special('skillDmg') / 100);
     const dmg = (m: Monster, mult: number, knock: number, fx: number, fz: number) => this.host.damageMonster(m, mult * k, knock, fx, fz);
     const around = (x: number, z: number, r: number, mult: number, knock: number) => {
       for (const m of d.monsters) if (m.targetable && Math.hypot(m.x - x, m.z - z) < r + m.radius) dmg(m, mult, knock, x, z);
@@ -1199,6 +1336,135 @@ export class Combat {
         }
         this.flair(d, p.x, p.z, 0x8a6aff, tier);
         this.host.sfx('level');
+        break;
+      }
+
+      // ================= 차원 소환사 =================
+      case 'summoner:0': {
+        // 계약 소환 (A 무리 소환: 둘씩 · B 거대 소환: 하나만 크게)
+        player.startAction({ pose: 'cast', duration: 0.4, hitAt: 0.5, onHit: () => {} }, aim);
+        const cap = 2 + Math.floor(lv / 4) + Math.round(this.host.special('summonCount')) + (aw === 'A' ? 2 : 0);
+        const fx0 = p.x + Math.sin(aim) * 1.6;
+        const fz0 = p.z + Math.cos(aim) * 1.6;
+        if (aw === 'B') {
+          for (const m of this.minions.list) if (m.spec.giant) m.remove();
+          const spec = this.pactSpec(2.4 * k, 30);
+          this.minions.spawn(d, { ...spec, size: (spec.size ?? 1) * 1.8, giant: true }, fx0, fz0);
+        } else {
+          const n = aw === 'A' ? 2 : 1;
+          for (let i = 0; i < n; i++) {
+            while (this.minions.count((m) => m.spec.species.id !== SUMMON_SPIRIT.id && !m.spec.giant) >= cap) {
+              const old = this.minions.list.find((m) => !m.spec.extra && m.spec.species.id !== SUMMON_SPIRIT.id && !m.spec.giant);
+              if (!old) break;
+              old.remove();
+              this.minions.list = this.minions.list.filter((m) => m.alive);
+            }
+            this.minions.spawn(d, this.pactSpec((aw === 'A' ? 0.7 : 1) * k, 20), fx0 + (i ? 0.9 : 0), fz0 + (i ? 0.6 : 0));
+          }
+        }
+        d.effects.glyph(fx0, fz0, 1.4, color, 0.6);
+        this.flair(d, fx0, fz0, color, tier);
+        this.host.sfx('magic');
+        break;
+      }
+      case 'summoner:1': {
+        // 차원 정령 (A 차원 포대: 제자리·두 배 빠르게 · B 연쇄 사격: 두 번 튄다)
+        player.startAction({ pose: 'cast', duration: 0.4, hitAt: 0.5, onHit: () => {} }, aim);
+        const spirits = this.minions.list.filter((m) => m.spec.species.id === SUMMON_SPIRIT.id);
+        for (const m of spirits.slice(0, Math.max(0, spirits.length - 2))) m.remove();
+        for (const side of [-1, 1]) {
+          const x = p.x + Math.sin(aim + side * 1.2) * 1.6;
+          const z = p.z + Math.cos(aim + side * 1.2) * 1.6;
+          this.minions.spawn(d, { species: SUMMON_SPIRIT, ranged: true, power: k, duration: 15, extra: true, stationary: aw === 'A', rate: aw === 'A' ? 0.5 : 1, bounce: aw === 'B' ? 2 : 0, color: 0x5ef0ff }, x, z);
+        }
+        this.flair(d, p.x, p.z, 0x5ef0ff, tier);
+        this.host.sfx('magic');
+        break;
+      }
+      case 'summoner:2': {
+        // 차원문 (A 블랙홀 · B 포탈 행진)
+        const t = target ?? { x: p.x + Math.sin(aim) * 6, z: p.z + Math.cos(aim) * 6 };
+        const cx = t.x;
+        const cz = t.z;
+        const big = aw === 'A';
+        const r = big ? 6.5 : 4.5;
+        const dur = big ? 3.5 : 2;
+        player.startAction({ pose: 'cast', duration: 0.45, hitAt: 0.5, onHit: () => {} }, Math.atan2(cx - p.x, cz - p.z));
+        d.effects.zone(cx, cz, r, 0xb67cff, dur + 0.3);
+        d.effects.glyph(cx, cz, r * 0.7, 0xff5ae0, dur);
+        this.repeat(d, 0.05, 0.1, Math.round(dur / 0.1), () => {
+          for (const m of d.monsters) if (m.targetable && Math.hypot(m.x - cx, m.z - cz) < r + m.radius) m.pull(cx, cz, big ? 0.45 : 0.3);
+          if (Math.random() < 0.5) d.effects.sparks(cx, 0.8, cz, 0xff5ae0, 3, { speed: 3 });
+        });
+        this.repeat(d, dur, 1, 1, () => {
+          d.effects.explosion(cx, cz, r * 0.8, 0xb67cff);
+          d.effects.ring(cx, cz, r, 0xffffff, 0.35, 1.2);
+          this.flair(d, cx, cz, 0xff5ae0, tier);
+          this.host.sfx('boom');
+          this.host.shake(0.3);
+          around(cx, cz, r * 0.8, big ? 4.5 : 3.2, 1.5);
+        });
+        if (aw === 'B') {
+          for (const m of this.minions.list) {
+            m.x = cx + (Math.random() - 0.5) * 2;
+            m.z = cz + (Math.random() - 0.5) * 2;
+          }
+          player.addBuff('portalmarch', '포탈 행진', 5);
+        }
+        this.host.sfx('magic');
+        break;
+      }
+      case 'summoner:3': {
+        // 영혼 결속 (A 피의 계약 · B 광란)
+        const t = 10 + lv * 0.5;
+        player.addBuff('bond', '영혼 결속', t);
+        if (aw === 'A') player.addBuff('bondblood', '피의 계약', t);
+        if (aw === 'B') player.addBuff('bondfrenzy', '광란', t);
+        d.effects.aura(p.x, p.z, color);
+        for (const m of this.minions.list) d.effects.bolt(p.x, p.z, m.x, m.z, color);
+        this.flair(d, p.x, p.z, color, tier);
+        this.host.sfx('level');
+        break;
+      }
+      case 'summoner:4': {
+        // 희생 (A 연쇄 폭발 · B 영혼 회수)
+        player.startAction({ pose: 'cast', duration: 0.35, hitAt: 0.5, onHit: () => {} }, null);
+        const r = aw === 'A' ? 3.75 : 2.5;
+        const sp = this.host.summonPower();
+        const back: { spec: MinionSpec; left: number; x: number; z: number }[] = [];
+        for (const m of [...this.minions.list]) {
+          if (m.spec.extra) continue;
+          const x = m.x;
+          const z = m.z;
+          d.effects.explosion(x, z, r, 0xff5ae0);
+          d.particles.burst(x, 0.6, z, 0xff8ae0, 12, 1.4);
+          for (const t of d.monsters) {
+            if (!t.targetable || Math.hypot(t.x - x, t.z - z) > r + t.radius) continue;
+            this.host.damageMonster(t, 3.5 * k * m.spec.power * sp, 1.4, x, z);
+            if (aw === 'A' && t.targetable) t.stun = Math.max(t.stun, 1);
+          }
+          player.hp = Math.min(player.maxHp, player.hp + player.maxHp * 0.05);
+          if (aw === 'B') back.push({ spec: m.spec, left: m.left / 2, x, z });
+          m.remove();
+        }
+        this.minions.list = this.minions.list.filter((m) => m.alive);
+        if (back.length) this.repeat(d, 2, 1, 1, () => back.forEach((b) => this.minions.spawn(d, { ...b.spec, duration: Math.max(3, b.left) }, b.x, b.z)));
+        this.flair(d, p.x, p.z, color, tier);
+        this.host.sfx('boom');
+        this.host.shake(0.35);
+        break;
+      }
+      case 'summoner:5': {
+        // 차원 보호막 (A 반사 장막 · B 재생 장막)
+        const t = 6 + lv * 0.3;
+        player.addBuff('riftward', '차원 보호막', t);
+        if (aw === 'A') player.addBuff('manareflect', '반사 장막', t);
+        if (aw === 'B') player.addBuff('shieldregen', '재생 장막', t);
+        d.effects.ring(p.x, p.z, 4, 0xb67cff, 0.4, 1.2);
+        d.effects.aura(p.x, p.z, 0xb67cff);
+        around(p.x, p.z, 4, 1, 3);
+        this.flair(d, p.x, p.z, 0xb67cff, tier);
+        this.host.sfx('ice');
         break;
       }
 

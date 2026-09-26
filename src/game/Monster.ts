@@ -117,6 +117,13 @@ const SIGNATURE: Record<string, BossPattern[]> = {
   m5: ['missiles', 'sweep', 'slam', 'charge', 'missiles'],
   m6: ['flameCharge', 'rush', 'eruption', 'leap', 'cone'],
   m7: ['lunge', 'crossX', 'voidZones', 'charge', 'sweep'],
+  // v10 8장 보스
+  c8_m: ['lunge', 'icicles', 'blink', 'crossX', 'frostring', 'lunge', 'spiral', 'charge'],
+  c8_b: ['voidZones', 'rush', 'whirlwind', 'blink', 'warcry', 'spiral', 'voidZones', 'leap', 'sweep', 'chase', 'summon'],
+  // v10 레이드 보스: 여러 보스의 대표 패턴을 섞어 쉴 틈이 적다
+  r1: ['voidZones', 'blink', 'spiral', 'sweep', 'chase', 'crossX', 'voidZones', 'hex', 'summon', 'frostring', 'barrage'],
+  r2: ['quake', 'missiles', 'overheat', 'slam', 'sweep', 'leap', 'missiles', 'roots', 'charge', 'barrage'],
+  r3: ['icicles', 'blink', 'prism', 'hex', 'frostring', 'spiral', 'icicles', 'rain', 'sweep', 'crossX'],
 };
 
 /** 고유 패턴을 쓸 때 머리 위로 외치는 이름 */
@@ -270,7 +277,7 @@ export class Monster {
     readonly homeRoom: number,
   ) {
     const boss = kind === 'boss' || kind === 'midboss';
-    this.species = kind === 'boss' ? BOSS_SPECIES[tier - 1] : kind === 'midboss' ? MIDBOSS_SPECIES[tier - 1] : species;
+    this.species = species.bossForm ? species : kind === 'boss' ? BOSS_SPECIES[tier - 1] : kind === 'midboss' ? MIDBOSS_SPECIES[tier - 1] : species;
     const archetype = this.species.arch;
     this.arch = archetype;
     this.def = ARCHETYPES[archetype];
@@ -287,11 +294,17 @@ export class Monster {
       this.bars = 10;
       this.gimmickAt = [];
     }
+    if (mods.raid && kind === 'boss') {
+      this.trialBoss = true;
+      this.bars = 12;
+      this.gimmickAt = [8, 4];
+    }
     this.atk = this.def.atk * scale.atk * mult.atk * (mods.atk ?? 1) * monsterAtkMult(mods.statTier ?? tier, mods.statStage ?? stage);
     this.defense = (boss ? 6 : this.def.def) * scale.def;
     this.speed = this.def.speed * (boss ? 0.95 : 1) * (mods.speed ?? 1);
     this.baseAtk = this.atk;
     this.baseSpeed = this.speed;
+    mult.size *= this.species.scale ?? 1;
     this.radius = this.def.radius * mult.size;
     this.x = x;
     this.z = z;

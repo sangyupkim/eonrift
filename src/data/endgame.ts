@@ -183,8 +183,14 @@ export interface EndgameState {
   rushGradeBest: string[];
   /** 심연 균열: 시간 안에 깬 가장 높은 단계 */
   riftBest: number;
-  /** 주간 차원 시련 */
+  /** 일일 차원 시련 (v10: 주간 → 일일. 필드 week에 날짜 키가 들어간다) */
   trial?: TrialRecord;
+  /** 주간 차원 레이드 (v10) */
+  raid?: RaidRecord;
+  /** 무한 러쉬 (v10) */
+  horde?: HordeRecord;
+  /** 심연 균열: 마지막으로 고른 서약 */
+  vows?: VowId[];
 }
 
 export function newEndgame(): EndgameState {
@@ -195,8 +201,11 @@ export function newEndgame(): EndgameState {
 export type EndRun =
   | { kind: 'tower'; floor: number }
   | { kind: 'rush'; diff: RushDiff; index: number }
-  | { kind: 'rift'; tier: number; level: number; affixes: AffixId[]; timeLeft: number }
-  | { kind: 'trial'; week: string; hits: number; potions: number };
+  | { kind: 'rift'; tier: number; level: number; affixes: AffixId[]; timeLeft: number; vows?: VowId[] }
+  | { kind: 'trial'; week: string; hits: number; potions: number }
+  | { kind: 'raid'; week: string; hits: number }
+  | { kind: 'horde'; kills: number; time: number; bossesDown: number; picks: number }
+  | { kind: 'ch8'; stage: number };
 
 /** 초 → "m:ss" */
 export function formatClock(seconds: number): string {
@@ -215,6 +224,19 @@ export const TRIAL_TIME = 180;
 /** 시련 수호자 체력: 7-10 수호자의 몇 배 */
 export const TRIAL_HP = 12;
 
+/** 날짜 키 ("2026-09-26", 기기 시간 기준). 일일 차원 시련·순위표에 쓴다 */
+export function dayKey(d = new Date()): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+/** 어제 날짜 키 */
+export function prevDayKey(d = new Date()): string {
+  return dayKey(new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1));
+}
+/** 지난주 키 */
+export function prevWeekKey(d = new Date()): string {
+  return weekKey(new Date(d.getFullYear(), d.getMonth(), d.getDate() - 7));
+}
+
 /** 월요일 기준 주 번호 ("2026-W39") */
 export function weekKey(d = new Date()): string {
   const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
@@ -231,7 +253,7 @@ function hashStr(s: string): number {
   return h >>> 0;
 }
 
-/** 이번 주 시련: 수호자(단계 1~7 중 하나)와 맵 시드 */
+/** 오늘(또는 그 주)의 시련: 수호자(단계 1~7 중 하나)와 맵 시드. 키가 날짜면 하루마다 바뀐다 */
 export function trialSpec(week: string): { seed: number; tier: number } {
   const seed = hashStr(`trial:${week}`);
   return { seed, tier: (seed % 7) + 1 };
@@ -288,6 +310,10 @@ export interface TrialRecord {
   /** 가장 높았던 등급 (칭호용) */
   topGrade: number;
   history: { week: string; best: number; grade: number; cls: string }[];
+  /** (v10) 이 날 받은 증표 */
+  marks?: number;
+  /** (v10) 순위 보상을 확인한 날 */
+  rankDone?: string[];
 }
 
 export function newTrial(week: string): TrialRecord {
@@ -300,7 +326,7 @@ export function rollTrialWeek(t: TrialRecord, week: string): TrialRecord {
   if (t.v !== 2) t = { ...t, v: 2, best: 0, time: 0, hits: 0, cls: '', history: [] };
   if (t.week === week) return t;
   if (t.best > 0) t.history = [{ week: t.week, best: t.best, grade: trialGrade(t.best), cls: t.cls }, ...t.history].slice(0, 10);
-  return { ...t, week, best: 0, time: 0, hits: 0, cls: '', claimed: [] };
+  return { ...t, week, best: 0, time: 0, hits: 0, cls: '', claimed: [], marks: 0 };
 }
 
 /** 기록 코드: 친구와 점수를 비교할 때 주고받는다 */
@@ -322,8 +348,8 @@ export function readTrialCode(code: string): { week: string; cls: string; score:
 }
 
 // ---------------- 차원의 끝 해금 순서 ----------------
-export type EndContent = 'tower' | 'rush' | 'rift' | 'trial';
-export const END_NAMES: Record<EndContent, string> = { tower: '무한의 탑', rush: '보스 러시', rift: '심연 균열', trial: '주간 차원 시련' };
+export type EndContent = 'tower' | 'rush' | 'rift' | 'trial' | 'raid' | 'horde';
+export const END_NAMES: Record<EndContent, string> = { tower: '무한의 탑', rush: '보스 러시', rift: '심연 균열', trial: '일일 차원 시련', raid: '주간 차원 레이드', horde: '무한 러쉬' };
 
 /** 무한의 탑 → (10층) 보스 러시 → (일반 완주) 심연 균열 → (3단계 돌파) 주간 차원 시련. 열렸으면 null, 아니면 조건 */
 export function endLock(e: EndgameState, c: EndContent): string | null {
@@ -336,5 +362,171 @@ export function endLock(e: EndgameState, c: EndContent): string | null {
       return e.rushGradeBest[0] ? null : '보스 러시 일반을 한 번 완주하면 열립니다';
     case 'trial':
       return e.riftBest >= 3 ? null : `심연 균열 3단계를 돌파하면 열립니다 (지금 ${e.riftBest}단계)`;
+    case 'raid':
+      return e.riftBest >= 5 ? null : `심연 균열 5단계를 돌파하면 열립니다 (지금 ${e.riftBest}단계)`;
+    case 'horde':
+      return e.rushGradeBest[0] ? null : '보스 러시 일반을 한 번 완주하면 열립니다';
   }
+}
+
+
+// ---------------- 심연 균열 서약 (v10) ----------------
+/**
+ * 스스로 제약을 걸고 들어가 더 많은 보상을 받는다. 고른 서약의 보너스를 모두 더한 만큼 골드·차원 가루가 는다.
+ */
+export type VowId = 'nopotion' | 'brutal' | 'tough' | 'glass' | 'hurry' | 'elite' | 'slowdodge';
+export const VOWS: Record<VowId, { name: string; text: string; bonus: number; color: number }> = {
+  nopotion: { name: '물약 금지', text: '물약을 마실 수 없다', bonus: 0.25, color: 0xff7a9a },
+  brutal: { name: '잔혹', text: '몬스터 공격력 +60%', bonus: 0.35, color: 0xff4a4a },
+  tough: { name: '강인', text: '몬스터 체력 +60%', bonus: 0.3, color: 0xb5bcc8 },
+  glass: { name: '유리 몸', text: '내 최대 체력 -40%', bonus: 0.4, color: 0x9fe3ff },
+  hurry: { name: '촉박', text: `제한 시간 ${RIFT_TIME / 60}분 → 3분`, bonus: 0.4, color: 0xffd23a },
+  elite: { name: '정예 소집', text: '일반 몬스터 25%가 정예로', bonus: 0.3, color: 0xffb04a },
+  slowdodge: { name: '무거운 발', text: '회피 재사용 대기 2배', bonus: 0.2, color: 0x8a8aff },
+};
+export const VOW_IDS = Object.keys(VOWS) as VowId[];
+export function vowMult(v: VowId[] | undefined): number {
+  return 1 + (v ?? []).reduce((a, id) => a + (VOWS[id]?.bonus ?? 0), 0);
+}
+export const HURRY_TIME = 180;
+
+// ---------------- 순위 공통 ----------------
+/** 순위표 종류: 일일 시련 · 주간 레이드 · 무한 러쉬(일일) */
+export type BoardId = 'trial' | 'raid' | 'horde';
+
+/**
+ * 하루 동안 받는 증표 (v10): 오늘 최고 기록의 등급만큼. 기록이 오르면 차액을 바로 받는다.
+ * 시련: 참여 2 + 등급(브론즈 4 · 실버 6 · 골드 9 · 플래티넘 12 · 차원 16)
+ */
+export function trialDayMarks(score: number): number {
+  if (score <= 0) return 0;
+  const g = trialGrade(score);
+  return 2 + (g < 0 ? 0 : [4, 6, 9, 12, 16][g]);
+}
+
+// ---------------- 주간 차원 레이드 (v10) ----------------
+/**
+ * 매주 바뀌는 레이드 보스 하나를 5분 안에 쓰러뜨린다. 체력 12줄, 8·4줄에서 보호막(수호병), 10%마다 격노.
+ * 순위는 처치 시간(못 잡으면 깎은 체력). 하루 한 번 오늘 기록만큼 증표, 한 주가 끝나면 순위 보상.
+ */
+export const RAID_TIME = 300;
+/** 레이드 보스 체력: 7-10 수호자의 몇 배 */
+export const RAID_HP = 28;
+export interface RaidBossDef {
+  id: string;
+  name: string;
+  /** 모습의 원래 단계 (색·장판) */
+  tier: number;
+  desc: string;
+}
+export const RAID_BOSSES: RaidBossDef[] = [
+  { id: 'r1', name: '차원 포식자', tier: 7, desc: '틈새를 삼키는 거대한 망령. 순간이동과 차원 붕괴, 나선 탄막' },
+  { id: 'r2', name: '영겁의 거신', tier: 5, desc: '멈추지 않는 마공 거신. 미사일 폭격과 과열 폭발, 땅울림' },
+  { id: 'r3', name: '균열의 여왕', tier: 3, desc: '얼음과 차원을 다루는 여왕. 고드름 비와 침묵 저주, 수정 광선' },
+];
+export function raidSpec(week: string): { seed: number; boss: RaidBossDef } {
+  const seed = hashStr(`raid:${week}`);
+  return { seed, boss: RAID_BOSSES[seed % RAID_BOSSES.length] };
+}
+export function raidScore(ratio: number, killed: boolean, seconds: number): number {
+  if (killed) return 10000 + Math.max(0, Math.round((RAID_TIME - seconds) * 10));
+  return Math.max(0, Math.min(9999, Math.floor(ratio * 10000)));
+}
+export function raidScoreText(score: number): string {
+  if (score >= 10000) return `처치 ${formatClock(RAID_TIME - (score - 10000) / 10)}`;
+  return `${(score / 100).toFixed(2)}%`;
+}
+/** 레이드 하루 증표: 깎은 체력 10%마다 1 (최대 9) + 처치 15 (3분 안이면 +5) */
+export function raidDayMarks(score: number): number {
+  if (score <= 0) return 0;
+  if (score < 10000) return 2 + Math.floor(score / 1000);
+  const secs = RAID_TIME - (score - 10000) / 10;
+  return 18 + (secs <= 180 ? 5 : 0);
+}
+export interface RaidRecord {
+  week: string;
+  best: number;
+  time: number;
+  cls: string;
+  /** 오늘 받은 증표와 그 날 */
+  day?: string;
+  dayBest?: number;
+  dayMarks?: number;
+  /** 순위 보상을 확인한 주 */
+  rankDone?: string[];
+  /** 기록을 남긴 주 (순위 보상 확인용, 최근 10개) */
+  played?: string[];
+  kills: number;
+}
+export function newRaid(week: string): RaidRecord {
+  return { week, best: 0, time: 0, cls: '', kills: 0 };
+}
+
+// ---------------- 무한 러쉬 (v10) ----------------
+/**
+ * 넓은 벌판 한가운데서 끝없이 쏟아지는 몬스터를 막는다 (차원의 틈에서 몬스터가 사방으로 나온다).
+ * 시간이 갈수록 몬스터가 강해지고 많아지며, 1분 30초마다 보스가 섞인다. 처치 수가 기록.
+ * 처치 수가 목표를 넘을 때마다 축복 셋 중 하나를 고른다 (뱀서라이크).
+ */
+export const HORDE_MAX_ALIVE = 70;
+/** 시간(초) → 몬스터 배율 (7-10 기준. 1분마다 +18%, 곱으로) */
+export function hordeMult(t: number): number {
+  return 0.55 * Math.pow(1.18, t / 60);
+}
+/** 초마다 나오는 몬스터 수 */
+export function hordeRate(t: number): number {
+  return Math.min(7, 1.6 + t / 45);
+}
+export const HORDE_BOSS_EVERY = 90;
+/** 다음 축복까지 필요한 처치 수 (n번째 축복) */
+export function blessNeed(n: number): number {
+  return Math.round(25 + n * 18 + n * n * 2.5);
+}
+export type BlessId = 'might' | 'fury' | 'swift' | 'vital' | 'keen' | 'vamp' | 'orbit' | 'thunder' | 'nova' | 'focus' | 'guard' | 'reach';
+export const BLESSINGS: Record<BlessId, { name: string; text: string; max: number; color: number }> = {
+  might: { name: '힘의 축복', text: '공격력 +15%', max: 8, color: 0xff6a4a },
+  fury: { name: '분노의 축복', text: '공격 속도 +10%', max: 6, color: 0xffa04a },
+  swift: { name: '바람의 축복', text: '이동 속도 +8%', max: 5, color: 0x7affd0 },
+  vital: { name: '생명의 축복', text: '최대 체력 +15%, 체력 모두 회복', max: 6, color: 0xff4a6a },
+  keen: { name: '예리함의 축복', text: '치명타 +6%, 치명타 피해 +15%', max: 6, color: 0xffd23a },
+  vamp: { name: '흡혈의 축복', text: '처치할 때마다 최대 체력 1% 회복', max: 5, color: 0xd02a4a },
+  orbit: { name: '칼날 궤도', text: '몸 주위를 도는 칼날이 적을 벤다 (단계마다 칼날 +1)', max: 5, color: 0x9affc8 },
+  thunder: { name: '천둥의 축복', text: '2초마다 가까운 적에게 번개 (단계마다 +1줄기)', max: 5, color: 0xfff08a },
+  nova: { name: '폭발의 축복', text: '처치한 자리가 폭발해 주변에 피해', max: 5, color: 0xff8a2a },
+  focus: { name: '집중의 축복', text: '스킬 재사용 대기 -8%, 스킬 피해 +10%', max: 5, color: 0x8a8aff },
+  guard: { name: '수호의 축복', text: '받는 피해 -6%', max: 5, color: 0x6ab0ff },
+  reach: { name: '자석의 축복', text: '회피 충전 +1, 회피 뒤 3초 공격력 +20%', max: 2, color: 0xc08aff },
+};
+export const BLESS_IDS = Object.keys(BLESSINGS) as BlessId[];
+
+/** 처치 수 첫 달성 보상 (증표) */
+export const HORDE_MILESTONES: { kills: number; marks: number }[] = [
+  { kills: 100, marks: 3 },
+  { kills: 250, marks: 5 },
+  { kills: 500, marks: 8 },
+  { kills: 800, marks: 10 },
+  { kills: 1200, marks: 12 },
+  { kills: 1700, marks: 15 },
+  { kills: 2300, marks: 18 },
+  { kills: 3000, marks: 22 },
+  { kills: 4000, marks: 26 },
+  { kills: 5000, marks: 30 },
+];
+/** 하루 한 번 받는 러쉬 보상: 최고 기록 기준 (탑 소탕처럼) */
+export function hordeDaily(best: number): { marks: number; gold: number } {
+  return { marks: Math.min(15, Math.floor(best / 200)), gold: best * 60 };
+}
+export interface HordeRecord {
+  best: number;
+  bestTime: number;
+  /** 받은 첫 달성 보상 수 */
+  claimed: number;
+  dailyDate?: string;
+  /** 오늘 최고 (순위표) */
+  day?: string;
+  dayBest?: number;
+  rankDone?: string[];
+}
+export function newHorde(): HordeRecord {
+  return { best: 0, bestTime: 0, claimed: 0 };
 }

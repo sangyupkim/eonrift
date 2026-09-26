@@ -3,6 +3,9 @@ import { durability, equipStats, seriesBonus, withSpecials, type Equip, type Equ
 import type { AwakenBranch } from '../data/awaken';
 import type { FarmKind } from '../dungeon/generator';
 import { specialBonus, specialStats, sumSpecials, type SpecialTotals } from '../data/special';
+import { setCounts, setLines } from '../data/sets';
+import type { Relic } from '../data/relics';
+import { newAch, type AchCounter, type AchState } from '../data/achievements';
 import { newTool, type ToolKind, type ToolState } from '../data/tools';
 import { FACTORY_SIZES, RECIPES, RECIPE_RENAMES } from '../data/factory';
 import { ITEM_RENAMES, TIER_PLANK, TIER_PLATE } from '../data/items';
@@ -10,6 +13,14 @@ import type { BuildingState, FactoryState } from '../factory/sim';
 import { newEndgame, type EndgameState } from '../data/endgame';
 import { addBonus, BONUS_CAP, FOODS, TITLES, TRANSCEND_STATS, transcendCost, transcendExp, type Bonus, type BonusKey } from '../data/bonus';
 import { BESTIARY, bestiaryId, bestiaryStats, COLLECTION_MILESTONES, killMilestones, RESEARCH_BONUS } from '../data/bestiary';
+
+/** 차원 소환사: 도감에서 이만큼 잡은 종족과 계약할 수 있다 (1000마리면 각성 계약) */
+export const PACT_KILLS = 100;
+/** 원정대 보너스 단위 · 성장 가속 */
+export const ROSTER_STEP = 25;
+export const CATCH_UP_RATIO = 0.7;
+export const CATCH_UP_EXP = 3;
+export const PACT_AWAKEN_KILLS = 1000;
 import { Bag, type Slot } from './Bag';
 import { BAG_SLOTS } from '../config';
 import { newQuestState, type QuestState } from './Quests';
@@ -36,6 +47,10 @@ export interface ClassState {
   tpts?: Partial<Record<BonusKey, number>>;
   /** 스킬 각성: 's0'~'s5'(스킬), 'u0'·'u1'(궁극기) → 고른 방향. 키가 있으면 각성한 것 */
   awaken?: Record<string, AwakenBranch>;
+  /** 장착한 유물 uid (최대 3개) */
+  relics?: string[];
+  /** 차원 소환사: 고른 계약 종족 (최대 3) */
+  pacts?: string[];
 }
 
 export interface RunCheckpoint {
@@ -63,6 +78,12 @@ export interface SaveData {
   unlockedClasses: ClassId[];
   /** 공유 창고 (아이템 id → 개수) */
   storage: Record<string, number>;
+  /** 가진 유물 (모든 직업이 함께 쓴다) */
+  relics?: Relic[];
+  /** 업적 기록 (v10) */
+  ach?: AchState;
+  /** 8장 「갈라진 차원」: 깬 가장 높은 방 (0~10) */
+  ch8?: { cleared: number };
   /** 착용하지 않은 장비 */
   equips: Equip[];
   dimBag: (Slot | null)[];
@@ -133,7 +154,7 @@ export function newSave(): SaveData {
     version: 1,
     gold: 100,
     currentClass: 'sword',
-    classes: { sword: cls('sword'), mage: cls('mage'), archer: cls('archer') },
+    classes: { sword: cls('sword'), mage: cls('mage'), archer: cls('archer'), summoner: cls('summoner') },
     unlockedClasses: ['sword'],
     storage: { potion: 3 },
     equips: [],
@@ -218,6 +239,8 @@ const slotsOf = (r: Record<string, number>) => Object.values(r).reduce((a, n) =>
 
 /** 예전 저장 파일을 지금 구조로 바꾼다 */
 function migrate(d: SaveData & { maxTier?: number }): SaveData {
+  // v10: 차원 소환사 칸이 없던 저장
+  d.classes.summoner ??= { level: 1, exp: 0, equipment: { weapon: starterWeapon('summoner') }, alloc: zeroStats(), points: 0, skills: [1, 0, 0, 0, 0, 0], quick: [0, -1, -1] };
   const fixSlot = (e: Equip) => {
     if ((e.slot as string) === 'accessory') e.slot = 'ring';
   };
@@ -431,7 +454,9 @@ export class Progress {
     const bst = this.trial ? null : this.bestiaryStats;
     // 장신구 특수 옵션의 능력치 (시련에서는 없음)
     const sst = this.trial ? null : specialStats(this.specials(clsId));
-    for (const k of STAT_KEYS) b[k] = def.baseStats[k] + c.alloc[k] + (bst?.[k] ?? 0) + (sst?.[k] ?? 0);
+    // 원정대 보너스: 열린 직업 레벨 합 25마다 모든 능력치 +1 (시련에서는 없음)
+    const roster = this.trial ? 0 : this.rosterBonus;
+    for (const k of STAT_KEYS) b[k] = def.baseStats[k] + c.alloc[k] + (bst?.[k] ?? 0) + (sst?.[k] ?? 0) + roster;
     const lv = c.level - 1;
     const main = def.damage === 'physical' ? b.str : b.int;
     const s: Stats = {
@@ -473,8 +498,36 @@ export class Progress {
   /** 착용한 장비의 특수 옵션 합계 (망가진 장비·시련은 없음) */
   specials(clsId: ClassId = this.data.currentClass): SpecialTotals {
     if (this.trial) return {};
-    const lines = Object.values(this.data.classes[clsId].equipment).flatMap((e) => (e && durability(e) > 0 ? (e.sp ?? []) : []));
+    const worn = Object.values(this.data.classes[clsId].equipment).filter((e) => e && durability(e) > 0);
+    const lines = worn.flatMap((e) => e?.sp ?? []);
+    // 세트 효과 + 장착한 유물
+    lines.push(...setLines(setCounts(worn)));
+    for (const r of this.equippedRelics(clsId)) lines.push(...r.lines);
     return sumSpecials(lines);
+  }
+
+  /** 업적 기록 더하기 */
+  achAdd(k: AchCounter, n = 1): void {
+    const a = (this.data.ach ??= newAch());
+    a.c[k] = (a.c[k] ?? 0) + n;
+  }
+
+  /** 계약할 수 있는 종족 (도감 일반 종족 중 100마리 이상) */
+  pactEligible(): string[] {
+    return BESTIARY.filter((e) => e.rank === 'normal' && this.kills(e.species.id) >= PACT_KILLS).map((e) => e.species.id);
+  }
+  /** 지금 소환에 쓰는 계약: 고른 것 (없으면 가장 많이 잡은 셋) */
+  activePacts(): string[] {
+    const ok = new Set(this.pactEligible());
+    const chosen = (this.data.classes.summoner.pacts ?? []).filter((id) => ok.has(id));
+    if (chosen.length) return chosen.slice(0, 3);
+    return [...ok].sort((a, b) => this.kills(b) - this.kills(a)).slice(0, 3);
+  }
+
+  /** 이 직업이 장착한 유물 */
+  equippedRelics(clsId: ClassId = this.data.currentClass): Relic[] {
+    const ids = this.data.classes[clsId].relics ?? [];
+    return ids.map((u) => this.data.relics?.find((r) => r.uid === u)).filter((r): r is Relic => !!r);
   }
 
   /** 각인·칭호·초월·음식 보너스 합계 (한도 적용) */
@@ -586,13 +639,28 @@ export class Progress {
     return Math.min(7, Math.floor(this.data.cleared / 10) + 1);
   }
 
+  /** 원정대 보너스: 열린 직업들의 레벨 합 25마다 모든 능력치 +1 */
+  get rosterLevels(): number {
+    return this.data.unlockedClasses.reduce((a, id) => a + (this.data.classes[id]?.level ?? 0), 0);
+  }
+  get rosterBonus(): number {
+    return Math.floor(this.rosterLevels / ROSTER_STEP);
+  }
+  /** 성장 가속: 가장 높은 직업 레벨의 70%에 못 미치는 직업은 경험치 ×3 */
+  get catchUpLevel(): number {
+    return Math.floor(Math.max(...this.data.unlockedClasses.map((id) => this.data.classes[id]?.level ?? 1)) * CATCH_UP_RATIO);
+  }
+  get catchUp(): number {
+    return this.cls.level < this.catchUpLevel ? CATCH_UP_EXP : 1;
+  }
+
   /** 경험치를 더하고 오른 레벨 수를 돌려준다 */
   /** 마지막 addExp로 오른 초월 레벨 수 */
   transcendUps = 0;
 
   addExp(n: number): number {
     const c = this.cls;
-    n = Math.round(n * (1 + this.bonus('exp')));
+    n = Math.round(n * (1 + this.bonus('exp')) * this.catchUp);
     this.transcendUps = 0;
     // 99레벨 뒤: 경험치가 초월 레벨로 쌓인다 (레벨마다 초월 포인트 1)
     if (c.level >= MAX_LEVEL) {

@@ -3,23 +3,24 @@ import { decodeSave, encodeSave } from './saveCode';
 import { makeTestSave } from './testSave';
 import { gearLook } from '../models/items';
 import { BOSS_RESPAWN_MS, BOSS_TIME_LIMIT, FARM_COOLDOWN_MS, FARM_NAMES, goldScale, lowStageExpMult, playerDefK, vaultPileGold } from '../data/monsters';
-import { BOSS_SPECIES, DEBUFF_INFO, type DebuffId, type DebuffSpec } from '../data/species';
+import { BOSS_SPECIES, DEBUFF_INFO, pickSpecies, type DebuffId, type DebuffSpec } from '../data/species';
 import { newTool, TOOL_KIND_NAMES, TOOL_TIER_NAMES, toolBonusChance, toolName, toolSpeed, toolWear, type ToolKind } from '../data/tools';
-import { MeshLambertMaterial, OrthographicCamera, PCFShadowMap, Plane, Raycaster, Vector2, Vector3, WebGLRenderer } from 'three';
+import { AdditiveBlending, BoxGeometry, Mesh, MeshBasicMaterial, MeshLambertMaterial, OrthographicCamera, PCFShadowMap, Plane, Raycaster, Vector2, Vector3, WebGLRenderer } from 'three';
 import { CAMERA_OFFSET, GAME_VERSION, PLAYER, SCREEN_RIGHT, SCREEN_UP, TILE, VIEW_HEIGHT } from '../config';
 import { Audio } from '../core/audio';
 import { Input } from '../core/input';
 import { Rng, randomSeed } from '../core/rng';
-import { CLASSES, CLASS_ORDER, expToNext, MAX_SKILL_LEVEL, MAX_ULT_LEVEL, SKILL_LEARN, skillUpgradeCost, ULTIMATES, type ClassId } from '../data/classes';
+import { CLASSES, CLASS_ORDER, expToNext, MAX_LEVEL, MAX_SKILL_LEVEL, MAX_ULT_LEVEL, SKILL_LEARN, skillUpgradeCost, ULTIMATES, type ClassId } from '../data/classes';
 import { ultUpgradeCost } from '../data/ultUpgrade';
-import { durability, equipName, GRADE, GRADES, newUid, rollEquip, rollSeries, withSpecials, type Equip } from '../data/equipment';
+import { durability, EQUIP_SLOTS, equipName, GRADE, GRADES, newUid, rollEquip, rollSeries, withSpecials, type Equip } from '../data/equipment';
+import { SET_IDS } from '../data/sets';
 import { rollManaGrade } from '../data/crafting';
 import { BUILDINGS, FACTORY_SIZES, OFFLINE_CAP_HOURS, PRODUCER_LIMIT, PRODUCER_TYPES, PRODUCER_UNLOCK, type BuildingType, type ProducerType, upgradeBlueprintCost } from '../data/factory';
 import { essenceForTier, ITEMS, TIER_PLATE, ORE_TIERS, TIER_MANA_PLATE } from '../data/items';
 import { QUEST_BY_ID, type NpcRef, type QuestDef } from '../data/quests';
 import { SCRIPTS, type Step } from '../data/story';
 import { moveWithCollision } from '../dungeon/collision';
-import { generateDungeon, generateTowerFloor, type GenOptions, isFloor, type FarmKind } from '../dungeon/generator';
+import { generateDungeon, generateHordeField, generateTowerFloor, type GenOptions, isFloor, type FarmKind } from '../dungeon/generator';
 import { Factory, MACHINE_TYPES, RECIPE_BY_ID, type BuildingState, type Dir } from '../factory/sim';
 import { BuildBar } from '../ui/buildbar';
 import { Dialogue } from '../ui/dialogue';
@@ -32,13 +33,20 @@ import type { Monster } from './Monster';
 import type { SpecialTotals } from '../data/special';
 import { AWAKEN_HOLD, awakenCost, awakenHolds, SKILL_AWAKEN, STORM_RESUME, ULT_AWAKEN } from '../data/awaken';
 import { rememberNickname, submitTrial } from '../core/leaderboard';
+import { ACHIEVEMENTS, ACH_BY_ID, newAch, type AchCtx } from '../data/achievements';
+import { MARK } from '../data/marks';
 import { saveControls } from '../core/controls';
 import { Player } from './Player';
-import { DIM_BAG_MAX, deleteSave, hasSave, loadSave, newSave, Progress, useTestSlot, stageIndex, stageOf, type SaveData, type Stats, type RunCheckpoint } from './Progress';
+import { PACT_AWAKEN_KILLS, DIM_BAG_MAX, deleteSave, hasSave, loadSave, newSave, Progress, useTestSlot, stageIndex, stageOf, type SaveData, type Stats, type RunCheckpoint } from './Progress';
 import { objectiveNeed, objectiveProgress, Quests } from './Quests';
 import { bonusText, FOOD_MINUTES, FOODS, TITLES, type BonusKey } from '../data/bonus';
 import { hasStory, objective, questLines, scriptFor } from './Story';
 import { todayKey } from './Quests';
+import { BLESSINGS, BLESS_IDS, blessNeed, dayKey, hordeDaily, HORDE_BOSS_EVERY, HORDE_MAX_ALIVE, HORDE_MILESTONES, hordeMult, hordeRate, HURRY_TIME, newHorde, newRaid, prevDayKey, prevWeekKey, RAID_HP, RAID_TIME, raidDayMarks, raidScore, raidScoreText, raidSpec, trialDayMarks, VOWS, vowMult, type BlessId, type RaidRecord, type VowId } from '../data/endgame';
+import { rankMarks } from '../data/marks';
+import { CH8_LUCK, CH8_RULES, CH8_SET_DROP, CH8_STAGES, CH8_THEME, ch8Mult, type Ch8Rule } from '../data/chapter8';
+import { CH8_BOSS, CH8_MIDBOSS, RAID_SPECIES, SPECIES, TIER_POOLS } from '../data/species';
+import { myRank } from '../core/leaderboard';
 import { END_NAMES, endLock, type EndContent, rushEntry, riftEntry, AFFIXES, riftAffixes, riftLuck, riftMult, riftReward, RIFT_NODE_MULT, RIFT_TIME, rushFights, rushFightName, rushGrade, rushReward, RUSH_DIFFS, DUST, formatClock, newTrial, rollTrialWeek, trialGrade, TRIAL_GRADES, TRIAL_HP, trialScore, trialScoreText, trialSpec, TRIAL_TIME, weekKey, type TrialRecord, towerBoss, towerDaily, towerFirstClear, towerMult, towerTheme, type EndRun } from '../data/endgame';
 import { DungeonScene, type DungeonMods, type NodeInstance, type WaveSpec } from './scenes/DungeonScene';
 import { HomeScene } from './scenes/HomeScene';
@@ -76,6 +84,12 @@ interface Run {
 const ESSENCE = essenceForTier;
 const NPC_IDS = new Set<string>(NPCS.map((n) => n.id));
 const MAX_STAGE = 70;
+/** 무한 러쉬에 나오는 종족: 여러 단계의 사람형·언데드·공허 몬스터 (단계 색을 쓰는 짐승은 7단계 것만) */
+const HORDE_POOL: [string, number][] = (() => {
+  const seen = new Map<string, number>();
+  for (let t = 1; t <= 7; t++) for (const [id, w] of TIER_POOLS[t]) if (!/^t\d_/.test(id) || id.startsWith('t7_')) seen.set(id, Math.max(seen.get(id) ?? 0, w));
+  return [...seen].filter(([id]) => SPECIES[id]);
+})();
 /** 가로 시야 기준 화면비 (막대형 휴대폰 가로) */
 const REF_ASPECT = 2.2;
 
@@ -144,6 +158,10 @@ export class Game {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = PCFShadowMap;
     container.appendChild(this.renderer.domElement);
+    // 8장 '칠흑': 화면 가장자리를 어둡게 (HUD 아래)
+    const vignette = document.createElement('div');
+    vignette.className = 'ch8-vignette';
+    container.appendChild(vignette);
 
     this.camera = new OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
     this.input = new Input(this.renderer.domElement);
@@ -169,6 +187,8 @@ export class Game {
       },
       displayName: (speaker) => (speaker === '나' && this.progress?.data.nickname ? this.progress.data.nickname : speaker),
       portrait: (speaker) => {
+        // 8장에서 합류하는 차원 소환사 세이
+        if (speaker === '세이') return bustUrl('sei', { tunic: 0x3a2a6a, tunicDark: 0x241a48, hair: 0xe8e0ff, weapon: 'orb' });
         const npc = NPCS.find((n) => n.name === speaker || n.name.endsWith(` ${speaker}`));
         return npc ? bustUrl(npc.id, npc.look) : '';
       },
@@ -458,7 +478,11 @@ export class Game {
     const st = this.progress.stats();
     this.player.maxHp = st.maxHp;
     this.player.maxMp = st.maxMp;
-    this.player.moveBonus = this.progress.bonus('move');
+    this.player.moveBonus = this.progress.bonus('move') + 0.08 * (this.horde?.stacks.swift ?? 0);
+    this.player.dodgeCdMult = this.runVow('slowdodge') ? 2 : 1;
+    // 8장 차원 규칙: 무중력(회피 거리 2배) · 공허(MP 재생 없음)
+    this.player.dashMult = this.ch8Has('drift') ? 2 : 1;
+    this.player.noMpRegen = this.ch8Has('void');
     this.player.mpRegenBonus = this.progress.bonus('mpRegen');
     this.applyAura();
     // 게임을 막 불러왔으면 저장된 HP, 아니면 직전 장면의 HP를 이어받는다
@@ -468,6 +492,7 @@ export class Game {
     this.player.mp = keepHp && prev ? Math.min(st.maxMp, prev.mp) : st.maxMp;
     this.level.scene.add(this.player.rig.root);
     const game = this;
+    this.combat?.minions.clear();
     this.combat = new Combat({
       get player() {
         return game.player;
@@ -482,7 +507,11 @@ export class Game {
       // 시련: 배운 스킬은 모두 최고 레벨로 (같은 조건)
       awaken: (key) => this.progress.awakenOf(key),
       skillLevel: (i) => (this.progress.trial && (this.progress.cls.skills[i] ?? 0) > 0 ? MAX_SKILL_LEVEL : (this.progress.cls.skills[i] ?? 0)),
-      bonus: (k) => this.progress.bonus(k),
+      bonus: (k) => this.progress.bonus(k) + (k === 'cdr' ? Math.min(0.4 - this.progress.bonus('cdr'), 0.08 * (this.horde?.stacks.focus ?? 0)) : 0),
+      special: (k) => this.specialTotals()[k] ?? 0,
+      pacts: () => this.progress.activePacts().map((id) => ({ species: SPECIES[id], awakened: this.progress.kills(id) >= PACT_AWAKEN_KILLS })).filter((x) => x.species),
+      // 소환수 위력: 소환수 위력 보너스(계약 계열) + 특수 옵션 + 계약한 종족마다 +1% (최대 60%)
+      summonPower: () => 1 + this.progress.bonus('summon') + (this.specialTotals().summonDmg ?? 0) / 100 + Math.min(0.6, this.progress.pactEligible().length * 0.01),
       autoAim: () => this.progress.data.settings.autoAim !== false,
     });
     this.hud.setClass(cls.short, hex(cls.look.tunic), cls.skills.map((s) => s.name), this.progress.data.currentClass);
@@ -491,6 +520,8 @@ export class Game {
 
   private enterVillage(arrival: 'portal' | 'home' | 'start' | { x: number; z: number; facing: number }): void {
     const p = this.progress;
+    document.body.classList.remove('ch8-dark');
+    this.clearHorde();
     const endOn = p.flag('endgame') > 0;
     const village = new VillageScene(
       (spot) => this.interactVillage(spot),
@@ -514,6 +545,8 @@ export class Game {
     }
     if (grown) this.hud.toast(`차원가방이 ${p.data.dimBag.length}칸으로 늘어났습니다`, 3000);
     if (this.quests.refreshDaily(p.maxTier, p.flag('home') > 0, p.flag('endgame') > 0) && this.dailyUnlocked()) this.hud.toast('촌장 에단의 일일 의뢰가 새로 올라왔습니다', 3000);
+    // 어제 시련·지난주 레이드 순위 보상 확인
+    if (p.flag('endgame')) this.checkRankRewards();
     if (this.mode !== 'dialogue') this.mode = 'play';
     this.hud.setVisible(this.mode === 'play');
     this.refreshHud();
@@ -534,7 +567,7 @@ export class Game {
       extraBosses = e.extraBosses ?? [];
       tier = e.tier;
       stage = e.stage;
-      data = e.gen.tower ? generateTowerFloor(randomSeed(), tier) : generateDungeon(e.seed ?? randomSeed(), tier, stage, e.gen);
+      data = e.gen.horde ? generateHordeField(randomSeed(), tier) : e.gen.tower ? (e.gen.arena ? generateTowerFloor(e.seed ?? randomSeed(), tier, 27, 11.6) : generateTowerFloor(randomSeed(), tier)) : generateDungeon(e.seed ?? randomSeed(), tier, stage, e.gen);
       waves = e.waves ?? [];
       mods = e.mods;
     } else data = generateDungeon(randomSeed(), tier, stage, farm ? { farm } : { boss });
@@ -615,6 +648,11 @@ export class Game {
       }
     }
     this.fillPouch();
+    if (end?.kind === 'horde') this.beginHorde();
+    else this.clearHorde();
+    if (end?.kind === 'ch8') this.beginCh8(dungeon);
+    else document.body.classList.remove('ch8-dark');
+    if (end) this.applyStats();
     if (end) {
       this.hud.setLocation(this.endLabel(end, dungeon.theme.name), dungeon.theme.portalColor);
       this.audio.playMusic('dungeon');
@@ -702,12 +740,18 @@ export class Game {
         sound: d.settings.sound,
         onReturnStone: () => {
           if (!this.progress.take('return_stone', 1)) return;
+          const k = this.run?.end?.kind;
+          if (k === 'horde') return this.finishHorde();
+          if (k === 'raid') return this.finishRaid(false);
+          if (k === 'trial') return this.finishTrial(false);
           this.finishRun('귀환석으로 귀환');
         },
         onGiveUp: () => this.fall(),
         onBestiary: this.quests.isDone('m_research') ? () => this.openBestiary(false) : undefined,
         onEncyclopedia: () => this.screens.encyclopedia(this.progress, () => this.openPause()),
         onControls: () => this.openControls(),
+        onAchievements: this.progress.flag('endgame') ? () => this.openAchievements(() => this.openPause()) : undefined,
+        achReady: this.progress.flag('endgame') ? this.achClaimable() : 0,
         onFeedback: () => {
           const c = this.progress.cls;
           const cleared = this.progress.data.cleared;
@@ -828,13 +872,22 @@ export class Game {
     }
     if (pl.buff('ironwall')) st.def = Math.round(st.def * 1.6);
     if (pl.buff('haste')) st.speed *= 1.2;
+    // 무한 러쉬 축복
+    const b = this.horde?.stacks;
+    if (b) {
+      atk *= 1 + 0.15 * (b.might ?? 0);
+      st.speed *= 1 + 0.1 * (b.fury ?? 0);
+      st.crit += 6 * (b.keen ?? 0);
+    }
     st.atk = Math.round(st.atk * atk);
     return st;
   }
 
   private applyStats(): void {
     if (!this.player) return;
-    const st = this.progress.stats();
+    const st = { ...this.progress.stats() };
+    // 무한 러쉬 축복 (생명) · 균열 서약 (유리 몸)
+    st.maxHp = Math.round(st.maxHp * (1 + 0.15 * (this.horde?.stacks.vital ?? 0)) * (this.runVow('glass') ? 0.6 : 1));
     const hpRatio = this.player.hp / this.player.maxHp;
     this.player.maxHp = st.maxHp;
     this.player.maxMp = st.maxMp;
@@ -842,10 +895,34 @@ export class Game {
     this.player.mp = Math.min(this.player.mp, st.maxMp);
     this.refreshGear();
     // 장비 모습이 바뀌면 플레이어를 새로 만들므로 그 뒤에 넣는다
-    this.player.moveBonus = this.progress.bonus('move');
+    this.player.moveBonus = this.progress.bonus('move') + 0.08 * (this.horde?.stacks.swift ?? 0);
+    this.player.dodgeCdMult = this.runVow('slowdodge') ? 2 : 1;
+    // 8장 차원 규칙: 무중력(회피 거리 2배) · 공허(MP 재생 없음)
+    this.player.dashMult = this.ch8Has('drift') ? 2 : 1;
+    this.player.noMpRegen = this.ch8Has('void');
     this.player.mpRegenBonus = this.progress.bonus('mpRegen');
-    this.player.hpRegenBonus = (this.progress.specials().regen ?? 0) / 100;
-    this.player.dodgeCharges = 1 + Math.round(this.progress.specials().dodgeCharge ?? 0);
+    this.player.hpRegenBonus = (this.specialTotals().regen ?? 0) / 100;
+    this.player.dodgeCharges = 1 + Math.round(this.specialTotals().dodgeCharge ?? 0);
+    this.player.dodgeBuffPct = this.specialTotals().dodgeBuff ?? 0;
+  }
+
+  /** 특수 옵션 합계 (장비·세트·유물 + 무한 러쉬 축복) */
+  private specialTotals(): SpecialTotals {
+    const t = { ...this.progress.specials() };
+    for (const [k, v] of Object.entries(this.blessSpecials()) as [keyof SpecialTotals, number][]) t[k] = (t[k] ?? 0) + v;
+    return t;
+  }
+  /** 무한 러쉬 축복이 주는 특수 옵션 (러쉬가 아니면 없음) */
+  private blessSpecials(): SpecialTotals {
+    const b = this.horde?.stacks;
+    if (!b) return {};
+    const n = (k: BlessId) => b[k] ?? 0;
+    return { critDmg: 15 * n('keen'), killHeal: n('vamp'), skillDmg: 10 * n('focus'), dmgReduce: 6 * n('guard'), dodgeCharge: n('reach'), dodgeBuff: 20 * n('reach') };
+  }
+  /** 지금 판이 이 균열 서약을 걸었는지 */
+  private runVow(v: VowId): boolean {
+    const e = this.run?.end;
+    return e?.kind === 'rift' && !!e.vows?.includes(v);
   }
 
   private gearKey = '';
@@ -985,6 +1062,11 @@ export class Game {
           this.screens.close();
         },
         () => this.openEndgameMenu('rift'),
+        (stage) => {
+          if (stage > (this.progress.data.ch8?.cleared ?? 0) + 1) return;
+          this.afterMenu = () => this.enterDungeon(7, stage, false, undefined, { kind: 'ch8', stage });
+          this.screens.close();
+        },
       ),
     );
   }
@@ -1026,6 +1108,7 @@ export class Game {
       opts.push({ label: `${x.title} (진행 중)`, kind: 'pending', pick: run(() => this.playSteps(x.pending!, back)) });
     const service = this.npcServiceLabel(npc);
     if (service) opts.push({ label: service, kind: 'service', pick: run(() => this.npcService(npc)) });
+    for (const x of this.npcExtra(npc)) opts.push({ label: x.label, kind: 'service', pick: run(x.pick) });
     opts.push({ label: '대화 끝내기', kind: 'leave', pick: () => this.screens.close() });
 
     const idle = SCRIPTS[`${npc}_idle`]?.[0];
@@ -1052,6 +1135,23 @@ export class Game {
       default:
         return null;
     }
+  }
+
+  /** v10: 엔딩 뒤 NPC 추가 기능 (???: 증표 교환 · 노아: 유물 복원 · 촌장: 업적) */
+  private npcExtra(npc: NpcId): { label: string; pick: () => void }[] {
+    const p = this.progress;
+    if (!p.flag('endgame')) return [];
+    const change = () => {
+      this.applyStats();
+      this.saveNow();
+    };
+    if (npc === 'stranger') return [{ label: `증표 교환 (영겁의 증표 ${p.count('eon_mark')})`, pick: () => this.openMenu(() => this.screens.exchange(p, change, () => this.resume())) }];
+    if (npc === 'researcher')
+      return [
+        { label: '유물 복원·장착', pick: () => this.openMenu(() => this.screens.relics(p, change, () => this.resume())) },
+        ...(p.data.unlockedClasses.includes('summoner') ? [{ label: '차원 계약 (소환사)', pick: () => this.openMenu(() => this.screens.pacts(p, change, () => this.resume())) }] : []),
+      ];
+    return [];
   }
 
   /** NPC 고유 기능. 퀘스트 진행 중이어도 언제나 쓸 수 있다 */
@@ -1324,6 +1424,10 @@ export class Game {
         p.unlockClass('archer');
         this.audio.play('level');
         break;
+      case 'unlockSummoner':
+        p.unlockClass('summoner');
+        this.audio.play('level');
+        break;
       case 'endgame':
         this.pendingEndgame = true;
         break;
@@ -1376,19 +1480,56 @@ export class Game {
       }
       case 'rift': {
         const a = end.affixes;
+        const v = end.vows ?? [];
         const m = riftMult(end.level);
         return {
           tier: end.tier,
           stage: 4,
-          gen: { boss: 'present', rooms: [5, 6], monsterMult: a.includes('swarm') ? 1.4 : 1, eliteChance: a.includes('elite') ? 0.15 : 0, nodeMult: RIFT_NODE_MULT },
-          mods: { statTier: 7, statStage: 10, hp: m * (a.includes('fortified') ? 1.3 : 1), atk: m * (a.includes('enraged') ? 1.25 : 1), speed: a.includes('haste') ? 1.2 : 1, affixes: a },
+          gen: { boss: 'present', rooms: [5, 6], monsterMult: a.includes('swarm') ? 1.4 : 1, eliteChance: (a.includes('elite') ? 0.15 : 0) + (v.includes('elite') ? 0.25 : 0), nodeMult: RIFT_NODE_MULT },
+          mods: {
+            statTier: 7,
+            statStage: 10,
+            hp: m * (a.includes('fortified') ? 1.3 : 1) * (v.includes('tough') ? 1.6 : 1),
+            atk: m * (a.includes('enraged') ? 1.25 : 1) * (v.includes('brutal') ? 1.6 : 1),
+            speed: a.includes('haste') ? 1.2 : 1,
+            affixes: a,
+          },
         };
       }
+      case 'raid': {
+        // 주간 레이드: 넓은 둥근 투기장 한가운데에 레이드 보스 한 마리
+        const r = raidSpec(end.week);
+        return {
+          tier: r.boss.tier,
+          stage: 1,
+          seed: r.seed,
+          gen: { tower: true, arena: 'raid' },
+          mods: { statTier: 7, statStage: 10, hp: RAID_HP, raid: true },
+          waves: [{ normals: 0, elites: 0, bosses: [{ kind: 'boss', tier: r.boss.tier, species: RAID_SPECIES[r.boss.id] }] }],
+        };
+      }
+      case 'ch8': {
+        // 8장: 7단계 맵 구조에 차원 테마·8장 몬스터. 파수꾼·수문장은 보통 보스처럼 다시 나타나기까지 기다린다
+        const wait = this.progress.bossWait(8, end.stage);
+        const m = ch8Mult(end.stage);
+        return {
+          tier: 7,
+          stage: end.stage,
+          gen: { boss: wait > 0 ? 'guard' : 'present' },
+          mods: { statTier: 7, statStage: 10, hp: m, atk: m * 0.85, theme: CH8_THEME, pool: TIER_POOLS[8], bosses: { midboss: CH8_MIDBOSS, boss: CH8_BOSS } },
+        };
+      }
+      case 'horde':
+        // 무한 러쉬: 넓은 벌판. 몬스터는 게임이 시간에 맞춰 사방에서 불러낸다
+        return { tier: 7, stage: 1, gen: { horde: true }, mods: { statTier: 7, statStage: 10, hp: hordeMult(0), atk: hordeMult(0), endless: true, pool: HORDE_POOL } };
     }
   }
 
   private endLabel(end: EndRun, theme: string): string {
-    if (end.kind === 'trial') return `주간 차원 시련 · ${BOSS_SPECIES[trialSpec(end.week).tier - 1].name} · :hourglass: ${formatClock(Math.max(0, TRIAL_TIME - this.bossTime))}`;
+    if (end.kind === 'ch8') return `8-${end.stage} · ${CH8_STAGES[end.stage - 1].name} · ${CH8_STAGES[end.stage - 1].rules.map((r) => CH8_RULES[r].name).join('·')}`;
+    if (end.kind === 'raid') return `주간 차원 레이드 · ${raidSpec(end.week).boss.name} · :hourglass: ${formatClock(Math.max(0, RAID_TIME - this.bossTime))}`;
+    if (end.kind === 'horde') return `무한 러쉬 · 처치 ${end.kills} · ${formatClock(end.time)}`;
+    if (end.kind === 'trial') return `일일 차원 시련 · ${BOSS_SPECIES[trialSpec(end.week).tier - 1].name} · :hourglass: ${formatClock(Math.max(0, TRIAL_TIME - this.bossTime))}`;
     if (end.kind === 'tower') return `무한의 탑 ${end.floor}층 · ${theme}`;
     if (end.kind === 'rush') return `보스 러시 ${RUSH_DIFFS[end.diff].name} ${end.index + 1}/${rushFights(end.diff).length}`;
     const t = Math.max(0, Math.ceil(end.timeLeft));
@@ -1396,8 +1537,16 @@ export class Game {
   }
 
   private endIntro(end: EndRun): string {
+    if (end.kind === 'ch8') {
+      const st = CH8_STAGES[end.stage - 1];
+      const wait = this.progress.bossWait(8, end.stage);
+      const boss = end.stage === 10 ? (wait > 0 ? ` — 수문장은 ${formatWait(wait)} 뒤 다시 나타납니다` : ' — 차원 포탈의 수문장이 기다립니다') : end.stage === 5 ? (wait > 0 ? ` — 파수꾼은 ${formatWait(wait)} 뒤 다시 나타납니다` : ' — 시간의 파수꾼이 지키고 있습니다') : '';
+      return `8-${end.stage} ${st.name} · 차원 규칙: ${st.rules.map((r) => `${CH8_RULES[r].name} (${CH8_RULES[r].text})`).join(' / ')}${boss}`;
+    }
+    if (end.kind === 'raid') return `주간 차원 레이드 — ${raidSpec(end.week).boss.name}을(를) ${formatClock(RAID_TIME)} 안에 쓰러뜨리자 · 8·4줄에서 보호막, 10%마다 격노`;
+    if (end.kind === 'horde') return '무한 러쉬 — 차원의 틈에서 몬스터가 끝없이 쏟아진다! 쓰러질 때까지 버티며 최대한 많이 처치하자';
     if (end.kind === 'trial')
-      return `주간 차원 시련 (${end.week}) — ${BOSS_SPECIES[trialSpec(end.week).tier - 1].name}에게 ${formatClock(TRIAL_TIME)} 동안 최대한 피해를 주자 · 체력 10%마다 격노 단계가 오른다`;
+      return `일일 차원 시련 (${end.week}) — ${BOSS_SPECIES[trialSpec(end.week).tier - 1].name}에게 ${formatClock(TRIAL_TIME)} 동안 최대한 피해를 주자 · 체력 10%마다 격노 단계가 오른다`;
     if (end.kind === 'tower') {
       const b = towerBoss(end.floor);
       return `무한의 탑 ${end.floor}층 — 몬스터 ×${towerMult(end.floor).toFixed(2)}${b ? ` · ${b.kind === 'boss' ? '수호자' : '파수꾼'}가 기다립니다` : ''}${end.floor > 10 && end.floor % 10 === 1 ? ' · :warning: 새 구간: 몬스터가 한꺼번에 강해졌다' : ''}`;
@@ -1406,7 +1555,8 @@ export class Game {
       return `보스 러시 ${end.index + 1}/${rushFights(end.diff).length} — ${rushFightName(rushFights(end.diff)[end.index])}`;
     }
     const aff = end.affixes.map((a) => AFFIXES[a].name).join(' · ');
-    return `심연 균열 ${end.level}단계 — ${Math.floor(RIFT_TIME / 60)}분 안에 모두 쓰러뜨리자${aff ? ` · 변이: ${aff}` : ''}`;
+    const vw = (end.vows ?? []).map((v) => VOWS[v].name).join(' · ');
+    return `심연 균열 ${end.level}단계 — ${Math.floor(end.timeLeft / 60)}분 안에 모두 쓰러뜨리자${aff ? ` · 변이: ${aff}` : ''}${vw ? ` · 서약: ${vw} (보상 ×${vowMult(end.vows).toFixed(2)})` : ''}`;
   }
 
   /** 보스 러시 오늘 쓴 횟수 (날짜가 바뀌면 0) */
@@ -1428,6 +1578,8 @@ export class Game {
     const e = p.data.end!;
     this.rushUsedToday();
     this.trialRecord();
+    this.raidRecord();
+    this.checkRankRewards();
     this.openMenu(() =>
       this.screens.endgame(
         p,
@@ -1466,14 +1618,33 @@ export class Game {
             this.saveNow();
             this.openEndgameMenu(null, g < 0 ? '오라를 껐습니다' : `발밑 오라: ${TRIAL_GRADES[g].aura}`);
           },
-          rift: (tier, level) => {
+          rift: (tier, level, vows) => {
             if (level > e.riftBest + 1 || tier > p.maxTier) return;
             const cost = riftEntry(level);
             if (p.count(cost.id) < cost.n) return this.openEndgameMenu(null, `심연 균열 ${level}단계에 들어가려면 ${ITEMS[cost.id].name} ${cost.n}개가 필요합니다 (차원집 제작대)`);
             p.take(cost.id, cost.n);
+            e.vows = [...vows];
             this.saveNow();
-            this.afterMenu = () => this.enterDungeon(tier, 1, false, undefined, { kind: 'rift', tier, level, affixes: riftAffixes(level, todayKey()), timeLeft: RIFT_TIME });
+            this.afterMenu = () => this.enterDungeon(tier, 1, false, undefined, { kind: 'rift', tier, level, affixes: riftAffixes(level, todayKey()), timeLeft: vows.includes('hurry') ? HURRY_TIME : RIFT_TIME, vows: [...vows] });
             this.screens.close();
+          },
+          raid: () => this.startRaid(),
+          horde: () => this.startHorde(),
+          hordeDaily: () => {
+            const hr = this.hordeRecord();
+            if (hr.dailyDate === todayKey() || hr.best < 1) return;
+            const r = hordeDaily(hr.best);
+            hr.dailyDate = todayKey();
+            p.data.gold += r.gold;
+            if (r.marks) p.add(MARK, r.marks);
+            this.audio.play('coin');
+            this.saveNow();
+            this.openEndgameMenu(null, `무한 러쉬 일일 보상: +${r.gold.toLocaleString()} G${r.marks ? ` · 영겁의 증표 ${r.marks}개` : ''}`);
+          },
+          view: (c) => {
+            const lock = endLock(e, c);
+            if (lock) return this.openEndgameMenu(null, `${END_NAMES[c]}: ${lock}`);
+            this.openEndgameMenu(c);
           },
         },
         () => this.resume(),
@@ -1492,6 +1663,7 @@ export class Game {
       transcend: Math.max(...CLASS_ORDER.map((c) => p.data.classes[c].tlv ?? 0)),
       trialTop: p.data.end?.trial?.topGrade ?? -1,
       trialWeeks: p.data.end?.trial?.weeks ?? 0,
+      ach: p.data.ach?.done ?? [],
       engrave5: CLASS_ORDER.reduce((a, c) => a + Object.values(p.data.classes[c].equipment).filter((e) => (e?.eng?.length ?? 0) >= 5).length, 0) + p.data.equips.filter((e) => (e.eng?.length ?? 0) >= 5).length,
     };
     const got = (p.data.titles ??= []);
@@ -1515,18 +1687,26 @@ export class Game {
   /** 이번 주 시련 기록 (주가 바뀌었으면 지난 기록을 넘긴다) */
   private trialRecord(): TrialRecord {
     const e = this.progress.data.end!;
-    const wk = weekKey();
-    e.trial = rollTrialWeek(e.trial ?? newTrial(wk), wk);
+    const day = dayKey();
+    e.trial = rollTrialWeek(e.trial ?? newTrial(day), day);
     return e.trial;
   }
 
-  /** 주간 시련 시작: 내 능력치 그대로 이번 주 수호자에게 */
+  /** 일일 시련 시작: 내 능력치 그대로 오늘의 수호자에게 */
   private startTrial(): void {
-    this.afterMenu = () => this.enterDungeon(1, 1, false, undefined, { kind: 'trial', week: weekKey(), hits: 0, potions: 0 });
+    this.afterMenu = () => this.enterDungeon(1, 1, false, undefined, { kind: 'trial', week: dayKey(), hits: 0, potions: 0 });
     this.screens.close();
   }
 
-  /** 주간 시련 끝: 깎은 체력(또는 처치 시간)으로 기록한 뒤 마을로 (쓰러져도 짐은 그대로) */
+  /** 증표 주기 (던전 안이면 가방이 아니라 바로 창고로) */
+  private giveMarks(n: number, why: string): void {
+    if (n <= 0) return;
+    this.progress.add(MARK, n);
+    this.audio.play('coin');
+    this.hud.toast(`:sparkle: 영겁의 증표 +${n} — ${why}`, 3500);
+  }
+
+  /** 일일 시련 끝: 깎은 체력(또는 처치 시간)으로 기록한 뒤 마을로 (쓰러져도 짐은 그대로) */
   private finishTrial(killed: boolean): void {
     const run = this.run;
     if (!run || run.end?.kind !== 'trial') return;
@@ -1539,18 +1719,28 @@ export class Game {
     const score = trialScore(ratio, killed, secs);
     const grade = trialGrade(score);
     let best = '';
-    // 다른 주에 시작한 도전은 기록하지 않는다
+    // 다른 날 시작한 도전은 기록하지 않는다
     if (end.week === t.week && score > t.best) {
-      if (t.best === 0) t.weeks++;
+      if (t.best === 0) {
+        t.weeks++;
+        this.progress.achAdd('trialDays');
+      }
       t.best = score;
       t.time = Math.round(secs);
       t.hits = end.hits;
       t.cls = this.progress.data.currentClass;
-      best = ' · 이번 주 최고 기록!';
+      best = ' · 오늘 최고 기록!';
+      // 오늘 기록의 등급만큼 증표 (오르면 차액)
+      const want = trialDayMarks(score);
+      const got = t.marks ?? 0;
+      if (want > got) {
+        t.marks = want;
+        window.setTimeout(() => this.giveMarks(want - got, '일일 차원 시련 기록'), 1500);
+      }
       // 순위 이름이 있으면 시트에 바로 올린다
       const name = this.progress.data.nickname;
       if (name) {
-        void submitTrial({ week: t.week, name, cls: t.cls, level: this.progress.cls.level, score, seconds: t.time, boss: BOSS_SPECIES[trialSpec(t.week).tier - 1].name, version: GAME_VERSION }).then((r) =>
+        void submitTrial({ board: 'trial', week: t.week, name, cls: t.cls, level: this.progress.cls.level, score, seconds: t.time, boss: BOSS_SPECIES[trialSpec(t.week).tier - 1].name, version: GAME_VERSION }).then((r) =>
           this.hud.toast(r.ok ? ':sparkle: 순위표에 기록을 올렸습니다' : `순위표 올리기 실패: ${r.reason}`, 3000),
         );
       }
@@ -1559,7 +1749,7 @@ export class Game {
     if (grade > t.topGrade) {
       t.topGrade = grade;
       this.progress.data.aura = grade;
-      window.setTimeout(() => this.hud.toast(`:sparkle: 새 발밑 오라: ${TRIAL_GRADES[grade].aura} (차원의 끝 → 주간 시련에서 바꿀 수 있음)`, 4500), 2500);
+      window.setTimeout(() => this.hud.toast(`:sparkle: 새 발밑 오라: ${TRIAL_GRADES[grade].aura} (차원의 끝 → 시련에서 바꿀 수 있음)`, 4500), 2500);
     }
     run.pouch = [];
     this.mode = 'play';
@@ -1567,9 +1757,439 @@ export class Game {
     this.hud.setBoss(null);
     this.checkTitles();
     const gname = grade >= 0 ? TRIAL_GRADES[grade].name : '등급 없음';
-    const txt = `주간 시련 ${killed ? '처치!' : '종료'}: ${trialScoreText(score)} (${gname})`;
+    const txt = `일일 시련 ${killed ? '처치!' : '종료'}: ${trialScoreText(score)} (${gname})`;
     this.hud.toast(`${txt}${best}`, 5000);
     this.finishRun(txt);
+  }
+
+  // ---------------- 주간 차원 레이드 (v10) ----------------
+  private raidRecord(): RaidRecord {
+    const e = this.progress.data.end!;
+    const wk = weekKey();
+    const r = (e.raid ??= newRaid(wk));
+    if (r.week !== wk) Object.assign(r, { week: wk, best: 0, time: 0, cls: '' });
+    const day = dayKey();
+    if (r.day !== day) Object.assign(r, { day, dayBest: 0, dayMarks: 0 });
+    return r;
+  }
+
+  private startRaid(): void {
+    this.afterMenu = () => this.enterDungeon(1, 1, false, undefined, { kind: 'raid', week: weekKey(), hits: 0 });
+    this.screens.close();
+  }
+
+  /** 레이드 끝: 처치했으면 시간, 아니면 깎은 체력으로 기록. 짐은 잃지 않는다 */
+  private finishRaid(killed: boolean): void {
+    const run = this.run;
+    if (!run || run.end?.kind !== 'raid') return;
+    const end = run.end;
+    const r = this.raidRecord();
+    const lv = this.level;
+    const boss = lv instanceof DungeonScene ? (lv.monsters.find((m) => m.isBoss) ?? lv.boss) : null;
+    const ratio = killed ? 1 : boss ? 1 - Math.max(0, boss.hp) / boss.maxHp : 0;
+    const secs = Math.min(RAID_TIME, this.bossTime);
+    const score = raidScore(ratio, killed, secs);
+    let best = '';
+    if (killed) {
+      r.kills++;
+      this.progress.achAdd('raids');
+    }
+    if (end.week === r.week && score > r.best) {
+      r.best = score;
+      r.time = Math.round(secs);
+      r.cls = this.progress.data.currentClass;
+      r.played = [r.week, ...(r.played ?? []).filter((w) => w !== r.week)].slice(0, 10);
+      best = ' · 이번 주 최고 기록!';
+      const name = this.progress.data.nickname;
+      if (name)
+        void submitTrial({ board: 'raid', week: r.week, name, cls: r.cls, level: this.progress.cls.level, score, seconds: r.time, boss: raidSpec(r.week).boss.name, version: GAME_VERSION }).then((x) =>
+          this.hud.toast(x.ok ? ':sparkle: 레이드 순위표에 기록을 올렸습니다' : `순위표 올리기 실패: ${x.reason}`, 3000),
+        );
+    }
+    // 하루 한 번: 오늘 가장 좋은 기록만큼 증표 (오르면 차액)
+    if (score > (r.dayBest ?? 0)) {
+      r.dayBest = score;
+      const want = raidDayMarks(score);
+      const got = r.dayMarks ?? 0;
+      if (want > got) {
+        r.dayMarks = want;
+        window.setTimeout(() => this.giveMarks(want - got, '주간 차원 레이드 (오늘 기록)'), 1500);
+      }
+    }
+    // 레이드 보스는 세트 장비를 떨어뜨리기도 한다 (처치했을 때)
+    if (killed && Math.random() < 0.35) window.setTimeout(() => this.dropSetPiece('레이드 보스'), 2600);
+    this.mode = 'play';
+    this.player.hp = Math.max(1, this.player.hp);
+    this.hud.setBoss(null);
+    this.checkTitles();
+    const txt = `주간 레이드 ${killed ? '처치!' : '종료'}: ${raidScoreText(score)}`;
+    this.hud.toast(`${txt}${best}`, 5000);
+    this.finishRun(txt);
+  }
+
+  /** 세트 장비 하나 (무작위 세트·부위, 전설) → 창고 */
+  private dropSetPiece(from: string): void {
+    const p = this.progress;
+    const set = SET_IDS[Math.floor(Math.random() * SET_IDS.length)];
+    const slot = EQUIP_SLOTS[Math.floor(Math.random() * EQUIP_SLOTS.length)];
+    const e = withSpecials({ uid: newUid(), slot, cls: slot === 'weapon' ? p.data.currentClass : undefined, tier: 7, grade: Math.random() < 0.1 ? 6 : 5, plus: 0, set });
+    p.data.equips.push(e);
+    p.achAdd('sets');
+    this.audio.play('stone');
+    this.hud.toast(`:sparkle: ${from}이(가) 세트 장비를 떨어뜨렸다: ${equipName(e)} (창고)`, 4500);
+    this.saveNow();
+  }
+
+  // ---------------- 8장 「갈라진 차원」 (v10) ----------------
+  /** 거울 분신 (다시 분신이 되지 않게) */
+  private mirrored = new WeakSet<Monster>();
+  private ch8State: { t: number; meteorT: number; base: Map<Monster, number>; fast: boolean; level: DungeonScene | null } = { t: 0, meteorT: 5, base: new Map(), fast: false, level: null };
+
+  /** 지금 8장 방에 이 규칙이 붙어 있는지 */
+  private ch8Has(r: Ch8Rule): boolean {
+    const e = this.run?.end;
+    return e?.kind === 'ch8' && CH8_STAGES[e.stage - 1].rules.includes(r);
+  }
+
+  /** 8장 방에 들어왔을 때: 칠흑이면 빛을 줄이고 화면 가장자리를 어둡게 */
+  private beginCh8(level: DungeonScene): void {
+    this.ch8State = { t: 0, meteorT: 5, base: new Map(), fast: false, level };
+    const dark = this.ch8Has('dark');
+    if (dark) {
+      if (level.hemi) level.hemi.intensity *= 0.3;
+      level.sun.intensity *= 0.25;
+    }
+    document.body.classList.toggle('ch8-dark', dark);
+  }
+
+  private updateCh8(dt: number, level: DungeonScene): void {
+    const st = this.ch8State;
+    if (st.level !== level) this.beginCh8(level);
+    st.t += dt;
+    // 뒤틀린 시간: 12초마다 4초 동안 몬스터 가속
+    if (this.ch8Has('time')) {
+      const fast = st.t % 12 > 8;
+      for (const m of level.monsters) {
+        if (!m.alive) continue;
+        if (!st.base.has(m)) st.base.set(m, m.speed);
+        m.speed = st.base.get(m)! * (fast ? 1.6 : 1);
+      }
+      if (fast && !st.fast) {
+        this.hud.toast(':hourglass: 시간이 뒤틀린다 — 몬스터가 빨라졌다!', 1500);
+        level.effects.ring(this.player.position.x, this.player.position.z, 6, CH8_RULES.time.color, 0.6, 1.2);
+      }
+      st.fast = fast;
+    }
+    // 별똥비: 7초마다 내 주변 세 곳에 운석
+    if (this.ch8Has('meteor') && level.monsters.some((m) => m.alive && m.aggro)) {
+      st.meteorT -= dt;
+      if (st.meteorT <= 0) {
+        st.meteorT = 7;
+        const p = this.player.position;
+        const atk = Math.max(1, ...level.monsters.filter((m) => m.alive && !m.isBoss).map((m) => m.atk), 1);
+        for (let i = 0; i < 3; i++) {
+          const a = Math.random() * Math.PI * 2;
+          const r = i === 0 ? Math.random() * 1.5 : 2 + Math.random() * 4;
+          const x = p.x + Math.cos(a) * r;
+          const z = p.z + Math.sin(a) * r;
+          level.effects.zone(x, z, 2, CH8_RULES.meteor.color, 1.3);
+          level.effects.glyph(x, z, 2, CH8_RULES.meteor.color, 1.3);
+          window.setTimeout(() => {
+            if (this.level !== level || !this.player.alive) return;
+            level.effects.explosion(x, z, 2.2, 0xff6a4a);
+            level.particles.burst(x, 0.6, z, 0x5a3a2a, 14, 1.5);
+            this.audio.play('boom');
+            this.shakeT = Math.max(this.shakeT, 0.25);
+            const q = this.player.position;
+            if (Math.hypot(q.x - x, q.z - z) < 2.2) this.hurtPlayer(atk * 1.3, x, z);
+            for (const m of level.monsters) if (m.targetable && Math.hypot(m.x - x, m.z - z) < 2.2 + m.radius) m.damage(m.maxHp * 0.05, x, z, 1);
+          }, 1300);
+        }
+      }
+    }
+  }
+
+  /** 8-10 수문장을 처음 쓰러뜨렸다: 차원 소환사 합류 */
+  private ch8Finale(): void {
+    const p = this.progress;
+    if (p.data.unlockedClasses.includes('summoner')) return;
+    this.openMenu(
+      () =>
+        this.screens.ask(
+          '포탈이 부서지며 누군가 걸어 나온다…',
+          '수문장이 지키던 포탈 속에 갇혀 있던 사람이 풀려났습니다. 마을로 돌아가 ???와 이야기해 보세요.',
+          () => this.screens.close(),
+          () => this.screens.close(),
+        ),
+      () => this.resume(),
+    );
+    p.setFlag('ch8Boss');
+    this.saveNow();
+  }
+
+  // ---------------- 무한 러쉬 (v10) ----------------
+  /** 러쉬 한 판의 상태: 축복, 다음 축복까지 처치 수, 소환 타이머, 칼날 궤도 */
+  private horde: {
+    stacks: Partial<Record<BlessId, number>>;
+    next: number;
+    spawnAcc: number;
+    bossT: number;
+    bossN: number;
+    thunderT: number;
+    blades: Mesh[];
+    bladeCd: Map<Monster, number>;
+    angle: number;
+    label: number;
+  } | null = null;
+
+  private startHorde(): void {
+    this.afterMenu = () => this.enterDungeon(1, 1, false, undefined, { kind: 'horde', kills: 0, time: 0, bossesDown: 0, picks: 0 });
+    this.screens.close();
+  }
+
+  private hordeRecord() {
+    return (this.progress.data.end!.horde ??= newHorde());
+  }
+
+  /** 러쉬를 시작할 때 (enterDungeon 뒤) */
+  private beginHorde(): void {
+    this.clearHorde();
+    this.horde = { stacks: {}, next: blessNeed(0), spawnAcc: 4, bossT: HORDE_BOSS_EVERY, bossN: 0, thunderT: 2, blades: [], bladeCd: new Map(), angle: 0, label: 0 };
+    this.applyStats();
+  }
+
+  private clearHorde(): void {
+    if (!this.horde) return;
+    for (const b of this.horde.blades) {
+      b.parent?.remove(b);
+      b.geometry.dispose();
+      (b.material as MeshBasicMaterial).dispose();
+    }
+    this.horde = null;
+  }
+
+  /** 플레이어 둘레(화면 밖)의 바닥 한 곳 */
+  private hordeSpot(level: DungeonScene, min: number, max: number): { x: number; z: number } | null {
+    const p = this.player.position;
+    for (let i = 0; i < 14; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = min + Math.random() * (max - min);
+      const x = p.x + Math.cos(a) * r;
+      const z = p.z + Math.sin(a) * r;
+      if (isFloor(level.grid, Math.floor(x / TILE), Math.floor(z / TILE)) && isFloor(level.grid, Math.floor(x / TILE) + 1, Math.floor(z / TILE))) return { x, z };
+    }
+    return null;
+  }
+
+  private updateHorde(dt: number, level: DungeonScene, end: Extract<EndRun, { kind: 'horde' }>): void {
+    const h = this.horde;
+    if (!h) return;
+    end.time += dt;
+    h.label -= dt;
+    if (h.label <= 0) {
+      h.label = 0.5;
+      this.hud.setLocation(this.endLabel(end, level.theme.name), level.theme.portalColor);
+    }
+    const mult = hordeMult(end.time);
+    // 차원의 틈에서 몬스터가 쏟아진다
+    h.spawnAcc += dt * hordeRate(end.time);
+    const alive = level.monsters.filter((m) => m.alive).length;
+    while (h.spawnAcc >= 1) {
+      h.spawnAcc -= 1;
+      if (alive >= HORDE_MAX_ALIVE) continue;
+      const spot = this.hordeSpot(level, 12, 17);
+      if (!spot) continue;
+      level.mods.hp = level.mods.atk = mult;
+      const elite = Math.random() < Math.min(0.2, 0.03 + end.time / 1500);
+      const sp = pickSpecies(7, Math.random, elite ? (d) => d.arch !== 'swarm' : undefined, undefined, HORDE_POOL);
+      const n = !elite && sp.pack ? sp.pack : 1;
+      for (let i = 0; i < n; i++) level.spawnMonster(sp, elite ? 'elite' : 'normal', spot.x + (i ? (Math.random() - 0.5) * 1.6 : 0), spot.z + (i ? (Math.random() - 0.5) * 1.6 : 0), 0, true);
+      level.effects.glyph(spot.x, spot.z, 1.1, 0xb67cff, 0.5);
+    }
+    // 1분 30초마다 보스 (파수꾼 → 수호자 번갈아)
+    h.bossT -= dt;
+    if (h.bossT <= 0) {
+      h.bossT = HORDE_BOSS_EVERY;
+      const spot = this.hordeSpot(level, 9, 13);
+      if (spot) {
+        h.bossN++;
+        level.mods.hp = mult * 0.3;
+        level.mods.atk = mult * 0.8;
+        const kind = h.bossN % 2 ? 'midboss' : 'boss';
+        const m = level.spawnBoss(kind, 1 + Math.floor(Math.random() * 7), spot.x, spot.z);
+        m.aggro = true;
+        if (!level.boss || !level.boss.alive) level.boss = m;
+        level.effects.pillar(m.x, m.z, 0xff4a6a, 6);
+        this.hud.toast(`:warning: 차원의 틈에서 ${m.name}이(가) 나타났다!`, 2500);
+        this.audio.play('stone');
+      }
+    }
+    const p = this.player.position;
+    // 칼날 궤도
+    const nBlade = h.stacks.orbit ?? 0;
+    while (h.blades.length < nBlade) {
+      const b = new Mesh(new BoxGeometry(0.22, 0.12, 1.1), new MeshBasicMaterial({ color: BLESSINGS.orbit.color, transparent: true, opacity: 0.9, blending: AdditiveBlending, depthWrite: false }));
+      level.scene.add(b);
+      h.blades.push(b);
+    }
+    h.angle += dt * 3.2;
+    for (const [m, t] of h.bladeCd) h.bladeCd.set(m, t - dt);
+    h.blades.forEach((b, i) => {
+      const a = h.angle + (i / h.blades.length) * Math.PI * 2;
+      const x = p.x + Math.cos(a) * 2.4;
+      const z = p.z + Math.sin(a) * 2.4;
+      b.position.set(x, 0.9, z);
+      b.rotation.y = -a;
+      for (const m of level.monsters) {
+        if (!m.targetable || Math.hypot(m.x - x, m.z - z) > m.radius + 0.7 || (h.bladeCd.get(m) ?? 0) > 0) continue;
+        h.bladeCd.set(m, 0.4);
+        this.damageMonster(m, 0.7, 0.4, p.x, p.z);
+      }
+    });
+    // 천둥: 2초마다 가까운 적에게 번개
+    const nThunder = h.stacks.thunder ?? 0;
+    if (nThunder) {
+      h.thunderT -= dt;
+      if (h.thunderT <= 0) {
+        h.thunderT = 2;
+        const near = level.monsters.filter((m) => m.targetable && Math.hypot(m.x - p.x, m.z - p.z) < 10).sort((a, b) => Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z));
+        for (const m of near.slice(0, nThunder)) {
+          level.effects.bolt(m.x, m.z - 0.01, m.x, m.z, 0xfff08a);
+          level.effects.ring(m.x, m.z, 1.2, 0xfff08a, 0.3);
+          this.damageMonster(m, 1.8, 0.5, m.x, m.z);
+        }
+        if (near.length) this.audio.play('zap');
+      }
+    }
+  }
+
+  /** 러쉬에서 몬스터를 쓰러뜨렸을 때: 처치 수, 폭발 축복, 다음 축복 */
+  private hordeKill(m: Monster, end: Extract<EndRun, { kind: 'horde' }>): void {
+    const h = this.horde;
+    if (!h) return;
+    end.kills += m.isBoss ? 10 : 1;
+    if (m.isBoss) {
+      end.bossesDown++;
+      this.hud.setBoss(null);
+    }
+    const nNova = h.stacks.nova ?? 0;
+    const level = this.level;
+    if (nNova && level instanceof DungeonScene) {
+      level.effects.explosion(m.x, m.z, 2.2, BLESSINGS.nova.color);
+      for (const o of level.monsters) if (o !== m && o.targetable && Math.hypot(o.x - m.x, o.z - m.z) < 2.2 + o.radius) this.damageMonster(o, 0.5 * nNova, 0.6, m.x, m.z);
+    }
+    if (end.kills >= h.next) {
+      end.picks++;
+      h.next = end.kills + blessNeed(end.picks);
+      window.setTimeout(() => this.offerBlessing(), 50);
+    }
+  }
+
+  /** 축복 셋 중 하나 고르기 (고르는 동안 멈춘다) */
+  private offerBlessing(): void {
+    const h = this.horde;
+    if (!h || this.mode !== 'play') {
+      // 다른 창이 열려 있으면 조금 뒤에
+      if (h) window.setTimeout(() => this.offerBlessing(), 400);
+      return;
+    }
+    const pool = BLESS_IDS.filter((id) => (h.stacks[id] ?? 0) < BLESSINGS[id].max);
+    const picks: BlessId[] = [];
+    while (picks.length < 3 && pool.length) picks.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+    this.audio.play('level');
+    this.openMenu(() =>
+      this.screens.blessPick(
+        picks.map((id) => ({ id, name: BLESSINGS[id].name, text: BLESSINGS[id].text, color: BLESSINGS[id].color, lv: h.stacks[id] ?? 0, max: BLESSINGS[id].max })),
+        (id: string | null) => {
+          const pl = this.player;
+          if (id) {
+            h.stacks[id as BlessId] = (h.stacks[id as BlessId] ?? 0) + 1;
+            this.applyStats();
+            if (id === 'vital') pl.hp = pl.maxHp;
+          } else pl.hp = Math.min(pl.maxHp, pl.hp + pl.maxHp * 0.5);
+          this.screens.close();
+        },
+        () => this.resume(),
+      ),
+    );
+  }
+
+  /** 러쉬 끝 (쓰러지거나 포기): 기록 · 첫 달성 보상 · 골드. 짐은 잃지 않는다 */
+  private finishHorde(): void {
+    const run = this.run;
+    if (!run || run.end?.kind !== 'horde') return;
+    const end = run.end;
+    const rec = this.hordeRecord();
+    let best = '';
+    if (end.kills > rec.best) {
+      rec.best = end.kills;
+      rec.bestTime = Math.round(end.time);
+      best = ' · 최고 기록!';
+    }
+    const day = dayKey();
+    if (rec.day !== day) Object.assign(rec, { day, dayBest: 0 });
+    if (end.kills > (rec.dayBest ?? 0)) {
+      rec.dayBest = end.kills;
+      const name = this.progress.data.nickname;
+      if (name && end.kills > 0)
+        void submitTrial({ board: 'horde', week: day, name, cls: this.progress.data.currentClass, level: this.progress.cls.level, score: end.kills, seconds: Math.min(36000, Math.round(end.time)), boss: '', version: GAME_VERSION }).then((x) =>
+          this.hud.toast(x.ok ? ':sparkle: 러쉬 순위표에 기록을 올렸습니다' : `순위표 올리기 실패: ${x.reason}`, 3000),
+        );
+    }
+    // 처치 수 첫 달성 보상
+    let marks = 0;
+    while (rec.claimed < HORDE_MILESTONES.length && rec.best >= HORDE_MILESTONES[rec.claimed].kills) marks += HORDE_MILESTONES[rec.claimed++].marks;
+    if (marks) window.setTimeout(() => this.giveMarks(marks, '무한 러쉬 첫 달성 보상'), 1500);
+    const gold = Math.round(end.kills * 40 * (1 + this.progress.bonus('gold')));
+    this.progress.data.gold += gold;
+    run.gold += gold;
+    this.clearHorde();
+    this.mode = 'play';
+    this.player.hp = Math.max(1, this.player.hp);
+    this.hud.setBoss(null);
+    this.applyStats();
+    this.checkTitles();
+    const txt = `무한 러쉬: ${end.kills}마리 처치 · ${formatClock(end.time)} 버팀 · +${gold.toLocaleString()} G`;
+    this.hud.toast(`${txt}${best}`, 5000);
+    this.finishRun(txt);
+  }
+
+  /** 지난 시련(어제)·레이드(지난주) 순위를 확인해 순위 보상을 준다 (시트에서 받아 온다) */
+  private rankChecking = false;
+  private checkRankRewards(): void {
+    const e = this.progress.data.end;
+    if (!e || this.rankChecking || !this.progress.data.nickname) return;
+    const t = e.trial;
+    const yday = prevDayKey();
+    const trialTodo = t && (t.history.some((h) => h.week === yday) || (t.week === yday && t.best > 0)) && !(t.rankDone ?? []).includes(yday);
+    const r = e.raid;
+    const lastWk = prevWeekKey();
+    const raidTodo = r && (r.played ?? []).includes(lastWk) && !(r.rankDone ?? []).includes(lastWk);
+    if (!trialTodo && !raidTodo) return;
+    this.rankChecking = true;
+    const jobs: Promise<void>[] = [];
+    if (trialTodo && t)
+      jobs.push(
+        myRank('trial', yday).then((x) => {
+          if (!x.ok) return;
+          t.rankDone = [yday, ...(t.rankDone ?? [])].slice(0, 20);
+          const m = rankMarks(x.rank, x.total);
+          if (m) this.giveMarks(m, `어제 일일 시련 ${x.rank}위 (${x.total}명)`);
+        }),
+      );
+    if (raidTodo && r)
+      jobs.push(
+        myRank('raid', lastWk).then((x) => {
+          if (!x.ok) return;
+          r.rankDone = [lastWk, ...(r.rankDone ?? [])].slice(0, 20);
+          const m = rankMarks(x.rank, x.total, true);
+          if (m) this.giveMarks(m, `지난주 레이드 ${x.rank}위 (${x.total}명)`);
+        }),
+      );
+    void Promise.all(jobs).finally(() => {
+      this.rankChecking = false;
+      this.saveNow();
+    });
   }
 
   /** 엔드 콘텐츠의 방을 다 정리했을 때: 기록과 보상 */
@@ -1585,6 +2205,14 @@ export class Game {
       }
       return `+${gold} G${dust ? ` · 차원 가루 ${dust}개` : ''}`;
     };
+    if (end.kind === 'ch8') {
+      const c8 = (p.data.ch8 ??= { cleared: 0 });
+      const first = end.stage > c8.cleared;
+      if (first) c8.cleared = end.stage;
+      if (end.stage === 10 && first) window.setTimeout(() => this.ch8Finale(), 600);
+      this.checkTitles();
+      return `8-${end.stage} ${CH8_STAGES[end.stage - 1].name} 돌파!${first && end.stage < 10 ? ` 8-${end.stage + 1} 열림` : ''}`;
+    }
     if (end.kind === 'tower') {
       if (end.floor > e.towerBest) {
         e.towerBest = end.floor;
@@ -1607,7 +2235,10 @@ export class Game {
     }
     if (end.kind !== 'rift') return '';
     const inTime = end.timeLeft > 0;
-    const r = riftReward(end.level, inTime);
+    const r0 = riftReward(end.level, inTime);
+    // 균열 서약: 건 서약만큼 보상 증가
+    const vm = vowMult(end.vows);
+    const r = { gold: Math.round(r0.gold * vm), dust: Math.floor(r0.dust * vm) };
     if (inTime && end.level > e.riftBest) e.riftBest = end.level;
     this.checkTitles();
     return `심연 균열 ${end.level}단계 ${inTime ? '돌파' : '정리 (시간 초과: 보상 절반)'} ${give(r.gold, r.dust)}${inTime && end.level === e.riftBest ? ` · ${end.level + 1}단계 열림` : ''}`;
@@ -1643,7 +2274,7 @@ export class Game {
       return;
     }
     const st = this.buffedStats();
-    const sp = this.progress.specials();
+    const sp = this.specialTotals();
     const crit = Math.random() * 100 < st.crit;
     // 특수 옵션: 치명타 피해 · 보스 피해 · 마무리(체력 30% 이하)
     let spMult = 1;
@@ -1651,11 +2282,13 @@ export class Game {
     if (sp.execute && m.hp < m.maxHp * 0.3) spMult *= 1 + sp.execute / 100;
     // 사냥 표적: 표식이 남은 적은 +40%
     if (m.marked > 0) spMult *= 1.4;
+    // 그림자 일격 (회피 뒤 3초)
+    if (sp.dodgeBuff && this.player.buff('dodgebuff')) spMult *= 1 + sp.dodgeBuff / 100;
     // 약점 포착: 치명타 피해 +50%
     const critMul = 1.6 + (sp.critDmg ?? 0) / 100 + (this.player.buff('hunt2') ? 0.5 : 0);
     const raw = st.atk * mult * spMult * (0.9 + Math.random() * 0.2) * (crit ? critMul : 1);
     const dmg = Math.max(1, Math.round(raw * (40 / (40 + m.defense))));
-    let killed = m.damage(dmg, fx, fz, knock);
+    let killed = m.damage(dmg, fx, fz, knock * (this.ch8Has('drift') ? 2 : 1));
     const s = this.toScreen(m.x, m.rig.height * m.rig.root.scale.y + 0.3, m.z);
     // 숫자는 공격한 쪽의 반대로 밀려난다
     const from = this.toScreen(fx, m.rig.height * m.rig.root.scale.y + 0.3, fz);
@@ -1716,6 +2349,7 @@ export class Game {
     }
     if (pl.isInvulnerable) return 0;
     pl.inCombat();
+    if (this.run?.end?.kind === 'raid') this.run.end.hits++;
     if (this.run?.end?.kind === 'trial') {
       this.run.end.hits++;
       if (this.level instanceof DungeonScene) this.hud.setLocation(this.endLabel(this.run.end, this.level.theme.name), this.level.theme.portalColor);
@@ -1741,7 +2375,7 @@ export class Game {
       return 0;
     }
     // 특수 옵션: 흘려 피하기 · 받는 피해 감소 · 위기 때 피해 감소
-    const hsp = this.progress.specials();
+    const hsp = this.specialTotals();
     if (hsp.dodge && Math.random() * 100 < hsp.dodge) {
       pl.invulnFor(0.2);
       this.hud.floatText(head.x, head.y, '회피', '#c8ffb0', 'small');
@@ -1752,6 +2386,9 @@ export class Game {
     if (hsp.lowGuard && pl.hp < pl.maxHp * 0.35) final = Math.max(1, Math.round(final * (1 - hsp.lowGuard / 100)));
     if (pl.buff('ironwall')) final = Math.max(1, Math.round(final * 0.6));
     if (pl.buff('smoke')) final = Math.max(1, Math.round(final * 0.5));
+    // 차원 소환사: 차원 보호막 -50% · 영혼 결속 -25%
+    if (pl.buff('riftward')) final = Math.max(1, Math.round(final * 0.5));
+    if (pl.buff('bond')) final = Math.max(1, Math.round(final * 0.75));
     // 마나 실드: 피해의 60%를 MP로 받는다 (MP가 모자라면 남은 만큼만)
     if (pl.buff('manashield')) {
       const absorb = Math.min(Math.round(final * 0.6), Math.floor(pl.mp));
@@ -1883,7 +2520,7 @@ export class Game {
 
   private monsterKilled(m: Monster): void {
     // 특수 옵션: 처치 시 회복
-    const ksp = this.progress.specials();
+    const ksp = this.specialTotals();
     if (ksp.killHeal) this.player.hp = Math.min(this.player.maxHp, this.player.hp + this.player.maxHp * ksp.killHeal / 100);
     if (ksp.killMp) this.player.mp = Math.min(this.player.maxMp, this.player.mp + this.player.maxMp * ksp.killMp / 100);
     const run = this.run;
@@ -1894,13 +2531,35 @@ export class Game {
     this.audio.play('kill');
     this.level.particles.burst(m.x, 0.7, m.z, 0xffffff, 12, 1.2);
     this.quests.event({ type: 'kill', tier, elite: m.kind === 'elite', species: m.species.id });
+    this.progress.achAdd('kills');
+    if (m.kind === 'elite') this.progress.achAdd('elites');
+    if (m.isBoss) this.progress.achAdd('bosses');
     // 몬스터 도감: 처음 잡은 종족은 알린다
     if (this.progress.recordKill(m.species.id)) {
       const name = m.species.id === 'slime_small' ? '슬라임' : m.species.name;
       this.hud.toast(this.quests.isDone('m_research') ? `도감에 새 몬스터 등록: ${name} — 연구자 노아에게 보상을 받자` : `새 몬스터 발견: ${name}`, 2600);
     }
 
-    // 주간 시련: 전리품·경험치 없음 (수호자를 쓰러뜨리면 방 정리로 기록)
+    // 무한 러쉬: 전리품 없이 처치 수 · 경험치 절반 (보상은 끝날 때 한꺼번에)
+    if (run.end?.kind === 'horde') {
+      const hexp = Math.max(1, Math.round(m.exp * 0.5));
+      run.exp += hexp;
+      this.gainExp(hexp);
+      this.hordeKill(m, run.end);
+      this.refreshHud();
+      return;
+    }
+    // 레이드: 전리품 없음. 레이드 보스를 쓰러뜨리면 바로 기록
+    if (run.end?.kind === 'raid') {
+      if (m.isBoss && !run.roomCleared) {
+        run.roomCleared = true;
+        this.hud.setBoss(null);
+        window.setTimeout(() => this.finishRaid(true), 900);
+      }
+      this.refreshHud();
+      return;
+    }
+    // 일일 시련: 전리품·경험치 없음 (수호자를 쓰러뜨리면 방 정리로 기록)
     if (run.end?.kind === 'trial') {
       if (m.isBoss) {
         this.hud.setBoss(null);
@@ -1921,7 +2580,7 @@ export class Game {
     const bossMult = m.kind === 'boss' ? 25 : m.kind === 'midboss' ? 10 : m.kind === 'elite' ? 4 : 1;
     // 몬스터 골드 (v9.2: +40%). 황금 보고를 지키는 몬스터는 두 배
     const vault = run.farm === 'gold' ? 2 : 1;
-    const gold = Math.max(1, Math.round((m.kind === 'normal' ? rng.range(0.6, 1.6) : rng.int(2, 5)) * 1.4 * vault * (run.end ? tier * (1 + (run.stage - 1) * 0.15) : goldScale(tier, run.stage)) * bossMult * (1 + this.progress.bonus('gold'))));
+    const gold = Math.max(1, Math.round((m.kind === 'normal' ? rng.range(0.6, 1.6) : rng.int(2, 5)) * 1.4 * vault * (run.end?.kind === 'ch8' ? goldScale(7, 10) * (1.2 + run.stage * 0.05) : run.end ? tier * (1 + (run.stage - 1) * 0.15) : goldScale(tier, run.stage)) * bossMult * (1 + this.progress.bonus('gold'))));
     run.gold += gold;
     this.progress.data.gold += gold;
 
@@ -1966,17 +2625,41 @@ export class Game {
     }
     // 장비: 수호자 2개, 파수꾼 1개, 정예는 가끔, 일반 몬스터는 드물게
     const eqCount = m.kind === 'boss' ? 2 : m.kind === 'midboss' ? 1 : rng.chance(m.kind === 'elite' ? 0.22 + run.stage * 0.01 : 0.004 + run.stage * 0.0003) ? 1 : 0;
-    const bonus = (m.kind === 'midboss' ? 0.35 : m.kind === 'boss' ? 0.3 : m.kind === 'elite' ? 0.12 : 0) + run.stage * 0.01 + (run.end?.kind === 'rift' ? riftLuck(run.end.level) : 0);
+    const bonus = (m.kind === 'midboss' ? 0.35 : m.kind === 'boss' ? 0.3 : m.kind === 'elite' ? 0.12 : 0) + run.stage * 0.01 + (run.end?.kind === 'rift' ? riftLuck(run.end.level) : run.end?.kind === 'ch8' ? CH8_LUCK : 0);
     for (let i = 0; i < eqCount; i++) {
       // 차원 등급: 보스만, 아주 낮은 확률 (수호자 1%, 파수꾼 0.3%)
       const dim = m.kind === 'boss' ? 0.01 : m.kind === 'midboss' ? 0.003 : 0;
-      const e = rollEquip(rng, tier, this.progress.data.currentClass, bonus, dim);
+      const e = rollEquip(rng, tier, this.progress.data.currentClass, bonus, dim, this.progress.data.unlockedClasses);
       if (e.grade >= GRADE.dimension) {
         this.level.effects.pillar(m.x, m.z, GRADES[e.grade].color, 10);
         this.hud.toast(`:sparkle: 차원 등급 장비! ${equipName(e)}`, 4000);
       }
       if (run.bag.addEquip(e)) loot(`${GRADES[e.grade].name} ${equipName(e)}`, hex(GRADES[e.grade].color));
       else this.hud.toast('가방이 가득 차서 장비를 줍지 못했습니다');
+    }
+    // 8장: 세트 장비를 떨어뜨리기도 한다. 파수꾼·수문장은 보통 보스처럼 한동안 다시 나오지 않는다
+    if (run.end?.kind === 'ch8') {
+      const ch = m.kind === 'boss' ? CH8_SET_DROP.boss : m.kind === 'midboss' ? CH8_SET_DROP.midboss : m.kind === 'elite' ? CH8_SET_DROP.elite : 0;
+      if (ch && rng.chance(ch)) window.setTimeout(() => this.dropSetPiece(m.name), 400);
+      if (m.isBoss) {
+        this.progress.bossDefeated(8, run.stage, BOSS_RESPAWN_MS[m.kind as 'boss' | 'midboss']);
+        this.hud.toast(`${m.name}은(는) ${formatWait(BOSS_RESPAWN_MS[m.kind as 'boss' | 'midboss'])} 뒤 다시 나타납니다`, 3000);
+      }
+      if (this.ch8Has('void')) this.player.mp = Math.min(this.player.maxMp, this.player.mp + this.player.maxMp * 0.06);
+      if (this.ch8Has('mirror') && !m.isBoss && !this.mirrored.has(m) && Math.random() < 0.34 && this.level instanceof DungeonScene) {
+        const lv = this.level;
+        const x = m.x;
+        const z = m.z;
+        const sp = m.species;
+        window.setTimeout(() => {
+          if (this.level !== lv) return;
+          const clone = lv.spawnMonster(sp, 'normal', x, z, -1, true);
+          clone.hp = clone.maxHp * 0.5;
+          clone.material.emissive.setHex(0x3a6a8a);
+          this.mirrored.add(clone);
+          lv.effects.ring(x, z, 1.4, CH8_RULES.mirror.color, 0.4);
+        }, 700);
+      }
     }
     // 보스는 쓰러뜨리면 한동안 다시 나오지 않는다 (파수꾼 1시간, 수호자 4시간)
     if ((m.kind === 'midboss' || m.kind === 'boss') && !run.end) {
@@ -2022,7 +2705,10 @@ export class Game {
     const run = this.run!;
     run.roomCleared = true;
     run.stagesCleared++;
+    this.progress.achAdd('rooms');
     if (run.end?.kind === 'trial') return this.finishTrial(true);
+    if (run.end?.kind === 'raid') return this.finishRaid(true);
+    if (run.end?.kind === 'horde') return;
     if (run.end) {
       const msg = this.endRoomClear(run.end);
       this.audio.play('portal');
@@ -2097,6 +2783,9 @@ export class Game {
       if (end.kind === 'tower') {
         next = { kind: 'tower', floor: end.floor + 1 };
         nextLabel = `${end.floor + 1}층`;
+      } else if (end.kind === 'ch8' && end.stage < 10) {
+        next = { kind: 'ch8', stage: end.stage + 1 };
+        nextLabel = `8-${end.stage + 1} ${CH8_STAGES[end.stage].name}`;
       } else if (end.kind === 'rush' && end.index < rushFights(end.diff).length - 1) {
         next = { ...end, index: end.index + 1 };
         nextLabel = rushFightName(rushFights(end.diff)[end.index + 1]);
@@ -2193,6 +2882,7 @@ export class Game {
 
   private gather(n: NodeInstance): void {
     if (!(this.level instanceof DungeonScene) || !this.run) return;
+    this.progress.achAdd('gathers');
     const s = this.toScreen(n.x, 1.6, n.z);
     let line = 0;
     if (n.def.style !== 'chest') {
@@ -2267,7 +2957,7 @@ export class Game {
     add(ESSENCE(t), 4 + rng.int(0, 3));
     add(ORE_TIERS[t - 1], 6 + rng.int(0, 5));
     if (rng.chance(0.35)) add(TIER_MANA_PLATE[t - 1], 1);
-    const e = rollEquip(rng, t, this.progress.data.currentClass, 0.3);
+    const e = rollEquip(rng, t, this.progress.data.currentClass, 0.3, 0, this.progress.data.unlockedClasses);
     if (run.bag.addEquip(e)) got.push(`[${GRADES[e.grade].name}] ${equipName(e)}`);
     this.level.effects.pillar(this.player.position.x, this.player.position.z, 0xffd23a, 5);
     this.audio.play('level');
@@ -2312,8 +3002,11 @@ export class Game {
   private fall(timeOver = false): void {
     const run = this.run;
     if (!run) return;
+    this.progress.achAdd('deaths');
     // 주간 시련은 쓰러져도 짐을 잃지 않는다 (처치 수만큼 점수)
     if (run.end?.kind === 'trial') return this.finishTrial(false);
+    if (run.end?.kind === 'raid') return this.finishRaid(false);
+    if (run.end?.kind === 'horde') return this.finishHorde();
     const p = this.progress;
     const lost = run.bag.totals();
     const lostEquips = run.bag.equips().length;
@@ -2699,6 +3392,7 @@ export class Game {
     if (this.timerAcc >= 1) {
       this.timerAcc = 0;
       this.updateTimers();
+      this.tickAchievements();
     }
 
     // 공장은 어디에 있든 계속 돌아간다
@@ -2837,14 +3531,22 @@ export class Game {
       // 회피: 검사는 구르기, 마법사는 블링크(무적 없음), 궁수는 후방 도약(무적 + 덫)
       const cls = pl.cls.id;
       let ok = false;
-      if (cls === 'mage') {
+      if (cls === 'mage' || cls === 'summoner') {
+        // 소환사: 차원 도약 (블링크와 같고, 곁의 소환수가 함께 따라온다)
         const sx = pl.position.x;
         const sz = pl.position.z;
+        const col = cls === 'summoner' ? 0xff8ae0 : 0xc8a8ff;
         ok = pl.startBlink(move, () => {
           const fx = this.level.effects;
-          fx.streak(sx, sz, pl.position.x, pl.position.z, 0xa070ff, 0.5);
-          fx.ring(pl.position.x, pl.position.z, 1.4, 0xc8a8ff, 0.25, 0.8);
-          fx.sparks(pl.position.x, 1, pl.position.z, 0xc8a8ff, 10, { speed: 4 });
+          fx.streak(sx, sz, pl.position.x, pl.position.z, cls === 'summoner' ? 0xff5ae0 : 0xa070ff, 0.5);
+          fx.ring(pl.position.x, pl.position.z, 1.4, col, 0.25, 0.8);
+          fx.sparks(pl.position.x, 1, pl.position.z, col, 10, { speed: 4 });
+          if (cls === 'summoner')
+            for (const m of this.combat.minions.list) {
+              if (m.spec.stationary || Math.hypot(m.x - sx, m.z - sz) > 4) continue;
+              m.x = pl.position.x + (m.x - sx);
+              m.z = pl.position.z + (m.z - sz);
+            }
         });
         if (ok) {
           this.level.effects.sparks(sx, 1, sz, 0xc8a8ff, 12, { speed: 4, up: true, spread: 0.5 });
@@ -2944,19 +3646,23 @@ export class Game {
           : [],
       );
       const boss = level.boss;
-      if (boss && boss.alive && boss.aggro) {
+      const ek = this.run.end?.kind;
+      if (boss && boss.alive && boss.aggro && ek === 'horde') {
+        // 무한 러쉬: 보스에게 제한 시간은 없다
+        this.hud.setBoss(`${boss.name}${boss.shielded ? ` · 보호막 (수호병 ${boss.guardsLeft})` : ''}`, boss.hp / boss.maxHp, boss.bars, boss.shielded, false);
+      } else if (boss && boss.alive && boss.aggro) {
         // 보스 제한 시간: 싸움이 시작되면 흐른다
         this.bossTime += dt;
-        const trialRun = this.run.end?.kind === 'trial';
-        const left = Math.max(0, (trialRun ? TRIAL_TIME : BOSS_TIME_LIMIT) - this.bossTime);
-        if (left <= 0 && !boss.dooming && !this.timeOver && this.run.end?.kind !== 'trial') {
+        const trialRun = ek === 'trial';
+        const left = Math.max(0, (trialRun ? TRIAL_TIME : ek === 'raid' ? RAID_TIME : BOSS_TIME_LIMIT) - this.bossTime);
+        if (left <= 0 && !boss.dooming && !this.timeOver && ek !== 'trial' && ek !== 'raid') {
           // 시간이 다 되면 보스가 방 전체 즉사기를 시전한다 (막을 수도 피할 수도 없다)
           this.timeOver = true;
           level.startBossDoom();
           this.audio.play('stone');
         }
         const clock = `:hourglass: ${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, '0')}`;
-        const tag = boss.trialBoss ? (boss.rage ? ` · 격노 ${boss.rage}단계 · ${((1 - boss.hp / boss.maxHp) * 100).toFixed(1)}%` : ` · ${((1 - boss.hp / boss.maxHp) * 100).toFixed(1)}%`) : boss.dooming ? ' · :skull: 틈새 붕괴' : boss.shielded ? ` · 보호막 (수호병 ${boss.guardsLeft})` : boss.exposed ? ' · 빈틈!' : boss.phase2 ? ' · 격노' : '';
+        const tag = boss.trialBoss ? `${boss.shielded ? ` · 보호막 (수호병 ${boss.guardsLeft})` : ''}${boss.rage ? ` · 격노 ${boss.rage}단계 · ${((1 - boss.hp / boss.maxHp) * 100).toFixed(1)}%` : ` · ${((1 - boss.hp / boss.maxHp) * 100).toFixed(1)}%`}` : boss.dooming ? ' · :skull: 틈새 붕괴' : boss.shielded ? ` · 보호막 (수호병 ${boss.guardsLeft})` : boss.exposed ? ' · 빈틈!' : boss.phase2 ? ' · 격노' : '';
         this.hud.setBoss(`${boss.name}${tag}  ${clock}`, boss.hp / boss.maxHp, boss.bars, boss.shielded, left < 60);
         this.audio.playMusic('boss');
       }
@@ -2965,6 +3671,15 @@ export class Game {
         if (Math.floor(this.run.time) !== Math.floor(this.run.time - dt)) this.hud.setLocation(this.endLabel(end, level.theme.name), level.theme.portalColor);
         if (this.bossTime >= TRIAL_TIME) return this.finishTrial(false);
       }
+      if (end?.kind === 'raid' && !this.run.roomCleared) {
+        if (Math.floor(this.run.time) !== Math.floor(this.run.time - dt)) this.hud.setLocation(this.endLabel(end, level.theme.name), level.theme.portalColor);
+        if (this.bossTime >= RAID_TIME) {
+          this.run.roomCleared = true;
+          return this.finishRaid(false);
+        }
+      }
+      if (end?.kind === 'horde' && this.mode === 'play') this.updateHorde(dt, level, end);
+      if (end?.kind === 'ch8') this.updateCh8(dt, level);
       if (end?.kind === 'rift' && !this.run.roomCleared) {
         const before = Math.ceil(end.timeLeft);
         end.timeLeft -= dt;
@@ -2974,7 +3689,7 @@ export class Game {
           this.hud.toast(':hourglass: 시간 초과! 끝까지 정리하면 보상은 절반, 다음 단계는 열리지 않습니다', 4000);
         }
       }
-      if (level.waves.length) this.hud.setWave(Math.max(1, level.waveIndex), level.waves.length, level.exitOpen);
+      if (level.waves.length && end?.kind !== 'raid') this.hud.setWave(Math.max(1, level.waveIndex), level.waves.length, level.exitOpen);
       if (!this.run.roomCleared && level.exitOpen) this.roomClear();
     }
     this.updateMap(dt);
@@ -3015,6 +3730,7 @@ export class Game {
     if (this.potionCd > 0) return this.hud.toast(`물약 재사용 대기 ${Math.ceil(this.potionCd)}초`, 900);
     const pl = this.player;
     if (pl.hp >= pl.maxHp && pl.mp >= pl.maxMp) return this.hud.toast('HP와 MP가 가득합니다', 900);
+    if (this.runVow('nopotion')) return this.hud.toast('균열 서약 「물약 금지」: 물약을 마실 수 없습니다', 1200);
     let id: string | undefined;
     if (this.run && this.level instanceof DungeonScene) {
       id = this.run.pouch.shift();
@@ -3027,6 +3743,7 @@ export class Game {
     pl.hp = Math.min(pl.maxHp, pl.hp + pl.maxHp * heal);
     pl.mp = Math.min(pl.maxMp, pl.mp + pl.maxMp * heal);
     this.potionCd = POTION_COOLDOWN;
+    this.progress.achAdd('potions');
     if (this.run?.end?.kind === 'trial') this.run.end.potions++;
     this.level.effects.ring(pl.position.x, pl.position.z, 2, 0xff7a9a, 0.4);
     this.audio.play('pickup');
@@ -3061,6 +3778,73 @@ export class Game {
   }
 
   /** 마을·차원집 상단 타이머: 재등장 대기 중인 보스와 채집 맵 */
+  // =============== 업적 (v10) ===============
+  private lastGold = -1;
+  private lastDodges = 0;
+  private achNotified = new Set<string>();
+  /** 업적을 확인할 값들 */
+  private achCtx(): AchCtx {
+    const p = this.progress;
+    const e = p.data.end!;
+    return {
+      c: p.data.ach?.c ?? {},
+      towerBest: e.towerBest,
+      riftBest: e.riftBest,
+      rushBest: e.horde?.best ?? 0,
+      transcend: Math.max(...CLASS_ORDER.map((c) => p.data.classes[c].tlv ?? 0)),
+      ch8: p.data.ch8?.cleared ?? 0,
+      discovered: p.discovered,
+      classes: CLASS_ORDER.filter((c) => p.data.classes[c].level >= MAX_LEVEL).length,
+      awakened: CLASS_ORDER.reduce((a, c) => a + Object.keys(p.data.classes[c].awaken ?? {}).length, 0),
+    };
+  }
+  /** 받을 수 있는 업적 수 */
+  achClaimable(): number {
+    const ctx = this.achCtx();
+    const done = this.progress.data.ach?.done ?? [];
+    return ACHIEVEMENTS.filter((a) => !done.includes(a.id) && a.value(ctx) >= a.goal).length;
+  }
+  /** 1초마다: 번 골드·회피 수를 세고, 새로 달성한 업적을 알린다 */
+  private tickAchievements(): void {
+    const p = this.progress;
+    if (this.mode === 'title' || !p) return;
+    if (this.lastGold >= 0 && p.data.gold > this.lastGold) p.achAdd('gold', p.data.gold - this.lastGold);
+    this.lastGold = p.data.gold;
+    if (this.player) {
+      if (this.player.dodgeCount > this.lastDodges) p.achAdd('dodges', this.player.dodgeCount - this.lastDodges);
+      this.lastDodges = this.player.dodgeCount;
+    }
+    if (!p.flag('endgame')) return;
+    const ctx = this.achCtx();
+    const done = p.data.ach?.done ?? [];
+    for (const a of ACHIEVEMENTS) {
+      if (done.includes(a.id) || this.achNotified.has(a.id) || a.value(ctx) < a.goal) continue;
+      this.achNotified.add(a.id);
+      this.hud.toast(`:sparkle: 업적 달성: 「${a.name}」 — 메뉴 → 업적에서 영겁의 증표 ${a.marks}개를 받으세요`, 3500);
+    }
+  }
+  private openAchievements(back?: () => void): void {
+    const p = this.progress;
+    this.openMenu(() =>
+      this.screens.achievements(
+        p,
+        this.achCtx(),
+        (id: string) => {
+          const a = ACH_BY_ID[id];
+          const st = (p.data.ach ??= newAch());
+          if (!a || st.done.includes(id) || a.value(this.achCtx()) < a.goal) return;
+          st.done.push(id);
+          p.add(MARK, a.marks);
+          this.audio.play('coin');
+          this.checkTitles();
+          this.saveNow();
+          this.openAchievements(back);
+        },
+        back ?? (() => this.resume()),
+      ),
+    );
+  }
+
   private updateTimers(): void {
     const town = this.mode !== 'title' && (this.level instanceof VillageScene || this.level instanceof HomeScene);
     if (!town) return this.hud.setTimers(null);
@@ -3098,7 +3882,17 @@ export class Game {
       const left = d.aliveCount;
       const boss = d.boss && d.boss.alive ? ` · ${d.boss.name}` : '';
       const amb = this.ambush ? this.ambush.monsters.filter((m) => m.alive).length : 0;
-      const head = amb > 0 ? `:sparkle: 고급 상자 습격! 남은 몬스터 ${amb}` : left > 0 ? `남은 몬스터 ${left}${boss} (M: 지도)` : '워프 게이트로 가자 (다음 방 / 마을)';
+      const ek = this.run.end;
+      const head =
+        ek?.kind === 'horde'
+          ? `처치 ${ek.kills} · 다음 축복까지 ${Math.max(0, (this.horde?.next ?? 0) - ek.kills)} · 축복 ${ek.picks}개`
+          : ek?.kind === 'raid'
+            ? `${d.boss?.name ?? '레이드 보스'}을(를) 쓰러뜨리자${d.boss?.shielded ? ` · 수호병 ${d.boss.guardsLeft}` : ''}`
+            : amb > 0
+              ? `:sparkle: 고급 상자 습격! 남은 몬스터 ${amb}`
+              : left > 0
+                ? `남은 몬스터 ${left}${boss} (M: 지도)`
+                : '워프 게이트로 가자 (다음 방 / 마을)';
       // 방을 정리했으면 언제든 워프 창을 열 수 있는 버튼
       this.hud.setWarpButton(!!this.run.roomCleared && d.exitOpen);
       this.hud.setObjective([head, ...questLines(p, this.quests)].join('\n'));
@@ -3111,7 +3905,8 @@ export class Game {
     this.hud.setBuffs(pl.buffs.map((b) => ({ text: `${b.name}${b.stacks !== undefined ? ` ${b.stacks}회` : ''} ${Math.ceil(b.t)}s`, bad: b.bad })));
     this.hud.setPotions(this.run && this.level instanceof DungeonScene ? this.run.pouch.length : POTION_KINDS.reduce((a, [k]) => a + p.count(k), 0), this.potionCd / POTION_COOLDOWN);
     this.hud.setDodgeCooldown(pl.dodgeStock < 1 && pl.dodgeMax > 0 ? pl.rollCooldown / pl.dodgeMax : 0, pl.dodgeCharges > 1 ? pl.dodgeStock : -1);
-    this.hud.setDodgeIcon(pl.cls.id === 'mage' ? skillIconUrl('mage', 8) : pl.cls.id === 'archer' ? skillIconUrl('archer', 8) : null, pl.cls.id === 'mage' ? '블링크' : pl.cls.id === 'archer' ? '후방 도약' : '');
+    const dc = pl.cls.id;
+    this.hud.setDodgeIcon(dc === 'sword' ? null : skillIconUrl(dc, 8), dc === 'mage' ? '블링크' : dc === 'archer' ? '후방 도약' : dc === 'summoner' ? '차원 도약' : '');
     const skills = pl.cls.skills;
     const quick = p.cls.quick.map((i) => (i >= 0 && (p.cls.skills[i] ?? 0) > 0 ? i : -1));
     const cb = this.combat;

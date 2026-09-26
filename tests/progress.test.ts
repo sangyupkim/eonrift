@@ -132,6 +132,15 @@ describe('Story', () => {
     expect(scriptFor('chief', p)).not.toBe('final');
     const q = questsOf(p);
     for (const m of MAIN_QUESTS) q.finish(m);
+    // v10: 엔딩 뒤에는 먼저 ???에게 8장 이야기를 듣는다
+    expect(objective(p, q)).toContain('???');
+    expect(scriptFor('stranger', p)).toBe('ch8_intro');
+    p.setFlag('ch8');
+    expect(objective(p, q)).toContain('8장');
+    p.data.ch8 = { cleared: 10 };
+    p.setFlag('ch8Boss');
+    expect(scriptFor('stranger', p)).toBe('ch8_join');
+    p.unlockClass('summoner');
     expect(objective(p, q)).toContain('차원의 끝');
   });
 

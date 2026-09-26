@@ -1,5 +1,5 @@
 import { essenceForTier, TIER_MANA_PLATE, TIER_PLATE } from './items';
-import { BOSS_SPECIES, MIDBOSS_SPECIES, SPECIES, TIER_POOLS, type SpeciesDef } from './species';
+import { BOSS_SPECIES, CH8_BOSS, CH8_MIDBOSS, MIDBOSS_SPECIES, SPECIES, TIER_POOLS, type SpeciesDef } from './species';
 import type { StatKey } from './classes';
 
 /**
@@ -15,14 +15,15 @@ export interface BestiaryEntry {
 
 const entries: BestiaryEntry[] = [];
 const seen = new Set<string>();
-for (let t = 1; t <= 7; t++) {
+for (let t = 1; t <= 8; t++) {
   for (const [id] of TIER_POOLS[t]) {
     if (seen.has(id)) continue;
     seen.add(id);
     entries.push({ species: SPECIES[id], tier: t, rank: 'normal' });
   }
-  entries.push({ species: MIDBOSS_SPECIES[t - 1], tier: t, rank: 'midboss' });
-  entries.push({ species: BOSS_SPECIES[t - 1], tier: t, rank: 'boss' });
+  // 8장(v10)의 보스는 따로 정한 모습
+  entries.push({ species: t === 8 ? CH8_MIDBOSS : MIDBOSS_SPECIES[t - 1], tier: t, rank: 'midboss' });
+  entries.push({ species: t === 8 ? CH8_BOSS : BOSS_SPECIES[t - 1], tier: t, rank: 'boss' });
 }
 export const BESTIARY: BestiaryEntry[] = entries;
 export const BESTIARY_BY_ID: Record<string, BestiaryEntry> = Object.fromEntries(entries.map((e) => [e.species.id, e]));
@@ -46,7 +47,8 @@ export interface BestiaryReward {
 const ESS = essenceForTier;
 
 export function milestoneReward(e: BestiaryEntry, idx: number): BestiaryReward {
-  const t = e.tier;
+  // 8장 몬스터는 7단계 재료로 (새 재료 없음)
+  const t = Math.min(7, e.tier);
   if (e.rank === 'normal') {
     if (idx === 0) return { gold: 40 * t, items: {} };
     if (idx === 1) return { gold: 150 * t, items: { [ESS(t)]: 3 + t } };
@@ -112,6 +114,6 @@ export function bestiaryStats(kills: (id: string) => number): Record<StatKey, nu
     if (m.stat === 'all') all(m.gain);
     else s[m.stat] += m.gain;
   }
-  for (let t = 1; t <= 7; t++) if (isStageMaster(t, kills)) all(MASTER_ALL_GAIN);
+  for (let t = 1; t <= 8; t++) if (isStageMaster(t, kills)) all(MASTER_ALL_GAIN);
   return s;
 }

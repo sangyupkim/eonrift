@@ -195,6 +195,9 @@ export function buildItemGeometry(id: string): BufferGeometry {
   else if (id === 'return_stone') g = returnStone(c);
   else if (id === 'bag_kit') g = bag(c);
   else if (id === 'resonator') g = resonator(c);
+  else if (id === 'relic_shard') g = shards(c);
+  else if (id === 'eon_mark') g = [part(new CylinderGeometry(0.4, 0.4, 0.1, 16), 0xe0b030, { rot: [1.2, 0, 0.2] }), part(new CylinderGeometry(0.3, 0.3, 0.12, 6), 0xfff0a0, { rot: [1.2, 0, 0.2], pos: [0, 0.02, 0.04] }), part(new OctahedronGeometry(0.13, 0), 0x5ef0ff, { pos: [0, 0.05, 0.12] })];
+  else if (id.startsWith('set_')) g = [part(new CylinderGeometry(0.42, 0.34, 0.12, 5), shade(c, 0.7), { rot: [1.2, 0, 0] }), part(new CylinderGeometry(0.32, 0.26, 0.14, 5), c, { rot: [1.2, 0, 0], pos: [0, 0.02, 0.04] }), part(new OctahedronGeometry(0.12, 0), 0xfff4d0, { pos: [0, 0.05, 0.14] })];
   else if (id === 'dim_shard') g = shards(c);
   else if (id === 'dim_alloy' || id === 'dim_alloy2') g = [...ingot(c, 0x5ef0ff), part(new OctahedronGeometry(0.1, 0), 0x5ef0ff, { pos: [0.15, 0.25, 0] })];
   else if (id.startsWith('food_')) g = bowl(c);
@@ -223,6 +226,13 @@ export function buildEquipGeometry(e: Equip): BufferGeometry {
           part(new CylinderGeometry(0.04, 0.05, 1.1, 6), WOOD, { rot: [0, 0, 0.7] }),
           part(new TorusGeometry(0.12, 0.03, 4, 10), metal, { pos: [0.4, 0.36, 0], rot: [0, 0, 0.7] }),
           part(new OctahedronGeometry(0.12, 0), gem, { pos: [0.4, 0.36, 0], scale: [1, 1.4, 1] }),
+        ];
+      else if (e.cls === 'summoner')
+        g = [
+          part(new CylinderGeometry(0.05, 0.06, 0.28, 6), WOOD, { pos: [-0.1, -0.3, 0] }),
+          part(new OctahedronGeometry(0.2, 0), gem, { pos: [-0.05, 0.08, 0] }),
+          part(new TorusGeometry(0.3, 0.035, 4, 14), metal, { pos: [-0.05, 0.08, 0], rot: [0.5, 0, 0] }),
+          part(new TorusGeometry(0.26, 0.03, 4, 14), metal, { pos: [-0.05, 0.08, 0], rot: [0, 0.9, 0.6] }),
         ];
       else if (e.cls === 'archer')
         g = [
@@ -341,7 +351,7 @@ export function buildEquipGeometry(e: Equip): BufferGeometry {
 }
 
 /** 계열 → 장비 모양 */
-export const SERIES_STYLE: Record<SeriesId, GearStyle> = { guard: 'plate', arcane: 'cloth', hunter: 'leather' };
+export const SERIES_STYLE: Record<SeriesId, GearStyle> = { guard: 'plate', arcane: 'cloth', hunter: 'leather', pact: 'cloth' };
 
 /** 착용 장비 → 캐릭터 모델에 입힐 모습 */
 export function gearLook(eq: Partial<Record<Equip['slot'], Equip>>, tools?: { pickaxe: { tier: number }; axe: { tier: number } }): HeroGear {

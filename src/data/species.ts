@@ -85,6 +85,10 @@ export interface SpeciesDef {
   debuff?: DebuffSpec;
   /** 도감에 따로 싣지 않는다 (분열한 작은 슬라임 등) */
   hidden?: boolean;
+  /** 보스 모습으로 쓰는 종족 (8장·레이드 보스): 보스로 나와도 단계 보스로 바뀌지 않는다 */
+  bossForm?: boolean;
+  /** 몸집 배율 (레이드 보스는 더 크다) */
+  scale?: number;
 }
 
 const S = (d: SpeciesDef) => d;
@@ -168,6 +172,22 @@ list.push(
   S({ id: 'void_witch', name: '공허 마녀', arch: 'caster', faction: 'void', model: { kind: 'humanoid', head: 'hood', weapon: 'staff', skin: 0x8a8ab0, cloth: 0x2a2a5a, cape: 0x1a1a3a }, glow: 0x5ef0ff, debuff: { id: 'silence', chance: 0.45, duration: 3 } }),
 );
 
+// ---- 8장 「갈라진 차원」 (v10): 차원 너머의 뒤틀린 몬스터 ----
+list.push(
+  S({ id: 'c8_stalker', name: '균열 추적자', arch: 'melee', faction: 'void', model: { kind: 'wolf' }, colors: { main: 0x3a2a6a, dark: 0x1a1030, accent: 0xff4af0 }, pack: 2, debuff: { id: 'curse', chance: 0.25, duration: 4 } }),
+  S({ id: 'c8_eye', name: '차원 관찰안', arch: 'ranged', faction: 'void', model: { kind: 'spirit' }, colors: { main: 0x5ef0ff, dark: 0x1a4a6a, accent: 0xffffff }, debuff: { id: 'silence', chance: 0.35, duration: 2.5 } }),
+  S({ id: 'c8_ram', name: '공허 돌격수', arch: 'charger', faction: 'void', model: { kind: 'boar' }, colors: { main: 0x2a2a4a, dark: 0x101020, accent: 0x7a5cff } }),
+  S({ id: 'c8_mine', name: '시간 폭탄', arch: 'bomber', faction: 'construct', model: { kind: 'spore' }, colors: { main: 0xe8d08a, dark: 0x6a5a2a, accent: 0x5ef0ff }, debuff: { id: 'slow', chance: 1, duration: 3 } }),
+  S({ id: 'c8_colossus', name: '균열 거상', arch: 'tank', faction: 'construct', model: { kind: 'golem' }, colors: { main: 0x4a4a7a, dark: 0x1a1a3a, accent: 0xff4af0 }, trait: 'regen' }),
+  S({ id: 'c8_mirror', name: '거울 기사', arch: 'knight', faction: 'construct', model: { kind: 'humanoid', head: 'helm', weapon: 'sword', shield: true, skin: 0xcfe8ff, cloth: 0x6a8aaa, armor: 0xe8f4ff, cape: 0x5ef0ff, hair: 0xffffff, size: 1.1 }, glow: 0x9ff4ff }),
+  S({ id: 'c8_reaper', name: '별의 사신', arch: 'assassin', faction: 'undead', model: { kind: 'wraith' }, colors: { main: 0x1a1a3a, dark: 0x05050e, accent: 0xffe08a }, trait: 'evasive', debuff: { id: 'curse', chance: 0.35, duration: 5 } }),
+  S({ id: 'c8_oracle', name: '뒤틀린 예언자', arch: 'caster', faction: 'void', model: { kind: 'humanoid', head: 'hood', weapon: 'staff', skin: 0xb8a8d8, cloth: 0x3a1a5a, cape: 0x1a0a2a }, glow: 0xff4af0, debuff: { id: 'silence', chance: 0.4, duration: 3 } }),
+  S({ id: 'c8_archer', name: '차원 사수', arch: 'archer', faction: 'elf', model: { kind: 'humanoid', head: 'elf', weapon: 'bow', skin: 0x9a9ad0, cloth: 0x2a2a5a, hair: 0x5ef0ff }, glow: 0x5ef0ff }),
+  S({ id: 'c8_mite', name: '틈새 벌레', arch: 'swarm', faction: 'void', model: { kind: 'bat' }, colors: { main: 0x5a2a7a, dark: 0x2a0a3a, accent: 0x5ef0ff }, pack: 4, trait: 'lifesteal' }),
+  S({ id: 'c8_spider', name: '성운 거미', arch: 'spitter', faction: 'void', model: { kind: 'spider' }, colors: { main: 0x2a3a6a, dark: 0x0a1030, accent: 0xff8af0 }, debuff: { id: 'poison', chance: 1, duration: 5 } }),
+  S({ id: 'c8_necro', name: '시간 강령술사', arch: 'necro', faction: 'undead', model: { kind: 'humanoid', head: 'skull', weapon: 'staff', skin: 0xe6dcc0, cloth: 0x2a2a4a, cape: 0x5a3a8a }, glow: 0xffe08a, debuff: { id: 'slow', chance: 0.5, duration: 3 } }),
+);
+
 export const SPECIES: Record<string, SpeciesDef> = Object.fromEntries(list.map((d) => [d.id, d]));
 
 /**
@@ -182,14 +202,16 @@ export const TIER_POOLS: Record<number, [string, number][]> = {
   5: [['t5_melee', 2], ['t5_ranged', 2], ['iron_spider', 2], ['t5_charger', 2], ['mech_knight', 2], ['ghoul', 1], ['t5_bomber', 1], ['necromancer', 1], ['t5_tank', 1]],
   6: [['t6_melee', 2], ['lava_imp', 2], ['fire_orc', 2], ['t6_bomber', 2], ['t6_ranged', 1], ['orc_shaman', 1], ['t6_charger', 1], ['troll', 1], ['t6_tank', 1]],
   7: [['t7_melee', 1], ['void_wraith', 2], ['void_knight', 2], ['skel_archer', 1], ['void_witch', 2], ['t7_charger', 1], ['delf_assassin', 1], ['t7_ranged', 1], ['necromancer', 1], ['death_knight', 1], ['t7_bomber', 1], ['t7_tank', 1]],
+  // 8장 (v10)
+  8: [['c8_stalker', 3], ['c8_eye', 2], ['c8_mite', 2], ['c8_mirror', 2], ['c8_ram', 1], ['c8_archer', 2], ['c8_mine', 1], ['c8_reaper', 2], ['c8_spider', 1], ['c8_oracle', 2], ['c8_necro', 1], ['c8_colossus', 1]],
 };
 
 /**
  * 이번 방(스테이지)에 나올 종족 몇 가지만 고른다.
  * 깊은 방일수록 고를 수 있는 종류가 늘고(앞에서부터), 한 번에 섞이는 수도 3 → 5로 늘어난다
  */
-export function stagePool(tier: number, stage: number, rand: () => number): [string, number][] {
-  const all = TIER_POOLS[tier];
+export function stagePool(tier: number, stage: number, rand: () => number, from?: [string, number][]): [string, number][] {
+  const all = from ?? TIER_POOLS[tier];
   const unlocked = all.slice(0, Math.min(all.length, 3 + Math.floor((stage - 1) * 0.75)));
   const k = Math.min(unlocked.length, 3 + Math.floor((stage - 1) / 4));
   // 가장 앞의 종족(그 단계의 대표 몬스터)은 늘 넣고 나머지는 무작위
@@ -217,6 +239,17 @@ export const MIDBOSS_SPECIES: SpeciesDef[] = [
   S({ id: 'm6', name: '용암 파수꾼', arch: 'melee', faction: 'beast', model: { kind: 'wolf' } }),
   S({ id: 'm7', name: '틈새의 문지기', arch: 'knight', faction: 'undead', model: { kind: 'humanoid', head: 'helm', weapon: 'sword', shield: true, skin: 0x3a3a44, cloth: 0x22222a, armor: 0x44485a, cape: 0x5a1a22, hair: 0x5ef0ff, size: 1.15 }, glow: 0x5ef0ff }),
 ];
+
+/** 8장 보스 (v10): 5번째 방 시간의 파수꾼, 10번째 방 차원 포탈의 수문장 */
+export const CH8_MIDBOSS: SpeciesDef = S({ id: 'c8_m', name: '시간의 파수꾼', arch: 'knight', faction: 'construct', model: { kind: 'humanoid', head: 'helm', weapon: 'spear', shield: true, skin: 0xd8c890, cloth: 0x3a3020, armor: 0xe8c860, cape: 0x5ef0ff, hair: 0xffe08a, size: 1.15 }, glow: 0x5ef0ff, bossForm: true });
+export const CH8_BOSS: SpeciesDef = S({ id: 'c8_b', name: '차원 포탈의 수문장', arch: 'brute', faction: 'void', model: { kind: 'humanoid', head: 'horned', weapon: 'axes', skin: 0x3a2a6a, cloth: 0x10081a, armor: 0x5a3aaa, cape: 0xff4af0, hair: 0x5ef0ff, size: 1.25 }, glow: 0xff4af0, bossForm: true, scale: 1.1 });
+
+/** 주간 차원 레이드 보스 (v10): 크고 단단한 보스 모습 */
+export const RAID_SPECIES: Record<string, SpeciesDef> = {
+  r1: S({ id: 'r1', name: '차원 포식자', arch: 'caster', faction: 'void', model: { kind: 'wraith' }, colors: { main: 0x2a1a5a, dark: 0x0a0a1a, accent: 0xff4af0 }, bossForm: true, scale: 1.35, hidden: true }),
+  r2: S({ id: 'r2', name: '영겁의 거신', arch: 'tank', faction: 'construct', model: { kind: 'golem' }, colors: { main: 0x8a7a4a, dark: 0x3a3020, accent: 0xffd23a }, bossForm: true, scale: 1.3, hidden: true }),
+  r3: S({ id: 'r3', name: '균열의 여왕', arch: 'caster', faction: 'elf', model: { kind: 'humanoid', head: 'elf', weapon: 'staff', skin: 0xd8c8f0, cloth: 0x5a1a3a, hair: 0xff5a8a, cape: 0x9a2a5a, size: 1.25 }, glow: 0xff5aff, bossForm: true, scale: 1.3, hidden: true }),
+};
 
 /** 가중치대로 하나 고르기 */
 export function pickSpecies(tier: number, rand: () => number, filter?: (s: SpeciesDef) => boolean, favor?: Faction, from: [string, number][] = TIER_POOLS[tier]): SpeciesDef {

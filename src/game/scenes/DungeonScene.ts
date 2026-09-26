@@ -63,13 +63,21 @@ export interface Drop {
 /** 던전 한 판의 조정: 몬스터 능력치 배율과 균열 변이 */
 export interface DungeonMods extends MonsterMods {
   affixes?: AffixId[];
+  /** 맵 모습 (8장처럼 단계 테마가 아닌 곳) */
+  theme?: DungeonTheme;
+  /** 나오는 종족 (없으면 단계 목록) */
+  pool?: [string, number][];
+  /** 5·10번째 방 보스의 모습 (8장) */
+  bosses?: { midboss: SpeciesDef; boss: SpeciesDef };
+  /** 끝나지 않는 판 (무한 러쉬): 워프 게이트가 열리지 않는다 */
+  endless?: boolean;
 }
 
 /** 무한의 탑 웨이브: 일반·정예 수와 보스 */
 export interface WaveSpec {
   normals: number;
   elites: number;
-  bosses?: { kind: 'boss' | 'midboss'; tier: number }[];
+  bosses?: { kind: 'boss' | 'midboss'; tier: number; species?: SpeciesDef }[];
 }
 
 export interface DungeonHooks {
@@ -105,7 +113,7 @@ export class DungeonScene extends Level {
     private hooks: DungeonHooks,
   ) {
     super();
-    this.theme = themeForTier(grid.tier);
+    this.theme = mods.theme ?? themeForTier(grid.tier);
     this.rng = new Rng(grid.seed ^ 0x5bd1e995);
     this.setupLights(this.theme.background, this.theme.ambient, this.theme.sun);
     this.buildTiles(grid, this.theme, this.rng, undefined, false);
@@ -142,7 +150,7 @@ export class DungeonScene extends Level {
     this.mods = mods;
     // 몬스터 배치 (방마다 정해진 위치).
     // 방마다 절반쯤은 한 세력(언데드·오크·다크엘프…)이 차지하고, 떼로 다니는 종족은 무리로 나온다
-    this.pool = stagePool(grid.tier, grid.stage, () => this.rng.next());
+    this.pool = mods.pool ? stagePool(grid.tier, grid.stage, () => this.rng.next(), mods.pool) : stagePool(grid.tier, grid.stage, () => this.rng.next());
     const factions = tierFactions(grid.tier, this.pool);
     const roomFavor = new Map<number, Faction | undefined>();
     const rand = () => this.rng.next();
@@ -152,7 +160,8 @@ export class DungeonScene extends Level {
       if (!roomFavor.has(room)) roomFavor.set(room, this.rng.chance(0.5) ? this.rng.pick(factions) : undefined);
       const boss = m.kind === 'boss' || m.kind === 'midboss';
       // 정예는 떼 종족이 아닌 것 중에서
-      const sp = pickSpecies(grid.tier, rand, m.kind === 'elite' ? (d) => d.arch !== 'swarm' : undefined, roomFavor.get(room), this.pool);
+      let sp = pickSpecies(grid.tier, rand, m.kind === 'elite' ? (d) => d.arch !== 'swarm' : undefined, roomFavor.get(room), this.pool);
+      if (boss && mods.bosses) sp = m.kind === 'boss' ? mods.bosses.boss : mods.bosses.midboss;
       const mon = this.spawnMonster(sp, m.kind, p.x, p.z, room, false);
       if (boss) this.boss = mon;
       if (m.kind === 'normal' && sp.pack) {
@@ -250,8 +259,8 @@ export class DungeonScene extends Level {
   }
 
   /** 보스를 하나 더 부른다 (보스 러시 하드·지옥). 종족은 단계의 보스로 정해진다 */
-  spawnBoss(kind: 'boss' | 'midboss', tier: number, x: number, z: number): Monster {
-    const m = new Monster(BOSS_SPECIES[tier - 1], kind, tier, kind === 'boss' ? 10 : 5, this.mods, x, z, this.boss?.homeRoom ?? -1);
+  spawnBoss(kind: 'boss' | 'midboss', tier: number, x: number, z: number, species?: SpeciesDef): Monster {
+    const m = new Monster(species ?? BOSS_SPECIES[tier - 1], kind, tier, kind === 'boss' ? 10 : 5, this.mods, x, z, this.boss?.homeRoom ?? -1);
     m.addTo(this.scene);
     this.monsters.push(m);
     return m;
@@ -379,6 +388,7 @@ export class DungeonScene extends Level {
 
   /** 모든 몬스터를 쓰러뜨리면 워프 게이트가 열린다 (웨이브가 남았으면 아직) */
   get exitOpen(): boolean {
+    if (this.mods.endless) return false;
     return this.waveIndex >= this.waves.length && this.monsters.every((m) => !m.alive);
   }
 
@@ -425,7 +435,7 @@ export class DungeonScene extends Level {
     }
     for (const b of w.bosses ?? []) {
       const ex = DungeonScene.toWorld(this.grid.exit.x, this.grid.exit.y - 3);
-      const m = this.spawnBoss(b.kind, b.tier, ex.x + (rand() - 0.5) * 2, ex.z);
+      const m = this.spawnBoss(b.kind, b.tier, ex.x + (rand() - 0.5) * 2, ex.z, b.species);
       m.aggro = true;
       if (!this.boss || !this.boss.alive) this.boss = m;
       this.effects.pillar(m.x, m.z, 0xff4a6a, 6);

@@ -19,7 +19,7 @@ export interface ActionSpec {
   tool?: 'pickaxe' | 'axe';
 }
 
-export type BuffId = 'ironwall' | 'block' | 'warcry' | 'manashield' | 'focus' | 'windwalk' | 'smoke' | 'hunter' | 'haste' | 'swift' | 'thorns' | 'undying' | 'counter' | 'bloodcry' | 'manareflect' | 'shieldregen' | 'windblade' | 'hunt2' | DebuffId;
+export type BuffId = 'ironwall' | 'block' | 'warcry' | 'manashield' | 'focus' | 'windwalk' | 'smoke' | 'hunter' | 'haste' | 'swift' | 'thorns' | 'undying' | 'counter' | 'bloodcry' | 'manareflect' | 'shieldregen' | 'windblade' | 'hunt2' | 'dodgebuff' | 'blessing' | 'bond' | 'bondblood' | 'bondfrenzy' | 'portalmarch' | 'riftward' | DebuffId;
 export interface Buff {
   id: BuffId;
   name: string;
@@ -91,7 +91,20 @@ export class Player {
     return this.dodgeStock >= 1;
   }
   /** 회피를 한 번 쓴다: 충전 하나를 쓰고, 충전 중이 아니면 재충전을 시작한다 */
+  /** 회피한 뒤 3초 동안 공격력 +% (세트·유물 옵션). 0이면 없음 */
+  dodgeBuffPct = 0;
+  /** 회피한 횟수 (업적용, 게임이 읽어 간다) */
+  dodgeCount = 0;
+  /** 회피 거리 배율 (8장 무중력 = 2) */
+  dashMult = 1;
+  /** MP가 저절로 차지 않는다 (8장 공허) */
+  noMpRegen = false;
+  /** 회피 재사용 대기 배율 (균열 서약 '무거운 발' = 2) */
+  dodgeCdMult = 1;
   useDodge(cooldown: number): void {
+    cooldown *= this.dodgeCdMult;
+    this.dodgeCount++;
+    if (this.dodgeBuffPct > 0) this.addBuff('dodgebuff', '그림자 일격', 3);
     this.dodgeStock = Math.max(0, this.dodgeStock - 1);
     if (this.rollCooldown <= 0) this.rollCooldown = this.dodgeMax = cooldown;
     else this.dodgeMax = Math.max(this.dodgeMax, cooldown);
@@ -212,7 +225,7 @@ export class Player {
   startBlink(move: { x: number; y: number }, onEnd: () => void): boolean {
     if (this.buff('stun') || !this.canDodge || this.state === 'dash' || !this.alive) return false;
     const dir = this.dodgeDir(move);
-    this.startDash({ dirX: dir.x, dirZ: dir.z, speed: PLAYER.blinkDist / 0.1, duration: 0.1, pose: 'lunge', invuln: false, onEnd });
+    this.startDash({ dirX: dir.x, dirZ: dir.z, speed: (PLAYER.blinkDist / 0.1) * this.dashMult, duration: 0.1, pose: 'lunge', invuln: false, onEnd });
     this.useDodge(PLAYER.blinkCooldown);
     return true;
   }
@@ -221,7 +234,7 @@ export class Player {
     if (this.buff('stun') || !this.canDodge || this.state === 'dash' || !this.alive) return false;
     const d = Player.worldDir(move);
     const dir = d.len > 0.1 ? { x: d.x / d.len, z: d.z / d.len } : { x: Math.sin(this.facing), z: Math.cos(this.facing) };
-    this.startDash({ dirX: dir.x, dirZ: dir.z, speed: PLAYER.rollSpeed, duration: PLAYER.rollTime, pose: 'roll', invuln: true });
+    this.startDash({ dirX: dir.x, dirZ: dir.z, speed: PLAYER.rollSpeed * this.dashMult, duration: PLAYER.rollTime, pose: 'roll', invuln: true });
     this.useDodge(PLAYER.rollCooldown + PLAYER.rollTime);
     return true;
   }
@@ -361,7 +374,9 @@ export class Player {
     this.invuln = Math.max(0, this.invuln - dt);
     // MP는 전투 중에는 차지 않는다: 3초 동안 때리지도 맞지도 않아야 회복된다
     this.combatT += dt;
-    if (this.combatT >= MP_REGEN_DELAY) this.mp = Math.min(this.maxMp, this.mp + dt * (2 + this.maxMp * 0.02));
+    if (this.noMpRegen) {
+      /* 공허: MP는 처치로만 찬다 */
+    } else if (this.combatT >= MP_REGEN_DELAY) this.mp = Math.min(this.maxMp, this.mp + dt * (2 + this.maxMp * 0.02));
     else if (this.mpRegenBonus > 0) this.mp = Math.min(this.maxMp, this.mp + dt * this.maxMp * this.mpRegenBonus);
     if (this.hpRegenBonus > 0 && this.state !== 'dead' && this.hp > 0) this.hp = Math.min(this.maxHp, this.hp + dt * this.maxHp * this.hpRegenBonus);
 

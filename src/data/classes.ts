@@ -1,4 +1,4 @@
-export type ClassId = 'sword' | 'mage' | 'archer';
+export type ClassId = 'sword' | 'mage' | 'archer' | 'summoner';
 
 export type StatKey = 'str' | 'int' | 'dex' | 'vit' | 'mag';
 
@@ -31,7 +31,7 @@ export interface ClassDef {
   baseMp: number;
   /** 기본 공격 간격 (초) */
   attackTime: number;
-  look: { tunic: number; tunicDark: number; hair: number; weapon: 'sword' | 'staff' | 'bow' };
+  look: { tunic: number; tunicDark: number; hair: number; weapon: 'sword' | 'staff' | 'bow' | 'orb' };
   basic: string;
   skills: SkillDef[];
   weaponNoun: string;
@@ -73,6 +73,10 @@ export const ULTIMATES: Record<ClassId, [UltDef, UltDef]> = {
   archer: [
     { name: '화살비', mp: 35, stone: 1, level: 15, description: '넓은 곳에 3초 동안 화살비를 퍼붓는다.' },
     { name: '용의 사격', mp: 40, stone: 4, level: 35, description: '힘을 모아 모든 것을 꿰뚫는 거대한 화살을 쏜다.' },
+  ],
+  summoner: [
+    { name: '차원 군단', mp: 40, stone: 1, level: 15, description: '계약한 짐승 여섯을 한꺼번에 불러 12초 동안 함께 싸운다 (소환수 수 한도와 따로).' },
+    { name: '수문장 강림', mp: 45, stone: 4, level: 35, description: '8장의 차원 포탈 수문장을 10초 동안 불러낸다. 수문장은 주변을 크게 내려찍는다.' },
   ],
 };
 
@@ -140,9 +144,30 @@ export const CLASSES: Record<ClassId, ClassDef> = {
       { name: '사냥꾼의 집중', mp: 20, cooldown: 24, description: '[보조] 10초 동안 치명타 +30%, 공격력 +15%.' },
     ],
   },
+  summoner: {
+    id: 'summoner',
+    name: '차원 소환사',
+    short: '소',
+    damage: 'magic',
+    baseStats: { str: 3, int: 10, dex: 6, vit: 6, mag: 9 },
+    baseHp: 52,
+    baseMp: 46,
+    attackTime: 0.42,
+    look: { tunic: 0x3a2a6a, tunicDark: 0x241a48, hair: 0xe8e0ff, weapon: 'orb' },
+    basic: '차원 구체 (맞힌 적을 소환수가 노린다)',
+    weaponNoun: '오브',
+    skills: [
+      { name: '계약 소환', mp: 18, cooldown: 6, description: '도감에서 계약한 짐승 하나를 20초 동안 불러낸다 (근접·원거리는 종족에 따라). 레벨이 오를수록 함께 부를 수 있는 수가 는다.' },
+      { name: '차원 정령', mp: 20, cooldown: 9, description: '마력탄을 쏘는 차원 정령 둘을 15초 동안 불러낸다.' },
+      { name: '차원문', mp: 22, cooldown: 8, description: '적이 모인 곳에 차원문을 열어 2초 동안 빨아들인 뒤 폭발시킨다.' },
+      { name: '영혼 결속', mp: 20, cooldown: 20, description: '[보조] 10초 동안 소환수 피해 +40%, 내가 받는 피해 -25%.' },
+      { name: '희생', mp: 10, cooldown: 10, description: '불러낸 소환수를 모두 터뜨려 주변에 큰 피해를 주고, 하나마다 HP 5%를 회복한다.' },
+      { name: '차원 보호막', mp: 18, cooldown: 18, description: '[방어] 6초 동안 받는 피해 -50%, 펼칠 때 주변 적을 밀쳐 낸다.' },
+    ],
+  },
 };
 
-export const CLASS_ORDER: ClassId[] = ['sword', 'mage', 'archer'];
+export const CLASS_ORDER: ClassId[] = ['sword', 'mage', 'archer', 'summoner'];
 
 export const MAX_LEVEL = 99;
 export const MAX_SKILL_LEVEL = 10;

@@ -18,7 +18,7 @@ import { QUEST_BY_ID, type QuestDef } from '../data/quests';
 import { THEMES } from '../data/themes';
 import { canEnqueue, enqueueJob, WORKBENCH_OUT_MAX, WORKBENCH_QUEUE_MAX, BOX_CAPACITY, boxTotal, producerStock, producerTarget, ESSENCES, MACHINE_TYPES, RECIPE_BY_ID, recipesFor, type BuildingState, type Factory, type WorkJob } from '../factory/sim';
 import type { Bag, Slot } from '../game/Bag';
-import { BAG_MAX_LEVEL, BAG_STEP, stageIndex, STORAGE_MAX_LEVEL, storageSlotsFor, STORE_STACK, warehouseSlots, type Progress } from '../game/Progress';
+import { CATCH_UP_EXP, ROSTER_STEP, PACT_AWAKEN_KILLS, PACT_KILLS, BAG_MAX_LEVEL, BAG_STEP, stageIndex, STORAGE_MAX_LEVEL, storageSlotsFor, STORE_STACK, warehouseSlots, type Progress } from '../game/Progress';
 import { objectiveNeed, objectiveProgress, objectiveText, todayKey, type Quests } from '../game/Quests';
 import { ICONS, mico, richText } from './icons';
 import { buildingThumb } from './thumbs';
@@ -28,9 +28,17 @@ import { awakenCost, effectTier, SKILL_AWAKEN, ULT_AWAKEN, type AwakenBranch, ty
 import { rollSpecials, specialRange, specialRerollCost, specialText } from '../data/special';
 import { BESTIARY, BESTIARY_BY_ID, COLLECTION_MILESTONES, isStageMaster, killMilestones, MASTER_ALL_GAIN, milestoneReward, RESEARCH_BONUS, SPECIES_STAT_KILLS, statMilestone, type BestiaryReward } from '../data/bestiary';
 import { BOSS_SPECIES, DEBUFF_INFO, TRAIT_TEXT, type Faction } from '../data/species';
+import { BLESSINGS, BLESS_IDS, dayKey, HORDE_BOSS_EVERY, HORDE_MILESTONES, hordeDaily, RAID_HP, RAID_TIME, raidDayMarks, raidScoreText, raidSpec, trialDayMarks, VOW_IDS, VOWS, vowMult, type VowId } from '../data/endgame';
+import { RAID_SPECIES, SPECIES } from '../data/species';
+import { CH8_RULES, CH8_STAGES, CH8_THEME, ch8Mult } from '../data/chapter8';
 import { endLock, AFFIXES, ALLOY, ALLOY2, RIFT_ALLOY2_FROM, riftEntry, rushEntry, formatClock, riftAffixes, riftMult, riftReward, RIFT_ALLOY, RIFT_TIME, rushReward, RUSH_DAILY, RUSH_DIFFS, RUSH_EXTRA_ALLOY, SHARD, DUST, DUST_PER_SHARD, END_NAMES, type EndContent, readTrialCode, trialCode, trialGrade, TRIAL_GRADES, TRIAL_HP, trialScoreText, trialSpec, TRIAL_TIME, weekKey, towerBoss, towerDaily, towerFirstClear, towerMult, rushFights, type RushDiff } from '../data/endgame';
 import { BONUS_NAMES, bonusText, TRANSCEND_STATS, transcendCost, transcendExp, engraveCost, engraveRange, ENGRAVE_STAGES, ENGRAVE_STAGE_NAMES, rollEngrave, TITLES, type BonusKey } from '../data/bonus';
 import { mathRng, Rng } from '../core/rng';
+import { EXCHANGE, MARK } from '../data/marks';
+import { ACHIEVEMENTS, type AchCtx } from '../data/achievements';
+import { RELIC_BY_ID, RELIC_CRAFT_GOLD, RELIC_CRAFT_SHARDS, RELIC_GRADES, RELIC_MAX, RELIC_SLOTS, relicName, relicRange, rollRelic, type Relic } from '../data/relics';
+import { rollSetGrade, SET_IDS, SETS, setCounts, setCraftCost, synthCost, SYNTH_COUNT, SYNTH_MIN_GRADE, type SetId } from '../data/sets';
+import { newUid, withSpecials } from '../data/equipment';
 import { TRIAL_RAGE, vaultPileGold, type Archetype } from '../data/monsters';
 
 const FACTION_NAME: Record<Faction, string> = { beast: '야수', undead: '언데드', orc: '오크족', elf: '다크엘프', construct: '구조물', elemental: '정령', void: '공허', demon: '악마' };
@@ -144,6 +152,7 @@ export function equipLine(e: Equip): string {
   const base = equipBase(e);
   if (!base) return '';
   const tags = [base];
+  if (e.set) tags.push(`<span class="ser" style="color:${hex(SETS[e.set].color)}">◈${SETS[e.set].name}</span>`);
   if (e.series) tags.push(`<span class="ser" style="color:${hex(SERIES[e.series].color)}">${SERIES[e.series].name}</span>`);
   if (e.eng?.length) tags.push(`<span class="eng">각인 ${e.eng.length}</span>`);
   if (e.sp?.length) tags.push(`<span class="spo">◆특수 ${e.sp.length}</span>`);
@@ -155,6 +164,11 @@ export function equipDetail(e: Equip): string {
   const base = equipBase(e);
   if (!base) return '<span class="bad">망가짐 — 대장간에서 수리하세요</span>';
   const lines = [`<div class="opt-base">${base}</div>`];
+  if (e.set) {
+    const st = SETS[e.set];
+    lines.push(`<div class="opt ser" style="color:${hex(st.color)}">◈ 세트 「${st.name}」 (${st.role}) · 능력치 ×1.4</div>`);
+    for (const t of st.tiers) lines.push(`<div class="opt ser" style="color:${hex(st.color)};opacity:.8">&nbsp;&nbsp;${t.n}세트: ${t.lines.map(specialText).join(', ')}</div>`);
+  }
   if (e.series) {
     const sr = SERIES[e.series];
     for (const [k, v] of Object.entries(seriesBonus(e)) as [BonusKey, number][]) lines.push(`<div class="opt ser" style="color:${hex(sr.color)}">${sr.name} · ${bonusText(k, v)}</div>`);
@@ -240,7 +254,7 @@ export class Screens {
         downOnBg = e.target === s && performance.now() - openedAt > 400;
       });
       s.addEventListener('pointerup', (e) => {
-        if (downOnBg && e.target === s && className !== 'ask' && className !== 'feedback') this.close();
+        if (downOnBg && e.target === s && className !== 'ask' && className !== 'feedback' && className !== 'bless') this.close();
         downOnBg = false;
       });
     }
@@ -319,14 +333,44 @@ export class Screens {
   }
 
   // ---------------- 차원문 광장: 단계 → 방 선택 ----------------
-  stageSelect(p: Progress, tier: number, onPick: (tier: number, stage: number) => void, onClose: () => void, onFarm?: (tier: number, kind: 'wood' | 'ore' | 'gold') => void, onEnd?: () => void): void {
+  stageSelect(p: Progress, tier: number, onPick: (tier: number, stage: number) => void, onClose: () => void, onFarm?: (tier: number, kind: 'wood' | 'ore' | 'gold') => void, onEnd?: () => void, onCh8?: (stage: number) => void): void {
     const maxTier = p.maxTier;
-    const tiers = THEMES.map((t) => {
-      const locked = t.tier > maxTier;
-      return `<button class="tier-tab ${t.tier === tier ? 'on' : ''} ${locked ? 'locked' : ''}" data-tier="${t.tier}" style="--c:${hex(t.portalColor)}" ${locked ? 'disabled' : ''}>
+    const ch8Open = !!onCh8 && p.flag('ch8') > 0;
+    const tiers =
+      THEMES.map((t) => {
+        const locked = t.tier > maxTier;
+        return `<button class="tier-tab ${t.tier === tier ? 'on' : ''} ${locked ? 'locked' : ''}" data-tier="${t.tier}" style="--c:${hex(t.portalColor)}" ${locked ? 'disabled' : ''}>
           <span class="gate"></span><b>${t.tier}${p.data.dimStones.includes(t.tier) ? '<i class="stone">◆</i>' : ''}</b></button>`;
-    }).join('');
-    const theme = THEMES[tier - 1];
+      }).join('') + (ch8Open ? `<button class="tier-tab ${tier === 8 ? 'on' : ''}" data-tier="8" style="--c:${hex(CH8_THEME.portalColor)}"><span class="gate"></span><b>8</b></button>` : '');
+    if (tier === 8 && ch8Open) {
+      // 8장 「갈라진 차원」: 방마다 차원 규칙
+      const cleared = p.data.ch8?.cleared ?? 0;
+      const rows = CH8_STAGES.map((st) => {
+        const open = st.stage <= cleared + 1;
+        const done = st.stage <= cleared;
+        const wait = p.bossWait(8, st.stage);
+        const mark = st.stage === 10 ? '수문장' : st.stage === 5 ? '파수꾼' : '';
+        const sub = !open ? '봉인' : mark ? (wait > 0 ? `${mark} ${formatWait(wait)}` : mark) : done ? '클리어' : '도전';
+        return `<button class="stage-btn ${done ? 'done' : ''} ${mark ? 'boss' : ''} ${wait > 0 ? 'waiting' : ''}" data-c8="${st.stage}" ${open ? '' : 'disabled'}>
+          <b>8-${st.stage}</b><small>${st.name}</small><small>${st.rules.map((r) => `<span style="color:${hex(CH8_RULES[r].color)}">${CH8_RULES[r].name}</span>`).join('·')} · ${sub}</small></button>`;
+      }).join('');
+      const s8 = this.open(
+        'select',
+        `<div class="panel wide">
+           <button class="close">${ICONS.close}</button>
+           <h2>차원문 광장 <small>8장 · 갈라진 차원</small></h2>
+           <div class="tier-tabs">${tiers}</div>
+           <p class="hint">차원 포탈 너머의 세계. 방마다 다른 <b>차원 규칙</b>이 붙고 몬스터는 7-10의 ×${ch8Mult(1).toFixed(1)}~×${ch8Mult(10).toFixed(1)}. 전리품은 7단계 것 (좋은 등급이 잘 나옴), 파수꾼·수문장·정예는 <b>세트 장비</b>를 떨어뜨리기도 합니다.${p.data.unlockedClasses.includes('summoner') ? '' : ' 8-10의 수문장을 쓰러뜨리면 새 동료가 합류합니다.'}</p>
+           <div class="stage-grid">${rows}</div>
+           <p class="hint">${Object.values(CH8_RULES).map((r) => `<b style="color:${hex(r.color)}">${r.name}</b> ${r.text}`).join(' · ')}</p>
+         </div>`,
+        onClose,
+      );
+      this.on(s8, '.tier-tab:not(.locked)', (b) => this.stageSelect(p, Number(b.dataset.tier), onPick, onClose, onFarm, onEnd, onCh8));
+      this.on(s8, '[data-c8]', (b) => onCh8?.(Number(b.dataset.c8)));
+      return;
+    }
+    const theme = THEMES[Math.min(7, tier) - 1];
     const stages = Array.from({ length: 10 }, (_, i) => {
       const st = i + 1;
       const g = stageIndex(tier, st);
@@ -361,7 +405,7 @@ export class Screens {
        </div>`,
       onClose,
     );
-    this.on(s, '.tier-tab:not(.locked):not(.end-tab)', (b) => this.stageSelect(p, Number(b.dataset.tier), onPick, onClose, onFarm, onEnd));
+    this.on(s, '.tier-tab:not(.locked):not(.end-tab)', (b) => this.stageSelect(p, Number(b.dataset.tier), onPick, onClose, onFarm, onEnd, onCh8));
     this.on(s, '[data-end]', () => onEnd?.());
     this.on(s, '[data-stage]', (b) => onPick(tier, Number(b.dataset.stage)));
     this.on(s, '[data-farm]', (b) => onFarm?.(tier, b.dataset.farm as 'wood' | 'ore' | 'gold'));
@@ -370,22 +414,43 @@ export class Screens {
   // ---------------- 차원의 끝 (엔드 콘텐츠) ----------------
   endgame(
     p: Progress,
-    h: { tower: (floor: number) => void; towerDaily: () => void; rush: (diff: RushDiff) => void; rift: (tier: number, level: number) => void; trial: () => void; trialAura: (grade: number) => void },
+    h: {
+      tower: (floor: number) => void;
+      towerDaily: () => void;
+      rush: (diff: RushDiff) => void;
+      rift: (tier: number, level: number, vows: VowId[]) => void;
+      trial: () => void;
+      trialAura: (grade: number) => void;
+      raid: () => void;
+      horde: () => void;
+      hordeDaily: () => void;
+      /** 같은 건물의 다른 콘텐츠로 (시련 ↔ 레이드, 보스 러시 ↔ 무한 러쉬) */
+      view: (c: EndContent) => void;
+    },
     onClose: () => void,
     message?: string,
-    sel?: { tier: number; level: number },
+    sel?: { tier: number; level: number; vows?: VowId[] },
     only: EndContent = 'tower',
     view: 'main' | 'info' | 'titles' = 'main',
   ): void {
     const e = p.data.end!;
     const today = todayKey();
-    const cur = { tier: sel?.tier ?? Math.min(7, p.maxTier), level: sel?.level ?? Math.max(1, e.riftBest + 1) };
+    const cur = { tier: sel?.tier ?? Math.min(7, p.maxTier), level: sel?.level ?? Math.max(1, e.riftBest + 1), vows: sel?.vows ?? e.vows ?? [] };
     const dust = (n: number) => (n ? `${inlineGem(DUST)}${n}` : '');
     const res = (id: string) => `<span class="res-chip">${inlineGem(id)}${p.count(id)}</span>`;
     const used = e.rushDate === today ? e.rushUsed : 0;
     const maxLevel = e.riftBest + 1;
-    const tr = e.trial;
-    const spec = trialSpec(weekKey());
+    const tr = e.trial && e.trial.week === dayKey() ? e.trial : undefined;
+    const trAll = e.trial;
+    const spec = trialSpec(dayKey());
+    const boardKey = only === 'raid' ? weekKey() : dayKey();
+    const boardId = only === 'raid' ? 'raid' : only === 'horde' ? 'horde' : 'trial';
+    const scoreTxt = (sc: number) => (boardId === 'raid' ? raidScoreText(sc) : boardId === 'horde' ? `${sc.toLocaleString()}마리` : trialScoreText(sc));
+    const rankBlock = (title: string, canUp: boolean) => `<h3 class="sub">${title} <button class="chip rank-refresh" data-rrefresh>🔄 새로고침</button></h3>
+        <div class="rank-me"><span>닉네임 <b>${esc(p.data.nickname ?? '')}</b></span>${boardId === 'trial' ? `<button class="rank-up" data-rup ${canUp ? '' : 'disabled'}>내 기록 올리기</button><span data-rup-out class="dim"></span>` : '<span class="dim">기록은 끝날 때 자동으로 올라갑니다</span>'}</div>
+        <ol class="rank-board" data-tboard><li class="dim">순위를 불러오는 중…</li></ol>`;
+    const sibling: Partial<Record<EndContent, EndContent[]>> = { trial: ['trial', 'raid'], raid: ['trial', 'raid'], rush: ['rush', 'horde'], horde: ['rush', 'horde'] };
+    const tabs = sibling[only] ? `<div class="tabs">${sibling[only]!.map((c) => `<button data-endview="${c}" class="${c === only ? 'on' : ''}">${END_NAMES[c]}${endLock(e, c) ? ' 🔒' : ''}</button>`).join('')}</div>` : '';
 
     // ---------- 첫 화면: 필요한 것만 ----------
     let main = '';
@@ -436,19 +501,46 @@ export class Screens {
           <span class="dim">보상 ${rr.gold} G ${dust(rr.dust)}</span>
         </div>
         <div class="chips">${affixes.length ? affixes.map((a) => `<span class="chip" style="--c:${hex(AFFIXES[a].color)}">${AFFIXES[a].name}</span>`).join('') : '<span class="dim">변이 없음</span>'}</div>
+        <h3 class="sub">균열 서약 <small class="dim">스스로 제약을 걸수록 보상이 커진다 · 보상 ×${vowMult(cur.vows).toFixed(2)} (${Math.round(rr.gold * vowMult(cur.vows)).toLocaleString()} G ${dust(Math.floor(rr.dust * vowMult(cur.vows)))})</small></h3>
+        <div class="chips">${VOW_IDS.map((v) => `<button class="chip ${cur.vows.includes(v) ? 'on' : ''}" data-vow="${v}" style="--c:${hex(VOWS[v].color)}" title="${VOWS[v].text}">${VOWS[v].name} <small>+${Math.round(VOWS[v].bonus * 100)}%</small></button>`).join('')}</div>
+        <p class="hint">${cur.vows.length ? cur.vows.map((v) => `<b style="color:${hex(VOWS[v].color)}">${VOWS[v].name}</b> ${VOWS[v].text}`).join(' · ') : '서약 없음 — 버튼을 눌러 제약을 걸 수 있습니다'}</p>
         <div class="menu row"><button class="primary" data-rift ${p.count(entry.id) < entry.n ? 'disabled' : ''}>입장 · ${inlineGem(entry.id)}${entry.n}</button></div>`;
+    } else if (only === 'raid') {
+      const rs = raidSpec(weekKey());
+      const rr = e.raid && e.raid.week === weekKey() ? e.raid : undefined;
+      const today = rr && rr.day === dayKey() ? rr : undefined;
+      const sp = RAID_SPECIES[rs.boss.id];
+      const nextMarks = raidDayMarks(Math.max(1, today?.dayBest ?? 0));
+      main = `<div class="end-summary"><span>${weekKey()} · 이번 주 레이드 보스</span>
+          <span>이번 주 <b>${rr?.best ? raidScoreText(rr.best) : '기록 없음'}</b> · 처치 ${e.raid?.kills ?? 0}회</span></div>
+        <div class="trial-boss"><img src="${monsterIconUrl(sp, rs.boss.tier, true)}" alt=""><div><b>${rs.boss.name}</b><small class="dim">${rs.boss.desc} · 체력 7-10 수호자의 ${RAID_HP}배 · 12줄 · ${formatClock(RAID_TIME)}</small></div></div>
+        <p class="hint">오늘 받은 증표 ${inlineGem('eon_mark')} <b>${today?.dayMarks ?? 0}</b> (오늘 기록 ${today?.dayBest ? raidScoreText(today.dayBest) : '없음'}) · 기록이 오르면 차액을 받습니다 (깎은 체력 10%마다 +1, 처치 ${raidDayMarks(10000)}~${raidDayMarks(10000 + 1200)}) · 지난주 순위 보상은 다음 주에 자동으로</p>
+        <div class="menu row"><button class="primary" data-raid>도전하기</button></div>
+        ${rankBlock('이번 주 레이드 순위', false)}`;
+      void nextMarks;
+    } else if (only === 'horde') {
+      const hr = e.horde;
+      const best = hr?.best ?? 0;
+      const daily = hordeDaily(best);
+      const dailyDone = hr?.dailyDate === todayKey();
+      const nextMs = HORDE_MILESTONES[hr?.claimed ?? 0];
+      main = `<div class="end-summary"><span>최고 <b>${best.toLocaleString()}마리</b>${hr?.bestTime ? ` · ${formatClock(hr.bestTime)} 버팀` : ''}</span>
+          <button class="small" data-hdaily ${dailyDone || best < 1 ? 'disabled' : ''}>${dailyDone ? '오늘 보상 받음' : `일일 보상 ${inlineGem('eon_mark')}${daily.marks} · ${daily.gold.toLocaleString()} G`}</button></div>
+        <p class="hint">차원의 틈에서 몬스터가 끝없이 쏟아집니다. 쓰러질 때까지 버티며 최대한 많이 처치하세요. 처치 수가 목표를 넘을 때마다 <b>축복 셋 중 하나</b>를 고르고, ${Math.round(HORDE_BOSS_EVERY)}초마다 보스가 섞여 나옵니다. 쓰러져도 짐은 잃지 않습니다.</p>
+        <p class="hint">${nextMs ? `다음 첫 달성 보상: <b>${nextMs.kills.toLocaleString()}마리</b> → ${inlineGem('eon_mark')}${nextMs.marks}` : '첫 달성 보상을 모두 받았습니다'} · 하루 한 번 최고 기록만큼 일일 보상</p>
+        <div class="menu row"><button class="primary" data-horde>출전하기</button></div>
+        ${rankBlock('오늘의 러쉬 순위', false)}`;
     } else {
       const g = tr ? trialGrade(tr.best) : -1;
-      const topG = tr?.topGrade ?? -1;
+      const topG = trAll?.topGrade ?? -1;
       const worn = p.data.aura ?? -1;
       const tb = BOSS_SPECIES[spec.tier - 1];
-      main = `<div class="end-summary"><span>${weekKey()} · 이번 주 수호자</span>
-          <span>이번 주 <b>${tr?.best ? trialScoreText(tr.best) : '기록 없음'}</b> ${g >= 0 ? `<b style="color:${hex(TRIAL_GRADES[g].color)}">${TRIAL_GRADES[g].name}</b>` : ''}</span></div>
+      main = `<div class="end-summary"><span>${dayKey()} · 오늘의 수호자</span>
+          <span>오늘 <b>${tr?.best ? trialScoreText(tr.best) : '기록 없음'}</b> ${g >= 0 ? `<b style="color:${hex(TRIAL_GRADES[g].color)}">${TRIAL_GRADES[g].name}</b>` : ''}</span></div>
+        <p class="hint">오늘 받은 증표 ${inlineGem('eon_mark')} <b>${tr?.marks ?? 0}</b> · 오늘 기록의 등급만큼 (참여 2 + ${TRIAL_GRADES.map((t) => `${t.name} ${trialDayMarks(t.min) - 2}`).join(' · ')}) · 어제 순위 보상은 다음 날 자동으로 (1위 20 · 3위 안 14 · 10위 안 9 · 상위 절반 5 · 참여 3)</p>
         <div class="trial-boss"><img src="${monsterIconUrl(tb, spec.tier, true)}" alt=""><div><b>${tb.name}</b><small class="dim">${THEMES[spec.tier - 1].name} · 체력 7-10 수호자의 ${TRIAL_HP}배 · ${formatClock(TRIAL_TIME)}</small></div></div>
         <div class="menu row"><button class="primary" data-trial>도전하기</button></div>
-        <h3 class="sub">이번 주 순위 <button class="chip rank-refresh" data-rrefresh>🔄 새로고침</button></h3>
-        <div class="rank-me"><span>닉네임 <b>${esc(p.data.nickname ?? '')}</b></span><button class="rank-up" data-rup ${tr?.best ? '' : 'disabled'}>내 기록 올리기</button><span data-rup-out class="dim"></span></div>
-        <ol class="rank-board" data-tboard><li class="dim">순위를 불러오는 중…</li></ol>
+        ${rankBlock('오늘의 순위', !!tr?.best)}
         <h3 class="sub">발밑 오라 ${worn >= 0 ? '<button class="chip" data-taura="-1">끄기</button>' : ''}</h3>
         <div class="rush-row trial-row">${TRIAL_GRADES.map((t, i) => {
           const open = topG >= i;
@@ -479,14 +571,28 @@ export class Screens {
           <li>오늘의 변이: ${riftAffixes(cur.level, today).map((a) => `<b style="color:${hex(AFFIXES[a].color)}">${AFFIXES[a].name}</b> ${AFFIXES[a].text}`).join(' · ') || '없음'}</li>
         </ul>`,
       trial: `<ul class="info-list">
-          <li>매주 무작위로 정해지는 수호자 한 마리와 ${formatClock(TRIAL_TIME)} 동안 싸웁니다. 내 장비·능력치 그대로 (강해질수록 기록이 오릅니다).</li>
+          <li>매일 무작위로 정해지는 수호자 한 마리와 ${formatClock(TRIAL_TIME)} 동안 싸웁니다. 내 장비·능력치 그대로 (강해질수록 기록이 오릅니다).</li>
           <li>체력이 7-10 수호자의 ${TRIAL_HP}배라 시간 안에 깎은 체력 비율이 기록입니다. 쓰러뜨리면 걸린 시간이 기록 (빠를수록 위).</li>
           <li>체력이 10% 깎일 때마다 <b>격노 단계</b>가 올라 공격 +${Math.round(TRIAL_RAGE.atk * 100)}% · 이동 +${Math.round(TRIAL_RAGE.speed * 100)}% · 패턴 사이 쉬는 시간이 줄고, 2단계부터 강화 패턴을 씁니다.</li>
           <li>중급 물약 3개 지급, 쓰러져도 짐을 잃지 않음. 몇 번이든 도전 가능. 시간은 수호자와 싸움이 시작되면 흐릅니다.</li>
           <li>등급(${TRIAL_GRADES.map((t) => `${t.name} ${t.min >= 10000 ? '처치' : `${t.min / 100}%`}`).join(' · ')})을 처음 달성하면 그 등급의 발밑 오라를 얻습니다.</li>
           ${tr && tr.best ? `<li>내 기록 코드: <input class="code-box" readonly value="${trialCode(tr.week, tr.cls, tr.best, tr.time, tr.hits)}"></li>` : ''}
           <li>친구 코드 확인: <input class="code-box" data-tcode placeholder="DT-..."> <span data-tcode-out></span></li>
-          <li>지난 기록: ${tr?.history.length ? tr.history.slice(0, 5).map((x) => `${x.week} ${trialScoreText(x.best)} ${x.grade >= 0 ? TRIAL_GRADES[x.grade].name : '-'}`).join(' · ') : '없음'}</li>
+          <li>보상: 오늘 기록의 등급만큼 ${inlineGem('eon_mark')}영겁의 증표 (기록이 오르면 차액), 다음 날 어제 순위에 따라 증표를 더 받습니다.</li>
+          <li>지난 기록: ${trAll?.history.length ? trAll.history.slice(0, 5).map((x) => `${x.week} ${trialScoreText(x.best)} ${x.grade >= 0 ? TRIAL_GRADES[x.grade].name : '-'}`).join(' · ') : '없음'}</li>
+        </ul>`,
+      raid: `<ul class="info-list">
+          <li>매주 바뀌는 레이드 보스(${RAID_SPECIES.r1.name} · ${RAID_SPECIES.r2.name} · ${RAID_SPECIES.r3.name})를 ${formatClock(RAID_TIME)} 안에 쓰러뜨립니다. 내 장비·능력치 그대로, 물약은 내 주머니의 것.</li>
+          <li>체력 12줄. 8줄·4줄에서 보호막을 펼치고 수호병을 부릅니다 (수호병을 모두 쓰러뜨리면 풀림). 체력이 10% 깎일 때마다 격노 단계가 오릅니다.</li>
+          <li>기록: 처치했으면 걸린 시간, 못 잡았으면 깎은 체력. 몇 번이든 도전할 수 있고 가장 좋은 기록이 순위에 오릅니다.</li>
+          <li>보상: 하루 한 번 오늘 기록만큼 ${inlineGem('eon_mark')}증표 (기록이 오르면 차액), 처치하면 35% 확률로 세트 장비, 한 주가 끝나면 순위 보상 (1위 60 · 3위 안 42 · 10위 안 27 · 상위 절반 15 · 참여 9).</li>
+        </ul>`,
+      horde: `<ul class="info-list">
+          <li>넓은 벌판 한가운데서 시작합니다. 차원의 틈에서 몬스터가 사방에서 끝없이 나오고, 시간이 갈수록 강해지고 많아집니다 (1분마다 +18%).</li>
+          <li>${Math.round(HORDE_BOSS_EVERY)}초마다 파수꾼·수호자가 번갈아 나옵니다 (보스는 10마리로 셉니다).</li>
+          <li>처치 수가 목표를 넘을 때마다 축복 셋 중 하나를 고릅니다: ${BLESS_IDS.map((b) => `<b style="color:${hex(BLESSINGS[b].color)}">${BLESSINGS[b].name}</b>`).join(' · ')}.</li>
+          <li>몬스터는 전리품을 떨어뜨리지 않고, 끝날 때 처치 수 × 40 G. 경험치는 절반.</li>
+          <li>첫 달성 보상: ${HORDE_MILESTONES.map((m) => `${m.kills} → ${m.marks}`).join(' · ')} (증표). 하루 한 번 최고 기록만큼 일일 보상 (200마리마다 증표 1, 최대 15).</li>
         </ul>`,
     };
     const common = `<p class="dim">보상은 ${inlineGem(DUST)}차원 가루로 받습니다. 차원집의 차원 응축기에서 가루 ${DUST_PER_SHARD} + 상급 정수 + 티타늄판 → ${inlineGem(SHARD)}차원 파편(궁극기 강화·각인·초월).</p>`;
@@ -494,9 +600,9 @@ export class Screens {
       const got = p.data.titles?.includes(t.id);
       return `<li class="${got ? '' : 'locked'}"><div><b>${got ? `「${t.name}」` : '???'}</b><small>${t.cond} · ${Object.entries(t.bonus).map(([k, v]) => bonusText(k as BonusKey, v!)).join(', ')}</small></div>${got ? '<span class="ok">획득</span>' : ''}</li>`;
     }).join('')}</ul>`;
-    const chips = only === 'tower' || only === 'trial' ? res(DUST) : `${res(DUST)}${res(ALLOY)}${res(ALLOY2)}`;
+    const chips = only === 'trial' || only === 'raid' || only === 'horde' ? res('eon_mark') : only === 'tower' ? res(DUST) : `${res(DUST)}${res(ALLOY)}${res(ALLOY2)}`;
 
-    const body = view === 'info' ? `<div class="scroll">${infoOf[only]}${only === 'trial' ? '' : common}</div>` : view === 'titles' ? `<div class="scroll">${titles}</div>` : main;
+    const body = view === 'info' ? `<div class="scroll">${infoOf[only]}${only === 'trial' || only === 'raid' || only === 'horde' ? '' : common}</div>` : view === 'titles' ? `<div class="scroll">${titles}</div>` : `${tabs}${main}`;
     const s = this.open(
       'endgame',
       `<div class="panel wide tall end-panel">
@@ -519,20 +625,29 @@ export class Screens {
     this.on(s, '[data-rush]', (b) => h.rush(Number(b.dataset.rush) as RushDiff));
     this.on(s, '[data-rtier]', (b) => again(message, { ...cur, tier: Number(b.dataset.rtier) }));
     this.on(s, '[data-rlv]', (b) => again(message, { ...cur, level: Math.max(1, Math.min(maxLevel, cur.level + Number(b.dataset.rlv))) }));
-    this.on(s, '[data-rift]', () => h.rift(cur.tier, cur.level));
+    this.on(s, '[data-rift]', () => h.rift(cur.tier, cur.level, cur.vows));
+    this.on(s, '[data-vow]', (b) => {
+      const v = b.dataset.vow as VowId;
+      const vows = cur.vows.includes(v) ? cur.vows.filter((x) => x !== v) : [...cur.vows, v];
+      again(message, { ...cur, vows });
+    });
     this.on(s, '[data-trial]', () => h.trial());
+    this.on(s, '[data-raid]', () => h.raid());
+    this.on(s, '[data-horde]', () => h.horde());
+    this.on(s, '[data-hdaily]', () => h.hordeDaily());
+    this.on(s, '[data-endview]', (b) => h.view(b.dataset.endview as EndContent));
     this.on(s, '[data-taura]', (b) => h.trialAura(Number(b.dataset.taura)));
     // 주간 시련 순위 (의견함과 같은 시트)
     const board = s.querySelector<HTMLElement>('[data-tboard]');
     const loadBoard = () => {
       if (!board) return;
-      void fetchBoard(weekKey()).then((r) => {
+      void fetchBoard(boardKey, 3, boardId).then((r) => {
         if (!board.isConnected) return;
         if (!r.ok) board.innerHTML = `<li class="dim">순위를 불러오지 못했습니다 · ${esc(r.reason)}</li>`;
-        else if (!r.rows.length) board.innerHTML = '<li class="dim">아직 이번 주 기록이 없습니다. 첫 기록을 올려 보세요!</li>';
+        else if (!r.rows.length) board.innerHTML = '<li class="dim">아직 기록이 없습니다. 첫 기록을 올려 보세요!</li>';
         else
           board.innerHTML = r.rows
-            .map((x, i) => `<li class="${x.me ? 'me' : ''}"><b class="rk">${i + 1}</b><span class="nm">${esc(x.name)}</span><small class="dim">${CLASSES[x.cls as ClassId]?.name ?? ''} Lv.${x.level}</small><b class="sc">${trialScoreText(x.score)}</b></li>`)
+            .map((x, i) => `<li class="${x.me ? 'me' : ''}"><b class="rk">${i + 1}</b><span class="nm">${esc(x.name)}</span><small class="dim">${CLASSES[x.cls as ClassId]?.name ?? ''} Lv.${x.level}</small><b class="sc">${scoreTxt(x.score)}</b></li>`)
             .join('');
       });
     };
@@ -547,7 +662,7 @@ export class Screens {
       if (!tr?.best || !name) return;
       (b as HTMLButtonElement).disabled = true;
       if (upOut) upOut.textContent = '올리는 중…';
-      void submitTrial({ week: tr.week, name, cls: tr.cls || p.data.currentClass, level: p.data.classes[(tr.cls || p.data.currentClass) as ClassId]?.level ?? 1, score: tr.best, seconds: tr.time, boss: BOSS_SPECIES[spec.tier - 1].name, version: GAME_VERSION }).then((r) => {
+      void submitTrial({ board: 'trial', week: tr.week, name, cls: tr.cls || p.data.currentClass, level: p.data.classes[(tr.cls || p.data.currentClass) as ClassId]?.level ?? 1, score: tr.best, seconds: tr.time, boss: BOSS_SPECIES[spec.tier - 1].name, version: GAME_VERSION }).then((r) => {
         (b as HTMLButtonElement).disabled = false;
         if (upOut) upOut.innerHTML = r.ok ? '<span class="ok">올렸습니다!</span>' : `<span class="bad">${esc(r.reason ?? '실패')}</span>`;
         if (r.ok) loadBoard();
@@ -801,6 +916,9 @@ export class Screens {
     onEncyclopedia?: () => void;
     /** 조작 설정 */
     onControls?: () => void;
+    /** 업적 (v10) */
+    onAchievements?: () => void;
+    achReady?: number;
     /** 가진 음식 (먹으면 30분 버프) */
     foods?: { id: string; count: number }[];
     foodLeft?: string;
@@ -827,6 +945,7 @@ export class Screens {
            ${opts.onControls ? `<button data-a="controls">🎮 조작 설정</button>` : ''}
            ${opts.onEncyclopedia ? `<button data-a="ency">${SPK('book', '📖')} 백과사전</button>` : ''}
            ${opts.onBestiary ? `<button data-a="bestiary">${SPK('book', '📖')} 몬스터 도감</button>` : ''}
+           ${opts.onAchievements ? `<button data-a="ach">🏆 업적${opts.achReady ? ` <b class="ok">(받을 보상 ${opts.achReady})</b>` : ''}</button>` : ''}
            <button data-a="savecode">${SPK('disk', '💾')} 저장 코드 만들기</button>
            ${opts.onFeedback ? `<button data-a="feedback">${SPK('scroll', '✉')} 의견 보내기</button>` : ''}
            <button data-a="title">타이틀로 (자동 저장)</button>
@@ -848,6 +967,7 @@ export class Screens {
     this.on(s, '[data-a="feedback"]', () => opts.onFeedback?.());
     this.on(s, '[data-a="ency"]', () => opts.onEncyclopedia?.());
     this.on(s, '[data-a="controls"]', () => opts.onControls?.());
+    this.on(s, '[data-a="ach"]', () => opts.onAchievements?.());
     s.querySelector<HTMLInputElement>('[data-t="shadow"]')!.addEventListener('change', (e) => opts.onToggleShadows((e.target as HTMLInputElement).checked));
     s.querySelector<HTMLInputElement>('[data-t="sound"]')!.addEventListener('change', (e) => opts.onToggleSound((e.target as HTMLInputElement).checked));
     s.querySelectorAll<HTMLButtonElement>('[data-aim]').forEach((b) =>
@@ -1225,6 +1345,7 @@ export class Screens {
         <h3>스탯 <small>남은 포인트 <b class="${c.points ? 'ok' : ''}">${c.points}</b> · 레벨업마다 5포인트</small></h3>
         <div class="stat-rows">${statRows}</div>
         ${this.transcendBlock(p)}
+        <p class="hint">원정대 보너스: 모든 능력치 <b>+${p.rosterBonus}</b> (열린 직업 레벨 합 ${p.rosterLevels} · ${ROSTER_STEP}마다 +1)${p.catchUp > 1 ? ` · <b class="ok">성장 가속 경험치 ×${CATCH_UP_EXP}</b> (Lv.${p.catchUpLevel}까지)` : ''}</p>
         <h3>스킬</h3><ul class="list">${cls.skills.map((sk, i) => `<li><span class="key">${i + 1}</span><div><b>${sk.name} ${c.skills[i] ? `Lv.${c.skills[i]}` : '<span class="dim">(미습득)</span>'}</b><small>${sk.description} · MP ${sk.mp} · ${sk.cooldown}초</small></div></li>`).join('')}</ul>
       </div>`;
     } else {
@@ -1808,11 +1929,13 @@ export class Screens {
     const research = p.data.research ?? 0;
     const claimed = (id: string) => p.data.bestiaryClaim?.[id] ?? 0;
     const giveText = (r: BestiaryReward) => [r.gold ? `${r.gold} G` : '', ...Object.entries(r.items).map(([id, n]) => `${ITEMS[id].name}×${n}`)].filter(Boolean).join(' · ');
-    const tabs = THEMES.map((t) => {
+    // 8장(v10) 몬스터는 8번 탭 (8장이 열려야 보인다)
+    const tabThemes = [...THEMES.map((t) => ({ tier: t.tier, color: t.portalColor })), ...(p.flag('ch8') ? [{ tier: 8, color: CH8_THEME.portalColor }] : [])];
+    const tabs = tabThemes.map((t) => {
       const list = BESTIARY.filter((e) => e.tier === t.tier);
       const got = list.filter((e) => p.kills(e.species.id) > 0).length;
       const ready = list.some((e) => killMilestones(e).some((m, i) => i >= claimed(e.species.id) && p.kills(e.species.id) >= m));
-      return `<button class="tier-tab ${t.tier === tier ? 'on' : ''}" data-tier="${t.tier}" style="--c:${hex(t.portalColor)}"><b>${t.tier}</b><small>${got}/${list.length}</small>${ready && canClaim ? '<i class="dot"></i>' : ''}</button>`;
+      return `<button class="tier-tab ${t.tier === tier ? 'on' : ''}" data-tier="${t.tier}" style="--c:${hex(t.color)}"><b>${t.tier}</b><small>${got}/${list.length}</small>${ready && canClaim ? '<i class="dot"></i>' : ''}</button>`;
     }).join('');
     const cards = BESTIARY.filter((e) => e.tier === tier)
       .map((e) => {
@@ -1940,7 +2063,7 @@ export class Screens {
         .join('');
       // 등급별로 장비 한꺼번에 팔기 (두 번 눌러 확인)
       const all = [...p.data.equips, ...bagEquips];
-      const byGrade = GRADES.map((g, gi) => ({ g, gi, list: all.filter((e) => e.grade === gi) })).filter((x) => x.list.length);
+      const byGrade = GRADES.map((g, gi) => ({ g, gi, list: all.filter((e) => e.grade === gi && !e.set) })).filter((x) => x.list.length);
       const gradeRow = byGrade.length
         ? `<div class="sell-grades">${byGrade.map((x) => `<button data-sellgr="${x.gi}" style="--c:${hex(x.g.color)}"><b style="color:${hex(x.g.color)}">${x.g.name}</b> 모두 팔기<small>${x.list.length}개 · ${x.list.reduce((a, e) => a + equipValue(e), 0).toLocaleString()} G</small></button>`).join('')}</div>`
         : '';
@@ -1997,10 +2120,10 @@ export class Screens {
         n++;
         gold += equipValue(e);
       };
-      p.data.equips = p.data.equips.filter((e) => (e.grade === gi ? (sell(e), false) : true));
+      p.data.equips = p.data.equips.filter((e) => (e.grade === gi && !e.set ? (sell(e), false) : true));
       for (const bag of [p.invBag, p.dimBagObj])
         bag.slots.forEach((x, i) => {
-          if (x?.equip && x.equip.grade === gi) {
+          if (x?.equip && x.equip.grade === gi && !x.equip.set) {
             sell(x.equip);
             bag.slots[i] = null;
           }
@@ -2146,12 +2269,14 @@ export class Screens {
       `<div class="panel wide tall">
          <button class="close">${ICONS.close}</button>
          <h2>대장장이 고른의 대장간 <small class="gold">${p.data.gold.toLocaleString()} G</small></h2>
+         ${p.flag('endgame') ? '<div class="tabs"><button class="on">강화·각인·특수 옵션</button><button data-forge-sets>◈ 세트 장비</button></div>' : ''}
          ${message ? `<div class="notice">${message}</div>` : ''}
          <div class="split"><ul class="list pick scroll">${toolRows}${list || '<li class="empty">장비 없음</li>'}</ul><div class="detail">${detail}</div></div>
        </div>`,
       onClose,
     );
     const again = (id?: string, msg?: string) => this.forge(p, onChange, onClose, id, msg);
+    this.on(s, '[data-forge-sets]', () => this.setForge(p, onChange, onClose));
     this.on(s, '[data-pick]', (el) => again(el.dataset.pick));
     this.on(s, '[data-repair-tool]', (b) => {
       const k = b.dataset.repairTool as 'pickaxe' | 'axe';
@@ -2230,6 +2355,318 @@ export class Screens {
       if (success) sel.plus++;
       onChange();
       again(sel.uid, success ? `<b class="ok">강화 성공! +${sel.plus}</b>` : '<b class="bad">강화 실패…</b>');
+    });
+  }
+
+  // ---------------- v10: 세트 장비 (대장간) ----------------
+  /** 세트 제작(문장) · 세트 합성(유니크 이상 3개) */
+  setForge(p: Progress, onChange: () => void, onClose: () => void, message?: string, pick: { set: SetId; slot: EquipSlot } = { set: 'breaker', slot: 'helmet' }, synthSlot: EquipSlot = 'helmet'): void {
+    const again = (msg?: string, pk = pick, ss = synthSlot) => this.setForge(p, onChange, onClose, msg, pk, ss);
+    const worn = Object.values(p.cls.equipment).filter(Boolean) as Equip[];
+    const counts = setCounts(worn);
+    const cur = SET_IDS.filter((id) => (counts[id] ?? 0) > 0)
+      .map((id) => {
+        const n = counts[id]!;
+        const st = SETS[id];
+        return `<div class="opt ser" style="color:${hex(st.color)}">◈ ${st.name} ${n}부위 — ${st.tiers.map((t) => `<span class="${n >= t.n ? 'ok' : 'dim'}">${t.n}세트 ${t.lines.map(specialText).join(', ')}</span>`).join(' · ')}</div>`;
+      })
+      .join('');
+    const setBtns = SET_IDS.map((id) => `<button class="chip ${pick.set === id ? 'on' : ''}" data-sset="${id}" style="--c:${hex(SETS[id].color)}">${SETS[id].name} <small>${SETS[id].role}</small></button>`).join('');
+    const slotBtns = EQUIP_SLOTS.map((sl) => `<button class="chip ${pick.slot === sl ? 'on' : ''}" data-sslot="${sl}">${slotName(sl, p.data.currentClass)}</button>`).join('');
+    const st = SETS[pick.set];
+    const cost = setCraftCost(pick.set, pick.slot);
+    const costTxt = (c: { gold: number; items: Record<string, number> }) =>
+      `<span class="${p.data.gold >= c.gold ? '' : 'bad'}">${c.gold.toLocaleString()} G</span> · ${Object.entries(c.items)
+        .map(([id, n]) => `<span class="${p.count(id) >= n ? '' : 'bad'}">${inlineGem(id)}${ITEMS[id].name} ${p.count(id)}/${n}</span>`)
+        .join(' · ')}`;
+    const canCraft = p.data.gold >= cost.gold && p.hasAll(cost.items);
+    // 합성 재료: 창고의 7단계 유니크 이상 (세트 아님), 같은 부위. 무기는 지금 직업의 것
+    const synthPool = (sl: EquipSlot) => p.data.equips.filter((e) => e.slot === sl && e.tier >= 7 && e.grade >= SYNTH_MIN_GRADE && !e.set && (sl !== 'weapon' || e.cls === p.data.currentClass)).sort((a, b) => a.grade - b.grade || a.plus - b.plus);
+    const pool = synthPool(synthSlot);
+    const sc = synthCost(synthSlot);
+    const canSynth = pool.length >= SYNTH_COUNT && p.data.gold >= sc.gold && p.hasAll(sc.items);
+    const synthSlots = EQUIP_SLOTS.map((sl) => `<button class="chip ${synthSlot === sl ? 'on' : ''}" data-synslot="${sl}">${slotName(sl, p.data.currentClass)} <small>${synthPool(sl).length}</small></button>`).join('');
+    const s = this.open(
+      'forge',
+      `<div class="panel wide tall">
+         <button class="close">${ICONS.close}</button>
+         <h2>대장장이 고른의 대장간 <small class="gold">${p.data.gold.toLocaleString()} G</small></h2>
+         <div class="tabs"><button data-forge-main>강화·각인·특수 옵션</button><button class="on">◈ 세트 장비</button></div>
+         ${message ? `<div class="notice">${message}</div>` : ''}
+         <div class="scroll">
+           <p class="hint">세트 장비는 7단계보다 한 단계 위 능력치(×1.4)에 세트 효과가 붙는 최상위 장비입니다. 새 재료 없이 ???에게서 바꾼 <b>문장</b>으로 만들거나, 7단계 <b>유니크 이상 장비 3개를 합성</b>하거나, 8장·레이드 보스에게서 얻습니다. 강화·각인·특수 옵션은 보통 장비와 같습니다.</p>
+           ${cur ? `<h3>지금 입은 세트</h3>${cur}` : ''}
+           <h3>◈ 세트 제작 <small class="dim">원하는 세트·부위 · 전설 85% / 차원 15%</small></h3>
+           <div class="chips">${setBtns}</div>
+           <div class="chips">${slotBtns}</div>
+           <div class="opt-list">${st.tiers.map((t) => `<div class="opt ser" style="color:${hex(st.color)}">${t.n}세트: ${t.lines.map(specialText).join(', ')}</div>`).join('')}</div>
+           <p><small>${costTxt(cost)}</small></p>
+           <div class="menu"><button class="primary" data-scraft ${canCraft ? '' : 'disabled'}>「${st.name}의 ${slotName(pick.slot, p.data.currentClass)}」 만들기</button></div>
+           <h3>⚗ 세트 합성 <small class="dim">같은 부위 7단계 유니크 이상 ${SYNTH_COUNT}개 → 그 부위의 무작위 세트 (전설)</small></h3>
+           <div class="chips">${synthSlots}</div>
+           <p class="hint">창고에 있는 장비 중 낮은 등급·낮은 강화부터 씁니다${synthSlot === 'weapon' ? ` (무기는 ${CLASSES[p.data.currentClass].name} 것만)` : ''}. 쓸 장비: ${pool.slice(0, SYNTH_COUNT).map((e) => `<span style="color:${hex(GRADES[e.grade].color)}">${esc(equipName(e))}</span>`).join(', ') || '없음'}</p>
+           <p><small>${costTxt(sc)}</small></p>
+           <div class="menu"><button class="primary" data-synth ${canSynth ? '' : 'disabled'}>합성하기 (${Math.min(pool.length, SYNTH_COUNT)}/${SYNTH_COUNT})</button></div>
+         </div>
+       </div>`,
+      onClose,
+    );
+    this.on(s, '[data-forge-main]', () => this.forge(p, onChange, onClose));
+    this.on(s, '[data-sset]', (b) => again(undefined, { ...pick, set: b.dataset.sset as SetId }));
+    this.on(s, '[data-sslot]', (b) => again(undefined, { ...pick, slot: b.dataset.sslot as EquipSlot }));
+    this.on(s, '[data-synslot]', (b) => again(undefined, pick, b.dataset.synslot as EquipSlot));
+    const make = (set: SetId, slot: EquipSlot, grade: number): Equip =>
+      withSpecials({ uid: newUid(), slot, cls: slot === 'weapon' ? p.data.currentClass : undefined, tier: 7, grade, plus: 0, set });
+    this.on(s, '[data-scraft]', () => {
+      if (p.data.gold < cost.gold || !p.hasAll(cost.items)) return;
+      if (!p.storageHasSlot) return again('<b class="bad">창고에 빈 칸이 없습니다</b>');
+      p.data.gold -= cost.gold;
+      p.takeAll(cost.items);
+      const e = make(pick.set, pick.slot, rollSetGrade(Math.random()));
+      p.data.equips.push(e);
+      p.achAdd('sets');
+      onChange();
+      again(`<b class="ok">완성! <span style="color:${hex(GRADES[e.grade].color)}">[${GRADES[e.grade].name}] ${esc(equipName(e))}</span> — 창고에 넣었습니다</b>`);
+    });
+    this.on(s, '[data-synth]', () => {
+      const use = synthPool(synthSlot).slice(0, SYNTH_COUNT);
+      if (use.length < SYNTH_COUNT || p.data.gold < sc.gold || !p.hasAll(sc.items)) return;
+      p.data.gold -= sc.gold;
+      p.takeAll(sc.items);
+      const ids = new Set(use.map((e) => e.uid));
+      p.data.equips = p.data.equips.filter((e) => !ids.has(e.uid));
+      const set = SET_IDS[Math.floor(Math.random() * SET_IDS.length)];
+      const e = make(set, synthSlot, 5);
+      p.data.equips.push(e);
+      p.achAdd('sets');
+      onChange();
+      again(`<b class="ok">합성 완료! <span style="color:${hex(SETS[set].color)}">${esc(equipName(e))}</span> — 창고에 넣었습니다</b>`, pick, synthSlot);
+    });
+  }
+
+  // ---------------- v10: 무한 러쉬 축복 고르기 (고를 때까지 닫히지 않는다) ----------------
+  blessPick(opts: { id: string; name: string; text: string; color: number; lv: number; max: number }[], onPick: (id: string | null) => void, onClose?: () => void): void {
+    const s = this.open(
+      'bless',
+      `<div class="panel bless-panel">
+         <h2>✦ 축복을 고르세요</h2>
+         <div class="bless-row">${
+           opts.length
+             ? opts
+                 .map(
+                   (o) =>
+                     `<button class="bless-card" data-bless="${o.id}" style="--c:${hex(o.color)}"><b style="color:${hex(o.color)}">${o.name}</b><small class="dim">Lv.${o.lv} → ${o.lv + 1} / ${o.max}</small><span>${o.text}</span></button>`,
+                 )
+                 .join('')
+             : '<button class="bless-card" data-bless="">체력 50% 회복<br><small class="dim">모든 축복을 최고 단계로 올렸습니다</small></button>'
+         }</div>
+       </div>`,
+      onClose,
+    );
+    s.dataset.locked = '1';
+    this.on(s, '[data-bless]', (b) => {
+      delete s.dataset.locked;
+      onPick(b.dataset.bless || null);
+    });
+  }
+
+  // ---------------- v10: 업적 ----------------
+  achievements(p: Progress, ctx: AchCtx, onClaim: (id: string) => void, onClose: () => void): void {
+    const done = p.data.ach?.done ?? [];
+    const rows = ACHIEVEMENTS.map((a) => {
+      const v = a.value(ctx);
+      const got = done.includes(a.id);
+      const ready = !got && v >= a.goal;
+      const pct = Math.min(100, Math.round((v / Math.max(1, a.goal)) * 100));
+      return { a, got, ready, html: `<li class="${got ? 'dim' : ''}"><span class="gem" style="--c:${got ? '#6a6a7a' : ready ? '#ffd86a' : '#8a8aa0'}"></span><div><b>${a.name}${a.title ? ` <small style="color:#ffd86a">칭호 「${a.title}」</small>` : ''}</b><small>${a.desc} · ${Math.min(v, a.goal).toLocaleString()}/${a.goal.toLocaleString()} (${pct}%)</small></div>${got ? '<button disabled>받음</button>' : `<button data-ach="${a.id}" ${ready ? 'class="primary"' : 'disabled'}>${inlineGem(MARK)} ${a.marks}</button>`}</li>` };
+    });
+    // 받을 수 있는 것 → 진행 중 → 받은 것
+    rows.sort((x, y) => Number(y.ready) - Number(x.ready) || Number(x.got) - Number(y.got));
+    const nGot = rows.filter((r) => r.got).length;
+    const s = this.open(
+      'shop',
+      `<div class="panel wide tall">
+         <button class="close">${ICONS.close}</button>
+         <h2>업적 <small class="gold">${nGot}/${ACHIEVEMENTS.length} · ${inlineGem(MARK)} ${p.count(MARK)}</small></h2>
+         <p class="hint">업적을 달성하면 영겁의 증표를 받습니다 (???에게서 유물 파편·세트 문장으로 교환). 몇몇 업적은 칭호도 줍니다.</p>
+         <ul class="list scroll">${rows.map((r) => r.html).join('')}</ul>
+       </div>`,
+      onClose,
+    );
+    this.on(s, '[data-ach]', (b) => onClaim(b.dataset.ach!));
+  }
+
+  // ---------------- v10: 차원 계약 (소환사, 노아) ----------------
+  pacts(p: Progress, onChange: () => void, onClose: () => void, message?: string): void {
+    const sm = p.data.classes.summoner;
+    const eligible = new Set(p.pactEligible());
+    const chosen = (sm.pacts ?? []).filter((id) => eligible.has(id));
+    const active = p.activePacts();
+    const rows = BESTIARY.filter((e) => e.rank === 'normal' && p.kills(e.species.id) > 0)
+      .sort((a, b) => p.kills(b.species.id) - p.kills(a.species.id))
+      .map((e) => {
+        const id = e.species.id;
+        const k = p.kills(id);
+        const ok = eligible.has(id);
+        const awk = k >= PACT_AWAKEN_KILLS;
+        const on = chosen.includes(id);
+        const ranged = ['ranged', 'archer', 'caster', 'necro', 'shaman', 'spitter'].includes(e.species.arch);
+        const url = monsterIconUrl(e.species, Math.min(7, e.tier), false);
+        return `<li class="${ok ? '' : 'locked'} ${on ? 'sel' : ''}"><img class="gem ico" src="${url}" alt=""><div><b>${e.species.name}${awk ? ' <small style="color:#ffd86a">각성 계약</small>' : ''}</b><small>처치 ${k.toLocaleString()}${ok ? '' : ` / ${PACT_KILLS}`} · ${ranged ? '원거리' : '근접'}${awk ? ' · 위력 ×1.5 · 몸집 ×1.25' : ok ? ` · 1000마리면 각성 계약` : ''}</small></div>${ok ? `<button data-pact="${id}" class="${on ? 'primary' : ''}" ${!on && chosen.length >= 3 ? 'disabled' : ''}>${on ? '계약 중' : '계약하기'}</button>` : ''}</li>`;
+      })
+      .join('');
+    const s = this.open(
+      'shop',
+      `<div class="panel wide tall">
+         <button class="close">${ICONS.close}</button>
+         <h2>노아 · 차원 계약 <small class="gold">계약할 수 있는 종족 ${eligible.size}</small></h2>
+         <div class="scroll">
+         <p class="hint">차원 소환사의 「계약 소환」은 도감에서 <b>${PACT_KILLS}마리 이상</b> 잡은 종족을 불러냅니다 (원거리 종족은 마력탄을 쏜다). 셋까지 고를 수 있고, 고르지 않으면 가장 많이 잡은 셋을 씁니다. <b>${PACT_AWAKEN_KILLS}마리</b>를 넘기면 각성 계약 (위력 ×1.5). 계약할 수 있는 종족 하나마다 소환수 위력 +1% (최대 +60%, 지금 +${Math.min(60, eligible.size)}%). 도감은 모든 직업이 함께 씁니다.</p>
+         <p>지금 부르는 계약: ${active.length ? active.map((id) => `<b>${SPECIES[id]?.name ?? id}</b>`).join(' · ') : '<span class="dim">없음 (차원 늑대를 부른다)</span>'}</p>
+         ${message ? `<div class="notice">${message}</div>` : ''}
+         <ul class="list">${rows || '<li class="empty">아직 잡은 몬스터가 없습니다</li>'}</ul>
+         </div>
+       </div>`,
+      onClose,
+    );
+    this.on(s, '[data-pact]', (b) => {
+      const id = b.dataset.pact!;
+      const list = (sm.pacts = chosen.slice());
+      const i = list.indexOf(id);
+      if (i >= 0) list.splice(i, 1);
+      else if (list.length < 3) list.push(id);
+      onChange();
+      this.pacts(p, onChange, onClose);
+    });
+  }
+
+  // ---------------- v10: ??? 증표 교환 ----------------
+  exchange(p: Progress, onChange: () => void, onClose: () => void, message?: string): void {
+    const have = p.count(MARK);
+    const rows = EXCHANGE.map(
+      (o, i) =>
+        `<li>${itemGem(o.item)}<div><b>${ITEMS[o.item].name} × ${o.n} <small class="dim">보유 ${p.count(o.item)}</small></b><small>${o.note}</small></div><button data-ex="${i}" ${have >= o.cost ? '' : 'disabled'}>${inlineGem(MARK)} ${o.cost}</button></li>`,
+    ).join('');
+    const s = this.open(
+      'shop',
+      `<div class="panel wide tall">
+         <button class="close">${ICONS.close}</button>
+         <h2>??? · 증표 교환 <small class="gold">${inlineGem(MARK)} 영겁의 증표 ${have}</small></h2>
+         <div class="scroll">
+         <p class="hint">"틈새가 기억하는 것들이다. 증표를 가져오면 나누어 주지." — 영겁의 증표는 일일 차원 시련·주간 차원 레이드·무한 러쉬·업적에서 얻습니다. 유물 파편은 몬스터 연구자 노아가 유물로 복원하고, 문장은 대장장이 고른이 세트 장비로 만들어 줍니다.</p>
+         ${message ? `<div class="notice">${message}</div>` : ''}
+         <ul class="list">${rows}</ul>
+         </div>
+       </div>`,
+      onClose,
+    );
+    this.on(s, '[data-ex]', (b) => {
+      const o = EXCHANGE[Number(b.dataset.ex)];
+      if (!o || !p.take(MARK, o.cost)) return;
+      p.add(o.item, o.n);
+      onChange();
+      this.exchange(p, onChange, onClose, `<b class="ok">${ITEMS[o.item].name} ${o.n}개를 받았습니다</b>`);
+    });
+  }
+
+  // ---------------- v10: 유물 (노아) ----------------
+  relics(p: Progress, onChange: () => void, onClose: () => void, message?: string, selected?: string): void {
+    const list = (p.data.relics ??= []);
+    const eq = (p.cls.relics ??= []);
+    const worn = eq.map((u) => list.find((r) => r.uid === u)).filter((r): r is Relic => !!r);
+    const icon = (r: Relic) => `<span class="gem" style="--c:${hex(RELIC_BY_ID[r.id]?.color ?? 0xffffff)};outline:2px solid ${hex(RELIC_GRADES[r.g].color)};border-radius:50%"></span>`;
+    const lineTxt = (r: Relic) =>
+      r.lines
+        .map((l) => {
+          const [lo, hi] = relicRange(l.k, r.g);
+          const pctIn = hi > lo ? Math.round(((l.v - lo) / (hi - lo)) * 100) : 100;
+          return `${specialText(l)} <span class="dim">(${Math.max(0, Math.min(100, pctIn))}%)</span>`;
+        })
+        .join(' · ');
+    const title = (r: Relic) => `<b style="color:${hex(RELIC_GRADES[r.g].color)}">[${RELIC_GRADES[r.g].name}] ${RELIC_BY_ID[r.id]?.name ?? '유물'}</b>`;
+    const sorted = [...list].sort((a, b) => b.g - a.g || a.id.localeCompare(b.id));
+    const sel = list.find((r) => r.uid === selected) ?? null;
+    const slots = Array.from({ length: RELIC_SLOTS }, (_, i) => {
+      const r = worn[i];
+      return r ? `<li class="${sel === r ? 'sel' : ''}" data-rpick="${r.uid}">${icon(r)}<div>${title(r)}<small>${lineTxt(r)}</small></div></li>` : `<li class="empty">빈 유물 칸 ${i + 1}</li>`;
+    }).join('');
+    const rows = sorted
+      .filter((r) => !eq.includes(r.uid))
+      .map((r) => `<li class="${sel === r ? 'sel' : ''}" data-rpick="${r.uid}">${icon(r)}<div>${title(r)}<small>${lineTxt(r)}</small></div></li>`)
+      .join('');
+    const shards = p.count('relic_shard');
+    const canCraft = shards >= RELIC_CRAFT_SHARDS && p.data.gold >= RELIC_CRAFT_GOLD && list.length < RELIC_MAX;
+    let detail = '';
+    if (sel) {
+      const isOn = eq.includes(sel.uid);
+      const sameKind = worn.find((r) => r.id === sel.id && r.uid !== sel.uid);
+      detail = `<div class="notice">${title(sel)} — ${lineTxt(sel)}
+        <div class="menu row">${
+          isOn
+            ? `<button data-roff="${sel.uid}">장착 해제</button>`
+            : `<button class="primary" data-ron="${sel.uid}" ${worn.length >= RELIC_SLOTS && !sameKind ? 'disabled' : ''}>${sameKind ? '같은 종류와 바꾸기' : '장착'}</button><button data-rdis="${sel.uid}">분해 (파편 +${RELIC_GRADES[sel.g].refund})</button>`
+        }</div></div>`;
+    }
+    const s = this.open(
+      'shop',
+      `<div class="panel wide tall">
+         <button class="close">${ICONS.close}</button>
+         <h2>노아 · 유물 복원 <small class="gold">${p.data.gold.toLocaleString()} G · ${inlineGem('relic_shard')} ${shards}</small></h2>
+         <div class="scroll">
+           <p class="hint">유물 파편 ${RELIC_CRAFT_SHARDS}개 + ${RELIC_CRAFT_GOLD.toLocaleString()} G → 무작위 유물 (14종 · ${RELIC_GRADES.map((g) => `<span style="color:${hex(g.color)}">${g.name}</span>`).join('·')}). 직업마다 ${RELIC_SLOTS}개 장착, 같은 종류는 하나만.</p>
+           ${message ? `<div class="notice">${message}</div>` : ''}
+           <div class="menu row"><button class="primary" data-rcraft ${canCraft ? '' : 'disabled'}>유물 복원 (파편 ${shards}/${RELIC_CRAFT_SHARDS})</button></div>
+           ${detail}
+           <h3>${CLASSES[p.data.currentClass].name}의 유물 (${worn.length}/${RELIC_SLOTS})</h3>
+           <ul class="list pick">${slots}</ul>
+           <h3>보관 중 (${list.length - worn.length}) <small class="dim">최대 ${RELIC_MAX}개 · 눌러서 장착·분해</small></h3>
+           <ul class="list pick">${rows || '<li class="empty">유물이 없습니다</li>'}</ul>
+         </div>
+       </div>`,
+      onClose,
+    );
+    const again = (msg?: string, sl?: string) => this.relics(p, onChange, onClose, msg, sl);
+    this.on(s, '[data-rpick]', (b) => again(undefined, b.dataset.rpick));
+    this.on(s, '[data-rcraft]', () => {
+      if (p.count('relic_shard') < RELIC_CRAFT_SHARDS || p.data.gold < RELIC_CRAFT_GOLD || list.length >= RELIC_MAX) return;
+      p.take('relic_shard', RELIC_CRAFT_SHARDS);
+      p.data.gold -= RELIC_CRAFT_GOLD;
+      const r = rollRelic(Math.random, newUid());
+      list.push(r);
+      p.achAdd('relics');
+      if (r.g >= 4) p.achAdd('mythic');
+      onChange();
+      again(`<b class="ok">복원 성공!</b> ${title(r)} — ${lineTxt(r)}`, r.uid);
+    });
+    this.on(s, '[data-ron]', (b) => {
+      const r = list.find((x) => x.uid === b.dataset.ron);
+      if (!r) return;
+      const same = eq.findIndex((u) => list.find((x) => x.uid === u)?.id === r.id);
+      if (same >= 0) eq[same] = r.uid;
+      else if (eq.length < RELIC_SLOTS) eq.push(r.uid);
+      else return;
+      onChange();
+      again(`${title(r)} 장착`, r.uid);
+    });
+    this.on(s, '[data-roff]', (b) => {
+      p.cls.relics = eq.filter((u) => u !== b.dataset.roff);
+      onChange();
+      again('장착을 해제했습니다', b.dataset.roff);
+    });
+    this.on(s, '[data-rdis]', (b) => {
+      const r = list.find((x) => x.uid === b.dataset.rdis);
+      if (!r) return;
+      if (!b.classList.contains('confirm')) {
+        b.classList.add('confirm');
+        b.textContent = '한 번 더 누르면 분해';
+        return;
+      }
+      // 다른 직업이 장착 중이면 거기서도 뺀다
+      for (const c of Object.values(p.data.classes)) if (c.relics) c.relics = c.relics.filter((u) => u !== r.uid);
+      p.data.relics = list.filter((x) => x !== r);
+      p.add('relic_shard', RELIC_GRADES[r.g].refund);
+      onChange();
+      again(`${relicName(r)} 분해 → 유물 파편 ${RELIC_GRADES[r.g].refund}개`);
     });
   }
 
@@ -2373,7 +2810,7 @@ export class Screens {
       return `<button class="class-card ${unlocked ? '' : 'locked'} ${p.data.currentClass === id ? 'on' : ''}" data-cls="${id}" ${unlocked ? '' : 'disabled'} style="--c:${hex(c.look.tunic)}">
           ${heroPortraitUrl(id) ? `<img class="cls-portrait" src="${heroPortraitUrl(id)}" alt="">` : `<span class="badge-cls">${c.short}</span>`}
           <b>${c.name}</b>
-          <small>${unlocked ? `Lv.${lv} · ${c.basic}` : '스토리를 진행하면 해금'}</small>
+          <small>${unlocked ? `Lv.${lv} · ${c.basic}` : id === 'summoner' ? '8장 「갈라진 차원」의 수문장을 쓰러뜨리면 해금' : '스토리를 진행하면 해금'}</small>
         </button>`;
     }).join('');
     const s = this.open(
