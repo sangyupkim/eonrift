@@ -1,4 +1,4 @@
-import { BUILDINGS, ESSENCE_BOOST, ESSENCE_BURN, generatorPower, levelSpeed, RECIPES, type BuildingType, type Recipe } from '../data/factory';
+import { BUILDINGS, ESSENCE_BOOST, ESSENCE_BURN, generatorPower, levelSpeed, PRODUCER_CAP, PRODUCER_TYPES, producerOutputs, producerTime, RECIPES, type BuildingType, type ProducerType, type Recipe } from '../data/factory';
 
 /** 0: +x(동), 1: +z(남), 2: -x(서), 3: -z(북) */
 export type Dir = 0 | 1 | 2 | 3;
@@ -125,6 +125,20 @@ export function workbenchBusy(b: BuildingState): boolean {
   return !!b.job && (b.out?.length ?? 0) < WORKBENCH_OUT_MAX;
 }
 
+/** 생산 건물: 쌓인 개수 */
+export function producerStock(b: BuildingState): number {
+  return Object.values(b.buffer ?? {}).reduce((a, n) => a + n, 0);
+}
+/** 생산 건물이 지금 만드는 것 (고른 것이 없거나 레벨이 모자라면 가장 좋은 것) */
+export function producerTarget(b: BuildingState): string {
+  const outs = producerOutputs(b.type as ProducerType, b.level ?? 1);
+  return b.recipe && outs.includes(b.recipe) ? b.recipe : outs[outs.length - 1];
+}
+/** 가득 찼는지 */
+export function producerFull(b: BuildingState): boolean {
+  return producerStock(b) >= PRODUCER_CAP[b.type as ProducerType];
+}
+
 export function boxTotal(b: BuildingState): number {
   return Object.values(b.buffer ?? {}).reduce((a, n) => a + n, 0);
 }
@@ -198,6 +212,12 @@ export class Factory {
       b.buffer = {};
       b.mode = 'in';
     }
+    if (PRODUCER_TYPES.has(type)) {
+      b.level = 1;
+      b.buffer = {};
+      b.progress = 0;
+      b.recipe = null;
+    }
     this.state.buildings.push(b);
     this.index.set(this.key(x, y), b);
     this.dirty = true;
@@ -260,7 +280,7 @@ export class Factory {
       id++;
     }
     for (const m of this.state.buildings) {
-      if (!MACHINE_TYPES.has(m.type) && m.type !== 'workbench' && m.type !== 'healer') continue;
+      if (!MACHINE_TYPES.has(m.type) && !PRODUCER_TYPES.has(m.type) && m.type !== 'workbench' && m.type !== 'healer') continue;
       for (const [dx, dy] of DIRS) {
         const n = this.at(m.x + dx, m.y + dy);
         if (n && conducts(n)) {
@@ -307,6 +327,10 @@ export class Factory {
       if (!b.job) return 'idle';
       return this.powerOf(b) > 0 ? 'working' : 'no-power';
     }
+    if (PRODUCER_TYPES.has(b.type)) {
+      if (producerFull(b)) return 'blocked';
+      return this.powerOf(b) > 0 ? 'working' : 'no-power';
+    }
     if (!MACHINE_TYPES.has(b.type)) return 'idle';
     if ((b.out?.length ?? 0) > 0) return 'blocked';
     if (!b.crafting) return 'idle';
@@ -326,6 +350,8 @@ export class Factory {
       // 제작대는 만드는 동안에만 전력을 쓴다
       if (b.type === 'workbench' && workbenchBusy(b) && this.netOf.has(b)) this.netDemand[this.netOf.get(b)!] += BUILDINGS.workbench.power;
       if (b.type === 'healer' && b.active && this.netOf.has(b)) this.netDemand[this.netOf.get(b)!] += BUILDINGS.healer.power;
+      // 생산 건물은 가득 차기 전까지 전력을 쓴다
+      if (PRODUCER_TYPES.has(b.type) && !producerFull(b) && this.netOf.has(b)) this.netDemand[this.netOf.get(b)!] += BUILDINGS[b.type].power;
     }
     for (const b of buildings) {
       if (b.type !== 'generator') continue;
@@ -374,6 +400,18 @@ export class Factory {
       } else (b.ready ??= []).push({ ...job, left: 1 });
       job.left--;
       if (job.left <= 0) b.job = b.queue?.shift() ?? null;
+    }
+
+    // 생산 건물: 전력을 받는 만큼 진행, 다 되면 안에 쌓는다 (한도까지)
+    for (const b of buildings) {
+      if (!PRODUCER_TYPES.has(b.type) || producerFull(b)) continue;
+      const item = producerTarget(b);
+      b.progress = (b.progress ?? 0) + (dt * this.powerOf(b) * this.boostOf(b)) / producerTime(item);
+      while (b.progress >= 1 && !producerFull(b)) {
+        b.progress -= 1;
+        b.buffer![item] = (b.buffer![item] ?? 0) + 1;
+      }
+      if (producerFull(b)) b.progress = 0;
     }
 
     // 2. 투입 보관상자: 앞 칸이 받을 수 있을 때만 하나씩 보낸다

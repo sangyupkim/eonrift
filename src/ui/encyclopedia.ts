@@ -14,6 +14,7 @@ import {
   towerFirstClear,
 } from '../data/endgame';
 import { enhanceCost, EQUIP_MAX_DUR, EQUIP_SLOTS, GRADES, repairMaterial, SERIES, SERIES_IDS, slotName, type Equip } from '../data/equipment';
+import { PRODUCER_CAP, PRODUCER_LIMIT, PRODUCER_MAX_LEVEL, producerTime } from '../data/factory';
 import { BUILD_ORDER, BUILDINGS, ESSENCE_BOOST, ESSENCE_BURN, FACTORY_SIZES, MAX_BUILDING_LEVEL, OFFLINE_CAP_HOURS, RECIPES, generatorPower, type BuildingType } from '../data/factory';
 import { ESSENCE_TIERS, ITEMS, ORE_TIERS, TIER_MANA_PLATE, TIER_PLANK, TIER_PLATE, WOOD_TIERS } from '../data/items';
 import { BOSS_RESPAWN_MS, BOSS_TIME_LIMIT, FARM_COOLDOWN_MS } from '../data/monsters';
@@ -200,7 +201,7 @@ function materials(): string {
   ${table(['단계', '광석', '나무', '주괴', '판자', '판', '마력판'], tierRows)}
   <p>각 단계 던전에서는 그 단계와 한 단계 아래 자원이 나온다 (뒤쪽 방일수록 높은 단계가 많다).</p>
   <h3>채집 도구</h3>
-  ${card('곡괭이 · 도끼', `<p>광맥은 곡괭이, 나무는 도끼로 캔다. <b>도구 단계까지</b>는 내구도가 1씩, <b>한 단계 위</b>는 3씩 닳고, 그보다 위는 캘 수 없다.</p><p>대장간에서 강화하면 캐는 속도 +6% · 추가 채집 +5% (단계마다). 제작대에서 ${it('copper_ingot', 4)} + ${it('plank', 3)} 식으로 새 단계 도구를 만든다.</p>`, `${img(toolIconUrl('pickaxe', 2))}${img(toolIconUrl('axe', 2))}`)}
+  ${card('곡괭이 · 도끼', `<p>광맥은 곡괭이, 나무는 도끼로 캔다. <b>도구 단계까지</b>는 내구도가 1씩, <b>한 단계 위</b>는 3씩 닳고, 그보다 위는 캘 수 없다.</p><p>광맥은 2~5번 치면 다한다 (광맥마다 다르다). 대장간에서 강화하면 캐는 속도 +6% · 추가 채집 +5% (단계마다). 도구 수리는 <b>골드만</b> 든다. 제작대에서 ${it('copper_ingot', 4)} + ${it('plank', 3)} 식으로 새 단계 도구를 만든다.</p>`, `${img(toolIconUrl('pickaxe', 2))}${img(toolIconUrl('axe', 2))}`)}
   <h3>마력 정수</h3>
   ${table(
     ['정수', '나오는 곳', '발전기에서', '생산 속도'],
@@ -271,6 +272,15 @@ function factory(): string {
   ${tip(`게임을 꺼 둔 동안에도 최대 ${OFFLINE_CAP_HOURS}시간까지 공장이 돌아간다.`)}
   <h3>건물</h3>
   ${bRows}
+  <h3>생산 건물 (엔딩 무렵)</h3>
+  <p>재료 없이 <b>전력만</b> 이어 두면 자원이 저절로 쌓이는 건물. 세라에게 도면을 사서 짓고, 건물을 눌러 [공유 창고로 받기]로 가져간다. 건물 하나에 쌓이는 양에는 한도가 있어서 오래 비워 두면 가득 찬 채로 멈춘다. 희귀한 것일수록 오래 걸린다. 업그레이드는 도면 없이 건물 창에서 바로 하지만 아주 비싸다.</p>
+  ${table(
+    ['건물', '조건 · 개수', '만드는 것', '한도'],
+    [
+      [`${img(buildingThumb('oregen'), 'enc-ico')} ${BUILDINGS.oregen.name}`, `7-10 클리어 · 최대 ${PRODUCER_LIMIT.oregen}개`, `Lv.1~${PRODUCER_MAX_LEVEL.oregen}: ${ORE_TIERS.map((o) => `${it(o)} ${producerTime(o)}초`).join(' ')}`, `${PRODUCER_CAP.oregen}개`],
+      [`${img(buildingThumb('manawell'), 'enc-ico')} ${BUILDINGS.manawell.name}`, `이야기 완료 · 최대 ${PRODUCER_LIMIT.manawell}개`, `Lv.1~${PRODUCER_MAX_LEVEL.manawell}: ${['essence_low', 'essence_mid', 'essence_high'].map((o) => `${it(o)} ${producerTime(o)}초`).join(' ')}`, `${PRODUCER_CAP.manawell}개`],
+    ],
+  )}
   <h3>건물 레벨과 공장 크기</h3>
   <ul class="enc-list">
     <li><b>건물 레벨 (Lv.1~${MAX_BUILDING_LEVEL})</b> — 마공학자 세라에게 강화 도면을 사서 올린다. 레벨 = 다룰 수 있는 재료 단계. 레벨마다 가공 속도 +15%, 발전기는 전력 +15 (Lv.${MAX_BUILDING_LEVEL} ${generatorPower(MAX_BUILDING_LEVEL)}).</li>

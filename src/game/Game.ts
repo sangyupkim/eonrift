@@ -14,7 +14,7 @@ import { CLASSES, CLASS_ORDER, expToNext, MAX_SKILL_LEVEL, SKILL_LEARN, skillUpg
 import { ultUpgradeCost } from '../data/ultUpgrade';
 import { durability, equipName, GRADE, GRADES, newUid, rollEquip, rollSeries, type Equip } from '../data/equipment';
 import { rollManaGrade } from '../data/crafting';
-import { BUILDINGS, FACTORY_SIZES, OFFLINE_CAP_HOURS, type BuildingType, upgradeBlueprintCost } from '../data/factory';
+import { BUILDINGS, FACTORY_SIZES, OFFLINE_CAP_HOURS, PRODUCER_LIMIT, PRODUCER_TYPES, PRODUCER_UNLOCK, type BuildingType, type ProducerType, upgradeBlueprintCost } from '../data/factory';
 import { essenceForTier, ITEMS, TIER_PLATE, ORE_TIERS, TIER_MANA_PLATE } from '../data/items';
 import { QUEST_BY_ID, type NpcRef, type QuestDef } from '../data/quests';
 import { SCRIPTS, type Step } from '../data/story';
@@ -1182,7 +1182,10 @@ export class Game {
         (t) => {
           const p = this.progress;
           const bp = BUILDINGS[t].blueprint;
-          if (!bp || p.flag(`bp_${t}`) || p.data.gold < bp.gold || !p.takeAll(bp.items)) return;
+          const req = PRODUCER_TYPES.has(t) ? PRODUCER_UNLOCK[t as ProducerType] : null;
+          if (req && !(req === 'clear7' ? p.data.cleared >= 70 : p.flag('endgame') > 0)) return;
+          if (!bp || p.flag(`bp_${t}`) || p.data.gold < bp.gold || !p.hasAll(bp.items)) return;
+          p.takeAll(bp.items);
           p.data.gold -= bp.gold;
           p.setFlag(`bp_${t}`);
           this.audio.play('coin');
@@ -2243,6 +2246,7 @@ export class Game {
     if (b.type === 'generator') this.openMenu(() => this.screens.generator(this.factory, b, p, save, () => this.resume()));
     else if (b.type === 'box') this.openMenu(() => this.screens.box(b, p, save, () => this.resume()));
     else if (b.type === 'warehouse') this.openMenu(() => this.screens.warehouse(p, b, save, () => this.resume()));
+    else if (PRODUCER_TYPES.has(b.type)) this.openMenu(() => this.screens.producer(this.factory, b, p, save, () => this.resume()));
     else if (MACHINE_TYPES.has(b.type)) this.openMenu(() => this.screens.machine(this.factory, b, p, save, () => this.resume()));
     else if (b.type === 'workbench') this.openMenu(() => this.screens.workbench(this.factory, b, p, () => {
       this.applyStats();
@@ -2498,6 +2502,15 @@ export class Game {
         this.audio.play('click');
       } else if (existing.type === tool && tool === 'belt') existing.dir = dir;
       return;
+    }
+    // 생산 건물은 개수 제한
+    if (PRODUCER_TYPES.has(tool)) {
+      const lim = PRODUCER_LIMIT[tool as ProducerType];
+      if (f.state.buildings.filter((x) => x.type === tool).length >= lim) {
+        this.hud.toast(`${BUILDINGS[tool].name}는 최대 ${lim}개까지 지을 수 있습니다`);
+        this.dragCell = null;
+        return;
+      }
     }
     const cost = BUILDINGS[tool].cost;
     if (!p.hasAll(cost)) {

@@ -17,7 +17,7 @@ import {
 } from 'three';
 import { TILE } from '../../config';
 import { Rng } from '../../core/rng';
-import type { BuildingType } from '../../data/factory';
+import { PRODUCER_TYPES, type BuildingType } from '../../data/factory';
 import { CELL_FLOOR, type DungeonData } from '../../dungeon/generator';
 import { DIRS, MACHINE_TYPES, type BuildingState, type Factory } from '../../factory/sim';
 import { buildBuildingGeometry } from '../../models/factory';
@@ -29,7 +29,7 @@ import { smoothstep } from '../../core/noise';
 import { merge } from '../../models/util';
 import { Level } from './Level';
 
-const POWERED = new Set<BuildingType>(['generator', 'wire', 'smelter', 'crusher', 'infuser', 'alchemy', 'condenser', 'workbench', 'healer']);
+const POWERED = new Set<BuildingType>(['generator', 'wire', 'smelter', 'crusher', 'infuser', 'alchemy', 'condenser', 'workbench', 'healer', 'oregen', 'manawell']);
 const MAX_ITEMS = 700;
 
 /** 차원집: 공장 격자 + 아래쪽 입구 */
@@ -222,8 +222,8 @@ export class HomeScene extends Level {
     this.interactables.length = 0;
     this.interactables.push(this.exitInteract, this.storageInteract);
     for (const b of this.factory.state.buildings) {
-      if (b.type !== 'generator' && b.type !== 'box' && b.type !== 'workbench' && b.type !== 'warehouse' && !MACHINE_TYPES.has(b.type)) continue;
-      const label = b.type === 'generator' ? '연료' : b.type === 'box' || b.type === 'warehouse' ? '열기' : b.type === 'workbench' ? '제작' : '보기';
+      if (b.type !== 'generator' && b.type !== 'box' && b.type !== 'workbench' && b.type !== 'warehouse' && !MACHINE_TYPES.has(b.type) && !PRODUCER_TYPES.has(b.type)) continue;
+      const label = b.type === 'generator' ? '연료' : b.type === 'box' || b.type === 'warehouse' ? '열기' : b.type === 'workbench' ? '제작' : PRODUCER_TYPES.has(b.type) ? '받기' : '보기';
       this.interactables.push({ id: 'building', x: (b.x + 0.5) * TILE, z: (b.y + 0.5) * TILE, range: 2.1, label, action: () => this.onBuilding(b) });
     }
   }
@@ -321,7 +321,7 @@ export class HomeScene extends Level {
     // 기계 상태등: 초록=가동, 빨강=전력 없음, 노랑=막힘, 회색=대기
     let j = 0;
     for (const b of f.state.buildings) {
-      if (!MACHINE_TYPES.has(b.type) && b.type !== 'generator' && b.type !== 'box' && b.type !== 'workbench' && b.type !== 'healer') continue;
+      if (!MACHINE_TYPES.has(b.type) && !PRODUCER_TYPES.has(b.type) && b.type !== 'generator' && b.type !== 'box' && b.type !== 'workbench' && b.type !== 'healer') continue;
       let c = 0x8a8a9a;
       if (b.type === 'generator') c = (b.fuel ?? 0) > 0 || Object.values(b.buffer ?? {}).some((n) => n > 0) ? 0x5affd0 : 0xff5a5a;
       else if (b.type === 'box') c = b.mode === 'in' ? 0x6ad0ff : 0xffd04a;

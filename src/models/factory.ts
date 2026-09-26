@@ -1,4 +1,5 @@
-import { BoxGeometry, BufferGeometry, ConeGeometry, CylinderGeometry, OctahedronGeometry, TorusGeometry } from 'three';
+import {
+  DodecahedronGeometry, BoxGeometry, BufferGeometry, ConeGeometry, CylinderGeometry, OctahedronGeometry, TorusGeometry } from 'three';
 import type { BuildingType } from '../data/factory';
 import { merge, part } from './util';
 
@@ -135,6 +136,36 @@ export function buildBuildingGeometry(type: BuildingType, connections: boolean[]
         part(new BoxGeometry(0.12, 1.3, 0.12), metal, { pos: [0.72, 0.9, 0.72] }),
         part(new BoxGeometry(0.12, 1.3, 0.12), metal, { pos: [-0.72, 0.9, -0.72] }),
         arrow(0xffffff, 0.55),
+      ]);
+    case 'oregen':
+      // 받침 위의 차원 소용돌이가 광석 덩어리를 빚어낸다
+      return merge([
+        part(new BoxGeometry(1.8, 0.4, 1.8), dark, { pos: [0, 0.2, 0] }),
+        part(new BoxGeometry(1.5, 0.12, 1.5), 0x7a6cff, { pos: [0, 0.46, 0] }),
+        part(new BoxGeometry(0.2, 1.5, 0.2), metal, { pos: [0.72, 1.1, 0.72] }),
+        part(new BoxGeometry(0.2, 1.5, 0.2), metal, { pos: [-0.72, 1.1, 0.72] }),
+        part(new BoxGeometry(0.2, 1.5, 0.2), metal, { pos: [0.72, 1.1, -0.72] }),
+        part(new BoxGeometry(0.2, 1.5, 0.2), metal, { pos: [-0.72, 1.1, -0.72] }),
+        part(new BoxGeometry(1.64, 0.14, 0.2), metal, { pos: [0, 1.85, 0.72] }),
+        part(new BoxGeometry(1.64, 0.14, 0.2), metal, { pos: [0, 1.85, -0.72] }),
+        part(new TorusGeometry(0.45, 0.06, 6, 16), 0x5ef0ff, { pos: [0, 1.2, 0], rot: [Math.PI / 2, 0, 0] }),
+        part(new DodecahedronGeometry(0.34, 0), 0x8a8a96, { pos: [0, 0.78, 0] }),
+        part(new OctahedronGeometry(0.12), 0xffc84a, { pos: [0.18, 0.95, 0.1] }),
+        part(new OctahedronGeometry(0.1), 0x5ef0ff, { pos: [-0.16, 0.9, -0.12] }),
+        part(new OctahedronGeometry(0.18), 0xb67cff, { pos: [0, 1.75, 0] }),
+      ]);
+    case 'manawell':
+      // 푸른 물이 고인 돌 우물, 위에 떠 있는 정수 결정
+      return merge([
+        part(new CylinderGeometry(0.85, 0.95, 0.6, 10), 0x5a5a6a, { pos: [0, 0.3, 0] }),
+        part(new CylinderGeometry(0.7, 0.7, 0.06, 10), 0x4ab8ff, { pos: [0, 0.6, 0] }),
+        part(new TorusGeometry(0.82, 0.1, 5, 12), 0x6a6a7a, { pos: [0, 0.62, 0], rot: [Math.PI / 2, 0, 0] }),
+        part(new BoxGeometry(0.14, 1.2, 0.14), metal, { pos: [0.7, 1.1, 0] }),
+        part(new BoxGeometry(0.14, 1.2, 0.14), metal, { pos: [-0.7, 1.1, 0] }),
+        part(new BoxGeometry(1.54, 0.12, 0.14), metal, { pos: [0, 1.7, 0] }),
+        part(new OctahedronGeometry(0.26), 0x7fd6ff, { pos: [0, 1.15, 0], scale: [1, 1.4, 1] }),
+        part(new OctahedronGeometry(0.1), 0xd76fff, { pos: [0.3, 0.95, 0.2] }),
+        part(new OctahedronGeometry(0.08), 0x6f8cff, { pos: [-0.28, 0.9, -0.2] }),
       ]);
     case 'alchemy':
       return merge([

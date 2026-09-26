@@ -1,6 +1,6 @@
 import { essenceForTier } from './items';
 /** 차원집 공장의 건물과 레시피 */
-export type BuildingType = 'generator' | 'wire' | 'belt' | 'splitter' | 'box' | 'smelter' | 'crusher' | 'infuser' | 'alchemy' | 'condenser' | 'workbench' | 'healer' | 'warehouse';
+export type BuildingType = 'generator' | 'wire' | 'belt' | 'splitter' | 'box' | 'smelter' | 'crusher' | 'infuser' | 'alchemy' | 'condenser' | 'workbench' | 'healer' | 'warehouse' | 'oregen' | 'manawell';
 
 export interface BuildingDef {
   type: BuildingType;
@@ -28,10 +28,63 @@ export const BUILDINGS: Record<BuildingType, BuildingDef> = {
   workbench: { type: 'workbench', name: '제작대', power: 8, color: 0xb07a3a, cost: { copper_ore: 10, wood: 10 }, description: '판·장비·채집 도구·귀환석 등을 만든다. 제작을 시작하면 전력을 쓰며 시간이 지나면 완성된다. 완성품은 앞쪽 레일로 내보낸다 (막히면 제작대에 쌓임).', blueprint: null },
   healer: { type: 'healer', name: '마력 치유석 (회복)', power: 10, color: 0x6aff9a, cost: { copper_ore: 6, wood: 4 }, description: '마력선으로 발전기와 이으면, 곁에 서 있는 동안 HP·MP를 초당 12%씩 회복한다. 회복할 때만 전력을 쓴다 (물약보다 훨씬 싸다).', blueprint: null },
   warehouse: { type: 'warehouse', name: '일반 창고', power: 0, color: 0x8a6a4a, cost: { wood: 8, copper_ore: 4 }, description: '차원집 전용 창고 (레벨당 20칸, 한 칸 99개). 차원집 안의 일반 창고는 모두 하나로 이어져 어느 것을 열어도 같고, 안의 재료는 차원집에서 제작·건설에 바로 쓰인다. 레일로 들어온 아이템도 받아 보관한다.', blueprint: { gold: 500, items: { copper_ingot: 4, plank: 6 } } },
+  oregen: {
+    type: 'oregen',
+    name: '차원 광물 생성기',
+    power: 25,
+    color: 0x7a6cff,
+    cost: { titanium_plate: 20, orichalcum_plate: 15, mana_gold_plate: 10, magi_alloy: 30, gear_part: 30, dim_ingot: 10, essence_high: 20 },
+    description: '차원의 힘으로 광석을 만들어 낸다. 전력만 이어 주면 고른 광석이 저절로 쌓인다 (레벨 = 만들 수 있는 최고 단계 광석).',
+    blueprint: { gold: 30000, items: { dim_alloy: 3, dim_shard: 3 } },
+  },
+  manawell: {
+    type: 'manawell',
+    name: '마력의 샘',
+    power: 30,
+    color: 0x5ac8ff,
+    cost: { mana_titanium_plate: 15, mana_orichalcum_plate: 10, dim_plate: 10, essence_supreme: 30, dim_shard: 10, magi_alloy: 40 },
+    description: '공기 중의 마력을 모아 마력 정수를 맺는다. 전력만 이어 주면 저절로 쌓인다 (Lv.1 하급 · Lv.2 중급 · Lv.3 상급).',
+    blueprint: { gold: 80000, items: { dim_alloy2: 2, dim_shard: 8 } },
+  },
   splitter: { type: 'splitter', name: '분배기', power: 0, color: 0x6a7080, cost: { copper_ore: 1 }, description: '들어온 아이템을 앞·왼쪽·오른쪽으로 번갈아 보낸다.', blueprint: { gold: 400, items: {} } },
 };
 
-export const BUILD_ORDER: BuildingType[] = ['generator', 'wire', 'belt', 'box', 'workbench', 'healer', 'smelter', 'crusher', 'infuser', 'alchemy', 'condenser', 'warehouse', 'splitter'];
+export const BUILD_ORDER: BuildingType[] = ['generator', 'wire', 'belt', 'box', 'workbench', 'healer', 'smelter', 'crusher', 'infuser', 'alchemy', 'condenser', 'warehouse', 'splitter', 'oregen', 'manawell'];
+
+// ---- 생산 건물: 재료 없이 전력만으로 자원을 만든다 ----
+export type ProducerType = 'oregen' | 'manawell';
+export const PRODUCER_TYPES = new Set<BuildingType>(['oregen', 'manawell']);
+/** 차원집에 지을 수 있는 최대 개수 */
+export const PRODUCER_LIMIT: Record<ProducerType, number> = { oregen: 5, manawell: 3 };
+export const PRODUCER_MAX_LEVEL: Record<ProducerType, number> = { oregen: 7, manawell: 3 };
+/** 건물 하나에 쌓아 둘 수 있는 최대 개수 (오래 비워도 무한히 쌓이지 않게) */
+export const PRODUCER_CAP: Record<ProducerType, number> = { oregen: 300, manawell: 120 };
+/** 도면을 살 수 있는 조건: 광물 생성기는 7-10 클리어, 마력의 샘은 이야기 완료 */
+export const PRODUCER_UNLOCK: Record<ProducerType, 'clear7' | 'endgame'> = { oregen: 'clear7', manawell: 'endgame' };
+const PRODUCER_ORES = ['copper_ore', 'iron_ore', 'gold_ore', 'diamond_ore', 'titanium_ore', 'orichalcum_ore', 'dim_ore'];
+const PRODUCER_ESSENCES = ['essence_low', 'essence_mid', 'essence_high'];
+/** 이 레벨에서 고를 수 있는 생산품 */
+export function producerOutputs(type: ProducerType, level: number): string[] {
+  return (type === 'oregen' ? PRODUCER_ORES : PRODUCER_ESSENCES).slice(0, Math.max(1, level));
+}
+/** 하나 만드는 데 걸리는 시간(초, 전력 100%·연료 ×1 기준): 희귀할수록 오래 걸린다 */
+export function producerTime(item: string): number {
+  const ore = PRODUCER_ORES.indexOf(item);
+  if (ore >= 0) return Math.round(25 * Math.pow(1.55, ore));
+  return [90, 240, 600][PRODUCER_ESSENCES.indexOf(item)] ?? 120;
+}
+/** Lv.L로 올리는 비용 (도면 없이 바로, 대신 아주 비싸다) */
+export function producerUpgradeCost(type: ProducerType, level: number): { gold: number; items: Record<string, number> } {
+  const t = level - 1;
+  if (type === 'oregen')
+    return {
+      gold: 15000 * level * level,
+      items: { [PLATE_OF[t]]: 20 + level * 5, [MANA_PLATE_OF[t]]: 5 + level * 2, [LEVEL_INGOT[t]]: 30, essence_supreme: 5 + level * 3 },
+    };
+  return level === 2
+    ? { gold: 150000, items: { essence_mid: 60, mana_titanium_plate: 12, dim_shard: 6, dim_alloy: 4 } }
+    : { gold: 400000, items: { essence_high: 80, mana_orichalcum_plate: 15, mana_dim_plate: 5, dim_shard: 15, dim_alloy2: 3 } };
+}
 
 export interface Recipe {
   id: string;
@@ -106,6 +159,8 @@ export const MAX_BUILDING_LEVEL = 7;
 export const UPGRADABLE: BuildingType[] = ['generator', 'smelter', 'crusher', 'infuser', 'alchemy', 'condenser', 'warehouse'];
 
 const LEVEL_INGOT = ['copper_ingot', 'iron_ingot', 'gold_ingot', 'diamond', 'titanium_ingot', 'orichalcum_ingot', 'dim_ingot'];
+const PLATE_OF = ['copper_plate', 'iron_plate', 'gold_plate', 'diamond_plate', 'titanium_plate', 'orichalcum_plate', 'dim_plate'];
+const MANA_PLATE_OF = PLATE_OF.map((id) => `mana_${id}`);
 
 /**
  * Lv.L 강화 도면 (세라): 한 단계 아래 재료로 산다.

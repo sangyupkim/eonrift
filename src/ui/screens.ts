@@ -8,11 +8,12 @@ import { ultUpgradeCost } from '../data/ultUpgrade';
 import { TOOL_KIND_NAMES, TOOL_TIER_NAMES, toolBonusChance, toolEnhanceCost, toolMaxDur, toolName, toolRepair, toolSpeed, type ToolKind, type ToolState } from '../data/tools';
 import { equipCraftCost, equipManaCraftCost, MANA_PLATE_OF, manaPlateCraftCost, plateCraftCost, toolCraftCost, workbenchUpgradeCost, type CraftCost } from '../data/crafting';
 import { durability, EQUIP_SLOTS, SERIES, seriesBonus, EQUIP_MAX_DUR, enhanceCost, repairCost, type EquipSlot, equipName, equipStats, equipValue, GRADES, slotName, type Equip } from '../data/equipment';
+import { PRODUCER_CAP, PRODUCER_LIMIT, PRODUCER_MAX_LEVEL, PRODUCER_TYPES, PRODUCER_UNLOCK, producerOutputs, producerTime, producerUpgradeCost, type ProducerType } from '../data/factory';
 import { BUILDINGS, BUILD_ORDER, buildingUpgradeCost, ESSENCE_BOOST, ESSENCE_BURN, FACTORY_SIZES, generatorPower, levelSpeed, MAX_BUILDING_LEVEL, RECIPES, UPGRADABLE, upgradeBlueprintCost, type BuildingType } from '../data/factory';
 import { ITEMS, ITEM_LIST, ORE_TIERS, TIER_PLATE, WOOD_TIERS } from '../data/items';
 import type { QuestDef } from '../data/quests';
 import { THEMES } from '../data/themes';
-import { canEnqueue, enqueueJob, WORKBENCH_OUT_MAX, WORKBENCH_QUEUE_MAX, BOX_CAPACITY, boxTotal, ESSENCES, MACHINE_TYPES, RECIPE_BY_ID, recipesFor, type BuildingState, type Factory, type WorkJob } from '../factory/sim';
+import { canEnqueue, enqueueJob, WORKBENCH_OUT_MAX, WORKBENCH_QUEUE_MAX, BOX_CAPACITY, boxTotal, producerStock, producerTarget, ESSENCES, MACHINE_TYPES, RECIPE_BY_ID, recipesFor, type BuildingState, type Factory, type WorkJob } from '../factory/sim';
 import type { Bag, Slot } from '../game/Bag';
 import { BAG_MAX_LEVEL, BAG_STEP, stageIndex, STORAGE_MAX_LEVEL, storageSlotsFor, STORE_STACK, warehouseSlots, type Progress } from '../game/Progress';
 import { objectiveNeed, objectiveProgress, objectiveText, todayKey, type Quests } from '../game/Quests';
@@ -1821,9 +1822,13 @@ export class Screens {
         const bp = d.blueprint!;
         const owned = p.flag(`bp_${t}`) > 0;
         const cost = [`${bp.gold} G`, ...Object.entries(bp.items).map(([id, n]) => `${ITEMS[id].name} ${p.count(id)}/${n}`)].join(' · ');
-        const ok = !owned && p.data.gold >= bp.gold && p.hasAll(bp.items);
+        const req = PRODUCER_TYPES.has(t) ? PRODUCER_UNLOCK[t as ProducerType] : null;
+        const reqOk = !req || (req === 'clear7' ? p.data.cleared >= 70 : p.flag('endgame') > 0);
+        const ok = !owned && reqOk && p.data.gold >= bp.gold && p.hasAll(bp.items);
         const thumb = buildingThumb(t);
-        return `<li>${thumb ? `<img class="gem ico" src="${thumb}" alt="">` : `<span class="gem" style="--c:${hex(d.color)}"></span>`}<div><b>${d.name} 도면</b><small>${d.description}</small><small class="dim">${owned ? '보유 중' : cost}</small></div><button data-bp="${t}" ${ok ? '' : 'disabled'}>${owned ? '보유' : '구입'}</button></li>`;
+        const limit = PRODUCER_TYPES.has(t) ? ` · 최대 ${PRODUCER_LIMIT[t as ProducerType]}개` : '';
+        const lockTxt = req === 'clear7' ? '7-10 수호자를 쓰러뜨리면 판매' : '이야기를 모두 마치면 판매';
+        return `<li>${thumb ? `<img class="gem ico" src="${thumb}" alt="">` : `<span class="gem" style="--c:${hex(d.color)}"></span>`}<div><b>${d.name} 도면${limit}</b><small class="dim">${owned ? '보유 중' : reqOk ? cost : `🔒 ${lockTxt}`}</small></div><button data-bp="${t}" ${ok ? '' : 'disabled'}>${owned ? '보유' : '구입'}</button></li>`;
       })
       .join('');
     const s = this.open(
@@ -1833,7 +1838,6 @@ export class Screens {
          <h2>세라의 도면 <small class="gold">${p.data.gold.toLocaleString()} G</small></h2>
          ${message ? `<div class="notice">${message}</div>` : ''}
          <div class="scroll">
-         <p class="notice">도면 없이 바로 지을 수 있는 기본 건물: 마력 발전기 · 마력선 · 레일 · 보관상자 · 제작대 · <b>마력 치유석(HP·MP 회복)</b> · 제련로 — 차원집의 망치 버튼(건설 모드)에서 고르세요.</p>
          <h3>건물 도면</h3>
          <ul class="list">${rows}</ul>
          <h3>강화 도면</h3>
@@ -1878,8 +1882,8 @@ export class Screens {
       detail = `<p><b>${toolName(selTool, t)}</b> · 내구도 ${t.dur}/${toolMaxDur(t)}</p>
         <p class="hint">캐는 속도 +${Math.round((toolSpeed(t) - 1) * 100)}% · 추가 채집 ${Math.round(toolBonusChance(t) * 100)}%</p>`;
       if (cost) {
-        const ok = p.count(cost.ore) >= cost.count && p.data.gold >= cost.gold;
-        detail += `<h3>수리</h3>${costLine(cost.ore, cost.count, cost.gold)}<div class="menu"><button data-repair-tool="${selTool}" ${ok ? '' : 'disabled'}>수리하기</button></div>`;
+        const ok = p.data.gold >= cost.gold;
+        detail += `<h3>수리</h3><p><span class="${ok ? '' : 'bad'}">${cost.gold.toLocaleString()} G</span></p><div class="menu"><button data-repair-tool="${selTool}" ${ok ? '' : 'disabled'}>수리하기</button></div>`;
       }
       const ec = toolEnhanceCost(t);
       if (ec) {
@@ -1922,8 +1926,7 @@ export class Screens {
     this.on(s, '[data-repair-tool]', (b) => {
       const k = b.dataset.repairTool as 'pickaxe' | 'axe';
       const cost = toolRepair(tools[k]);
-      if (!cost || p.count(cost.ore) < cost.count || p.data.gold < cost.gold) return;
-      p.take(cost.ore, cost.count);
+      if (!cost || p.data.gold < cost.gold) return;
       p.data.gold -= cost.gold;
       tools[k].dur = toolMaxDur(tools[k]);
       again(`tool:${k}`, '<b class="ok">수리 완료!</b>');
@@ -2119,6 +2122,92 @@ export class Screens {
       if (!p.flag(`bp_${b.type}_lv${next}`) || !p.takeAll(cost)) return;
       b.level = next;
       redraw();
+    });
+  }
+
+  // ---------------- 공장: 생산 건물 (광물 생성기 · 마력의 샘) ----------------
+  producer(f: Factory, b: BuildingState, p: Progress, onChange: () => void, onClose: () => void, message?: string): void {
+    const type = b.type as ProducerType;
+    const lv = b.level ?? 1;
+    const cap = PRODUCER_CAP[type];
+    const stock = producerStock(b);
+    const target = producerTarget(b);
+    const st = f.status(b);
+    const power = f.powerOf(b);
+    const boost = f.boostOf(b);
+    const perHour = (id: string) => Math.floor((3600 / producerTime(id)) * Math.max(power, 0) * boost);
+    const pct = Math.floor((b.progress ?? 0) * 100);
+    const outs = producerOutputs(type, PRODUCER_MAX_LEVEL[type]);
+    const choice = outs
+      .map((id, i) => {
+        const open = i < lv;
+        return `<button class="chip prod-pick ${id === target ? 'on' : ''}" data-pick="${id}" ${open ? '' : 'disabled'} style="--c:${hex(ITEMS[id].color)}">${inlineGem(id)}${ITEMS[id].name}${open ? '' : ` 🔒Lv.${i + 1}`}</button>`;
+      })
+      .join('');
+    const inside = Object.entries(b.buffer ?? {}).filter(([, n]) => n > 0);
+    const stockRows = inside.map(([id, n]) => `<span class="enc-chip">${inlineGem(id)}${ITEMS[id].name} ×${n}</span>`).join(' ');
+    const maxLv = PRODUCER_MAX_LEVEL[type];
+    let up = '';
+    if (lv >= maxLv) up = '<small class="ok">최고 레벨</small>';
+    else {
+      const c = producerUpgradeCost(type, lv + 1);
+      const ok = p.data.gold >= c.gold && p.hasAll(c.items);
+      const nextOut = producerOutputs(type, lv + 1).slice(-1)[0];
+      up = `<small>Lv.${lv + 1} → ${inlineGem(nextOut)}${ITEMS[nextOut].name}</small>
+        <small><span class="${p.data.gold >= c.gold ? '' : 'bad'}">${c.gold.toLocaleString()} G</span> · ${Object.entries(c.items).map(([id, n]) => `<span class="${p.count(id) >= n ? '' : 'bad'}">${inlineGem(id)}${ITEMS[id].name} ${p.count(id)}/${n}</span>`).join(' · ')}</small>
+        <button class="primary" data-prod-up ${ok ? '' : 'disabled'}>Lv.${lv + 1}로 업그레이드</button>`;
+    }
+    const stateTxt = st === 'blocked' ? '<b class="bad">가득 참</b>' : st === 'no-power' ? '<b class="bad">전력 없음</b>' : `<b class="ok">생산 중</b> ${pct}%`;
+    const s = this.open(
+      'factory-config',
+      `<div class="panel wide tall">
+         <button class="close">${ICONS.close}</button>
+         <h2>${BUILDINGS[type].name}</h2>
+         ${message ? `<div class="notice">${message}</div>` : ''}
+         <div class="scroll">
+         <div class="level-box"><b>Lv.${lv}/${maxLv}</b> ${up}</div>
+         <h3>생산품</h3>
+         <div class="prod-row">${choice}</div>
+         <p>${stateTxt} · ${inlineGem(target)}시간당 약 <b>${perHour(target)}</b>개 · 하나에 ${producerTime(target)}초</p>
+         <h3>보관 <small>${stock}/${cap}</small></h3>
+         <div class="prod-bar"><i style="width:${Math.min(100, (stock / cap) * 100)}%"></i></div>
+         <p>${stockRows || '<span class="dim">비어 있음</span>'}</p>
+         <div class="menu"><button class="primary" data-collect ${stock ? '' : 'disabled'}>공유 창고로 받기</button></div>
+         </div>
+       </div>`,
+      onClose,
+    );
+    const again = (msg?: string) => {
+      onChange();
+      this.producer(f, b, p, onChange, onClose, msg);
+    };
+    this.on(s, '[data-pick]', (el) => {
+      b.recipe = el.dataset.pick!;
+      b.progress = 0;
+      again();
+    });
+    this.on(s, '[data-collect]', () => {
+      let n = 0;
+      let left = 0;
+      for (const [id, k] of Object.entries(b.buffer ?? {})) {
+        const got = p.depositItem(id, k);
+        n += got;
+        left += k - got;
+        if (k - got > 0) b.buffer![id] = k - got;
+        else delete b.buffer![id];
+      }
+      again(n ? `<b class="ok">${n}개를 공유 창고로 옮겼습니다</b>${left ? ` <span class="bad">(창고가 가득 차서 ${left}개는 남김)</span>` : ''}` : '<span class="bad">공유 창고에 빈 칸이 없습니다</span>');
+    });
+    this.on(s, '[data-prod-up]', () => {
+      if (lv >= maxLv) return;
+      const c = producerUpgradeCost(type, lv + 1);
+      if (p.data.gold < c.gold || !p.hasAll(c.items)) return;
+      p.data.gold -= c.gold;
+      p.takeAll(c.items);
+      b.level = lv + 1;
+      b.recipe = producerOutputs(type, lv + 1).slice(-1)[0];
+      b.progress = 0;
+      again(`<b class="ok">Lv.${lv + 1}!</b>`);
     });
   }
 
