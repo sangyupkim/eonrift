@@ -324,7 +324,7 @@ export class VillageScene extends Level {
     spot('forge', 8, 4, 3.2, '강화', '대장간');
     spot('shop', 7, 12, 3, '거래', '상점');
     spot('hall', 20, 5, 2.6, '직업', '직업의 전당');
-    spot('storage', 11, 16, 2.2, '창고', '창고');
+    spot('storage', 11, 16, 2.2, '창고', '공유 창고');
 
     // 차원의 끝 (엔딩 뒤): 남쪽 구역에 탑·해골 전투장·시련장, 차원문 광장 옆에 부서진 균열문
     if (end.show) {

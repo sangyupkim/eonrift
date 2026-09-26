@@ -7,6 +7,7 @@ import {
   CylinderGeometry,
   DoubleSide,
   DynamicDrawUsage,
+  Float32BufferAttribute,
   Group,
   InstancedMesh,
   Matrix4,
@@ -391,6 +392,100 @@ export class Effects {
         const a = Math.random() * Math.PI * 2;
         const r = Math.sqrt(Math.random()) * radius;
         this.sparkSys.add(x + Math.cos(a) * r, 0.1, z + Math.sin(a) * r, 0, 1 + Math.random() * 1.2, 0, Math.random() < 0.3 ? 0xffffff : color, { life: 0.8, size: 0.07, gravity: 0, drag: 0.5 });
+      }
+    });
+  }
+
+  /**
+   * 독 웅덩이: 가장자리가 울퉁불퉁한 짙은 초록 늪, 안쪽에 더 짙은 얼룩,
+   * 부글부글 올라와 터지는 거품, 낮게 깔리는 독안개
+   */
+  poisonPool(x: number, z: number, radius: number, duration: number): void {
+    const group = new Group();
+    group.position.set(x, 0.09, z);
+    // 울퉁불퉁한 모양 (각도마다 반지름이 다르다)
+    const blob = (r: number, seed: number, wobble: number) => {
+      const n = 40;
+      const pos: number[] = [];
+      // 부드러운 물결 (낮은 주파수만): 웅덩이처럼 둥글둥글
+      const rr = (i: number) => {
+        const a = (i / n) * Math.PI * 2;
+        return r * (1 + wobble * (Math.sin(a * 3 + seed) * 0.6 + Math.sin(a * 5 + seed * 2.1) * 0.4));
+      };
+      for (let i = 0; i < n; i++) {
+        const a0 = (i / n) * Math.PI * 2;
+        const a1 = ((i + 1) / n) * Math.PI * 2;
+        pos.push(0, 0, 0, Math.cos(a1) * rr(i + 1), 0, Math.sin(a1) * rr(i + 1), Math.cos(a0) * rr(i), 0, Math.sin(a0) * rr(i));
+      }
+      const g = new BufferGeometry();
+      g.setAttribute('position', new Float32BufferAttribute(pos, 3));
+      return g;
+    };
+    const seed = Math.random() * 10;
+    const mk = (g: BufferGeometry, color: number, opacity: number, y: number, add = false) => {
+      const m = new Mesh(g, new MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false, side: DoubleSide, blending: add ? AdditiveBlending : NormalBlending }));
+      m.position.y = y;
+      group.add(m);
+      return m;
+    };
+    const rim = mk(blob(radius * 1.04, seed, 0.1), 0xb8ff3a, 0.45, 0, true);
+    const base = mk(blob(radius * 0.94, seed, 0.1), 0x3a6a10, 0.88, 0.005);
+    const core = mk(blob(radius * 0.62, seed + 3, 0.15), 0x1c3606, 0.8, 0.01);
+    const shine = mk(blob(radius * 0.35, seed + 6, 0.25), 0x6adf2a, 0.25, 0.015, true);
+    shine.position.x = radius * 0.2;
+    shine.position.z = -radius * 0.15;
+    // 거품: 떠올라 부풀었다 터진다
+    const bubbleGeo = new SphereGeometry(1, 8, 6, 0, Math.PI * 2, 0, Math.PI / 2);
+    const bubbles: { m: Mesh; t: number; life: number; size: number }[] = [];
+    const bubbleMat = new MeshBasicMaterial({ color: 0xa8ff4a, transparent: true, opacity: 0.85, depthWrite: false });
+    const spawnBubble = () => {
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.sqrt(Math.random()) * radius * 0.8;
+      const m = new Mesh(bubbleGeo, bubbleMat);
+      m.position.set(Math.cos(a) * r, 0.02, Math.sin(a) * r);
+      m.scale.setScalar(0.001);
+      group.add(m);
+      bubbles.push({ m, t: 0, life: 0.5 + Math.random() * 0.6, size: 0.14 + Math.random() * 0.16 * Math.min(1.5, radius / 1.5) });
+    };
+    let acc = 0;
+    let bAcc = 0;
+    this.add(group, duration, (k, dt) => {
+      const appear = Math.min(1, k * duration * 5);
+      const fade = Math.min(1, (1 - k) * duration * 2.5);
+      group.scale.setScalar(0.4 + 0.6 * (1 - Math.pow(1 - appear, 3)));
+      const pulse = 0.9 + Math.sin(k * duration * 5) * 0.1;
+      (rim.material as MeshBasicMaterial).opacity = 0.45 * fade * pulse;
+      (base.material as MeshBasicMaterial).opacity = 0.88 * fade;
+      (core.material as MeshBasicMaterial).opacity = 0.8 * fade;
+      (shine.material as MeshBasicMaterial).opacity = 0.25 * fade * pulse;
+      core.rotation.y += dt * 0.25;
+      bubbleMat.opacity = 0.85 * fade;
+      // 거품
+      bAcc += dt;
+      while (bAcc > 0.09 && fade > 0.3) {
+        bAcc -= 0.09;
+        spawnBubble();
+      }
+      for (let i = bubbles.length - 1; i >= 0; i--) {
+        const b = bubbles[i];
+        b.t += dt;
+        const q = b.t / b.life;
+        if (q >= 1) {
+          // 톡 터지며 작은 방울이 튄다
+          this.sparkSys.add(x + b.m.position.x, 0.15, z + b.m.position.z, 0, 0.8, 0, 0xb8ff6a, { life: 0.35, size: 0.06, gravity: 2, drag: 0.5 });
+          group.remove(b.m);
+          bubbles.splice(i, 1);
+          continue;
+        }
+        b.m.scale.setScalar(b.size * Math.min(1, q * 2.2));
+      }
+      // 낮게 깔려 피어오르는 독안개
+      acc += dt;
+      while (acc > 0.06) {
+        acc -= 0.06;
+        const a = Math.random() * Math.PI * 2;
+        const r = Math.sqrt(Math.random()) * radius;
+        this.sparkSys.add(x + Math.cos(a) * r, 0.15, z + Math.sin(a) * r, (Math.random() - 0.5) * 0.3, 0.35 + Math.random() * 0.4, (Math.random() - 0.5) * 0.3, Math.random() < 0.5 ? 0x6ad82a : 0x3a8a1a, { life: 1.3, size: 0.16 + Math.random() * 0.1, gravity: 0, drag: 0.8 });
       }
     });
   }

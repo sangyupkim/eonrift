@@ -1331,7 +1331,8 @@ export class Screens {
         let left = 0;
         for (const b of [bag, dim])
           b.slots.forEach((x, i) => {
-            if (!x || x.equip) return;
+            // 물약·귀환석·음식 같은 소모품은 가방에 남긴다
+            if (!x || x.equip || ITEMS[x.itemId]?.kind === 'consumable') return;
             const k = p.depositItem(x.itemId, x.count);
             n += k;
             x.count -= k;
@@ -1476,7 +1477,7 @@ export class Screens {
         if (side === 'bag')
           for (const bb of [bag, dim])
             bb.slots.forEach((x, i) => {
-              if (!x || x.equip) return;
+              if (!x || x.equip || ITEMS[x.itemId]?.kind === 'consumable') return;
               const k = moveToHome(x.itemId, x.count);
               n += k;
               x.count -= k;

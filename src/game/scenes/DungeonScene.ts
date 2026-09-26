@@ -271,7 +271,8 @@ export class DungeonScene extends Level {
 
   private addHazard(x: number, z: number, r: number, duration: number, dps: number, color: number, debuff?: DebuffSpec): void {
     this.hazards.push({ x, z, r, left: duration, tick: 0.3, dps, debuff });
-    this.effects.zone(x, z, r, color, duration);
+    if (debuff?.id === 'poison') this.effects.poisonPool(x, z, r, duration);
+    else this.effects.zone(x, z, r, color, duration);
   }
 
   /** 균열 변이: 불안정(쓰러진 자리 폭발), 서리 바닥(발밑에 둔화 서리) */
