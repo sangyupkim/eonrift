@@ -6,7 +6,7 @@ import { BOSS_RESPAWN_MS, BOSS_TIME_LIMIT, FARM_COOLDOWN_MS, FARM_NAMES, goldSca
 import { BOSS_SPECIES, DEBUFF_INFO, type DebuffId, type DebuffSpec } from '../data/species';
 import { newTool, TOOL_KIND_NAMES, TOOL_TIER_NAMES, toolBonusChance, toolName, toolSpeed, toolWear, type ToolKind } from '../data/tools';
 import { MeshLambertMaterial, OrthographicCamera, PCFShadowMap, Plane, Raycaster, Vector2, Vector3, WebGLRenderer } from 'three';
-import { CAMERA_OFFSET, GAME_VERSION, PLAYER, SCREEN_UP, TILE, VIEW_HEIGHT } from '../config';
+import { CAMERA_OFFSET, GAME_VERSION, PLAYER, SCREEN_RIGHT, SCREEN_UP, TILE, VIEW_HEIGHT } from '../config';
 import { Audio } from '../core/audio';
 import { Input } from '../core/input';
 import { Rng, randomSeed } from '../core/rng';
@@ -31,6 +31,7 @@ import { Combat } from './Combat';
 import type { Monster } from './Monster';
 import type { SpecialTotals } from '../data/special';
 import { rankName, submitTrial } from '../core/leaderboard';
+import { saveControls } from '../core/controls';
 import { Player } from './Player';
 import { DIM_BAG_MAX, deleteSave, hasSave, loadSave, newSave, Progress, useTestSlot, stageIndex, stageOf, type SaveData, type Stats, type RunCheckpoint } from './Progress';
 import { objectiveNeed, objectiveProgress, Quests } from './Quests';
@@ -679,6 +680,7 @@ export class Game {
         onGiveUp: () => this.fall(),
         onBestiary: this.quests.isDone('m_research') ? () => this.openBestiary(false) : undefined,
         onEncyclopedia: () => this.screens.encyclopedia(this.progress, () => this.openPause()),
+        onControls: () => this.openControls(),
         onFeedback: () => {
           const c = this.progress.cls;
           const cleared = this.progress.data.cleared;
@@ -2707,7 +2709,35 @@ export class Game {
     this.potionCd = Math.max(0, this.potionCd - dt);
     if (this.run) this.run.time += dt;
 
-    const move = this.building ? { x: 0, y: 0 } : input.getMove();
+    let move = this.building ? { x: 0, y: 0 } : input.getMove();
+    // PC 마우스 이동: 누르고 있는 동안 커서를 따라가고, 떼면 마지막으로 찍은 곳까지 걸어간다
+    if (!this.building && move.x === 0 && move.y === 0 && input.mouseMoveActive) {
+      if (input.mouseMoveHeld || !this.mouseTarget) {
+        const g = this.groundAt({ clientX: input.mouseX, clientY: input.mouseY } as PointerEvent);
+        if (g) this.mouseTarget = { x: g.x, z: g.z };
+        this.mouseBest = Infinity;
+        this.mouseStuck = 0;
+      }
+      const t = this.mouseTarget;
+      if (t) {
+        const dx = t.x - pl.position.x;
+        const dz = t.z - pl.position.z;
+        const d = Math.hypot(dx, dz);
+        // 막혀서 더 가까워지지 않으면 (0.6초) 멈춘다
+        if (d < this.mouseBest - 0.05) {
+          this.mouseBest = d;
+          this.mouseStuck = 0;
+        } else this.mouseStuck += dt;
+        if ((d < 0.35 || this.mouseStuck > 0.6) && !input.mouseMoveHeld) {
+          input.mouseMoveActive = false;
+          this.mouseTarget = null;
+        } else if (d >= 0.2) {
+          // 세계 방향 → 화면 기준 이동 (화면 축은 서로 직교)
+          const k = Math.min(1, d / 0.6) / d;
+          move = { x: (dx * SCREEN_RIGHT.x + dz * SCREEN_RIGHT.z) * k, y: (dx * SCREEN_UP.x + dz * SCREEN_UP.z) * k };
+        }
+      }
+    } else if (!input.mouseMoveActive) this.mouseTarget = null;
     const near = this.building ? null : this.nearestInteractable();
     this.hud.setInteract(near ? near.label : null);
 
@@ -2737,7 +2767,10 @@ export class Game {
         ok = true;
         this.audio.play('dash');
       }
-      if (ok) this.gathering = null;
+      if (ok) {
+        this.gathering = null;
+        this.planDodge();
+      }
     }
     for (let i = 0; i < 3; i++) {
       if (input.consume(`skill${i + 1}` as 'skill1')) {
@@ -2768,7 +2801,7 @@ export class Game {
     const obstacles = level instanceof DungeonScene ? level.playerObstacles() : level.obstacles;
     pl.update(dt, {
       move,
-      applyMove: (dx, dz) => moveWithCollision(level.grid, pl.position, dx, dz, PLAYER.radius, obstacles),
+      applyMove: (dx, dz) => moveWithCollision(level.grid, pl.position, dx, dz, PLAYER.radius, pl.activeDash?.ghost ? [] : obstacles),
     });
     level.update(dt, pl.position);
 
@@ -3064,7 +3097,100 @@ export class Game {
     } else this.hud.setBubbles([]);
   }
 
+  /**
+   * 회피 경로 판단 (몬스터·소품 같은 원형 장애물):
+   * 회피 거리 안에 장애물을 완전히 빠져나갈 수 있고 내릴 자리가 바닥이면 통과, 가까이서 정면으로 막혀 못 넘으면 제자리 구르기.
+   * 벽은 통과하지 않는다.
+   */
+  private planDodge(): void {
+    const pl = this.player;
+    const ds = pl.activeDash;
+    if (!ds || ds.speed <= 0) return;
+    const level = this.level;
+    const obs = level instanceof DungeonScene ? level.playerObstacles() : level.obstacles;
+    const r = PLAYER.radius;
+    const L = ds.speed * ds.duration * (ds.pose === 'roll' ? 0.725 : 1);
+    const px = pl.position.x;
+    const pz = pl.position.z;
+    let crossEnd = 0;
+    let blockedNear = false;
+    let any = false;
+    for (const o of obs) {
+      const R = r + o.radius;
+      const ox = o.x - px;
+      const oz = o.z - pz;
+      const t0 = ox * ds.dirX + oz * ds.dirZ;
+      const b = Math.abs(ox * ds.dirZ - oz * ds.dirX);
+      if (b >= R) continue;
+      const half = Math.sqrt(R * R - b * b);
+      const enter = t0 - half;
+      const exit = t0 + half;
+      if (exit <= 0 || enter >= L) continue;
+      any = true;
+      // 허용 범위: 회피 거리 안에서 장애물 반대편으로 완전히 나갈 수 있는가
+      if (exit <= L) crossEnd = Math.max(crossEnd, exit);
+      else if (enter < L * 0.5) blockedNear = true;
+    }
+    if (!any) return;
+    const floorAt = (x: number, z: number) => {
+      for (const [ax, az] of [[0, 0], [r, 0], [-r, 0], [0, r], [0, -r]]) if (!isFloor(level.grid, Math.floor((x + ax) / TILE), Math.floor((z + az) / TILE))) return false;
+      return true;
+    };
+    const freeAt = (x: number, z: number) => obs.every((o) => Math.hypot(o.x - x, o.z - z) >= r + o.radius);
+    if (blockedNear) {
+      // 넘을 수 없는 장애물이 코앞: 제자리에서 구른다
+      ds.speed = 0;
+      return;
+    }
+    if (crossEnd <= 0) return;
+    // 가는 길에 벽이 있으면 통과하지 않고 원래대로
+    for (let t = 0.2; t <= crossEnd; t += 0.2) if (!floorAt(px + ds.dirX * t, pz + ds.dirZ * t)) return;
+    // 가장 먼 곳부터 장애물 너머의 내릴 자리(바닥이고 비어 있는 곳)를 찾는다
+    for (let t = L; t >= crossEnd; t -= 0.15) {
+      const ex = px + ds.dirX * t;
+      const ez = pz + ds.dirZ * t;
+      if (floorAt(ex, ez) && freeAt(ex, ez)) {
+        ds.ghost = true;
+        ds.speed *= t / L;
+        return;
+      }
+    }
+    // 내릴 자리가 없으면 제자리
+    ds.speed = 0;
+  }
+
   private floatRef: { x: number; y: number } | null = null;
+  /** 조작 설정 화면 */
+  private openControls(msg?: string): void {
+    const c = this.input.controls;
+    this.screens.controlsSettings(
+      c,
+      (nc) => {
+        this.input.setControls(nc);
+        saveControls(nc);
+      },
+      (cb) => (this.input.capture = cb),
+      () => this.openPause(),
+      () => {
+        // 버튼 배치 편집: 게임은 멈춘 채 HUD 위에서 끌어서 옮긴다
+        this.mode = 'menu';
+        this.hud.setVisible(true);
+        this.hud.editLayout(c.layout, (layout) => {
+          this.hud.setVisible(false);
+          c.layout = layout;
+          saveControls(c);
+          this.hud.applyLayout(layout);
+          this.openControls('버튼 배치를 저장했습니다');
+        });
+      },
+      msg,
+    );
+  }
+
+  /** 마우스 이동 목적지 */
+  private mouseTarget: { x: number; z: number } | null = null;
+  private mouseBest = Infinity;
+  private mouseStuck = 0;
   private toScreen(x: number, y: number, z: number): { x: number; y: number } {
     const v = new Vector3(x, y, z).project(this.camera);
     return { x: ((v.x + 1) / 2) * this.container.clientWidth, y: ((1 - v.y) / 2) * this.container.clientHeight };

@@ -3264,3 +3264,28 @@ h3.sub { margin: 10px 0 6px; font-size: 14px; display: flex; align-items: center
 .sp-row b { color: #ffcf9a; }
 .sp-row.locked { background: rgba(255, 184, 106, 0.2); outline: 1px solid rgba(255, 184, 106, 0.6); }
 .sp-row .sp-lock { margin-left: 0; }
+/* 조작 설정 */
+.bind-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 4px 12px; }
+.bind-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 3px 6px; border-radius: 8px; background: rgba(255, 255, 255, 0.04); font-size: 13px; }
+.bind-row .bind-key { min-width: 86px; padding: 4px 10px; border-radius: 8px; font-weight: 800; background: rgba(255, 255, 255, 0.1); border: 1px solid var(--panel-line); }
+.bind-row .bind-key.dup { border-color: #ff6a6a; color: #ffb0b0; }
+.bind-row .bind-key.wait { background: rgba(255, 210, 58, 0.3); border-color: #ffd23a; }
+/* 모바일 버튼 배치 편집 */
+.hud.layout-edit .act { outline: 2px dashed rgba(255, 255, 255, 0.55); outline-offset: 2px; touch-action: none; cursor: move; }
+.hud.layout-edit .act.layout-sel { outline: 3px solid #ffd23a; }
+.hud.layout-edit .interact-btn.edit-show { display: flex !important; }
+.layout-bar { position: absolute; left: 50%; top: calc(8px + var(--safe-top)); transform: translateX(-50%); display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; padding: 8px 14px; max-width: 94vw; border-radius: 12px; background: rgba(10, 9, 22, 0.92); border: 1px solid rgba(255, 210, 120, 0.6); pointer-events: auto; z-index: 50; font-size: 13px; }
+.layout-bar label { display: flex; align-items: center; gap: 6px; }
+.layout-bar input[type='range'] { width: 140px; }
+.layout-bar button { padding: 5px 12px; border-radius: 8px; font-weight: 800; background: rgba(255, 255, 255, 0.1); border: 1px solid var(--panel-line); }
+.layout-bar button.primary { background: var(--accent); color: #10101e; }
+/* 편집 중에는 마을에서 숨는 스킬·궁극기 버튼도 보여 준다 */
+.hud.layout-edit[data-mode] .act.skill,
+.hud.layout-edit[data-mode] .act.ult,
+.hud.layout-edit[data-mode] .act.hidden { display: flex !important; visibility: visible !important; opacity: 1 !important; }
+
+.ctl-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0; }
+.ctl-row > span { font-size: 13px; color: var(--ink-dim); }
+.panel button.ctl-opt { flex: 1 1 180px; padding: 9px 12px; border-radius: 10px; font-weight: 800; font-size: 14px; color: var(--ink); background: rgba(255, 255, 255, 0.06); border: 1px solid var(--panel-line); }
+.panel button.ctl-opt.on { background: var(--accent); color: #10101e; border-color: transparent; }
+.panel .bind-row .bind-key { position: static; flex: 0 0 auto; color: var(--ink); }

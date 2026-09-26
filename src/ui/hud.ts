@@ -227,6 +227,9 @@ export class Hud {
     this.potionBtn.appendChild(this.potionCount);
     actions.append(this.attackBtn, this.interactBtn, dodge, ...this.skillBtns, ult, this.potionBtn);
     this.root.appendChild(actions);
+    // 모바일 버튼 배치 편집 대상
+    this.layoutTargets = { attack: this.attackBtn, interact: this.interactBtn, dodge, s1: this.skillBtns[0], s2: this.skillBtns[1], s3: this.skillBtns[2], ult, potion: this.potionBtn };
+    this.applyLayout(input.controls.layout);
 
     this.bigMapEl = el('div', 'bigmap-wrap hidden');
     this.bigMapEl.addEventListener('pointerdown', (e) => {
@@ -249,6 +252,97 @@ export class Hud {
     this.toastEl = el('div', 'toast');
     this.root.appendChild(this.toastEl);
     this.root.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
+
+  private layoutTargets: Record<string, HTMLElement> = {};
+  private layoutEdit: { layout: Record<string, { dx: number; dy: number; scale: number }>; sel: string; bar: HTMLDivElement; cleanup: () => void } | null = null;
+
+  /** 모바일 버튼 배치 (옮긴 거리·크기) 적용 */
+  applyLayout(layout: Record<string, { dx: number; dy: number; scale: number }>): void {
+    for (const [id, elx] of Object.entries(this.layoutTargets)) {
+      const l = layout[id];
+      elx.style.translate = l ? `${l.dx}px ${l.dy}px` : '';
+      elx.style.scale = l && l.scale !== 1 ? String(l.scale) : '';
+    }
+  }
+
+  get editingLayout(): boolean {
+    return !!this.layoutEdit;
+  }
+
+  /** 버튼 배치 편집: 끌어서 옮기고, 고른 버튼의 크기를 막대로 바꾼다. 끝나면 onDone(새 배치) */
+  editLayout(start: Record<string, { dx: number; dy: number; scale: number }>, onDone: (layout: Record<string, { dx: number; dy: number; scale: number }>) => void): void {
+    const layout: Record<string, { dx: number; dy: number; scale: number }> = JSON.parse(JSON.stringify(start));
+    this.root.classList.add('layout-edit');
+    // 편집 중에는 숨은 버튼(상호작용)도 보이게
+    this.interactBtn.classList.add('edit-show');
+    const bar = el('div', 'layout-bar');
+    bar.innerHTML = `<b>버튼 배치 편집</b><span class="dim">버튼을 끌어서 옮기세요</span>
+      <label>크기 <input type="range" min="60" max="170" step="5" value="100" data-ls></label><b data-lsv>100%</b>
+      <button data-lreset>초기화</button><button class="primary" data-ldone>완료</button>`;
+    this.root.appendChild(bar);
+    const slider = bar.querySelector<HTMLInputElement>('[data-ls]')!;
+    const sv = bar.querySelector<HTMLElement>('[data-lsv]')!;
+    const select = (id: string) => {
+      if (!this.layoutEdit) return;
+      this.layoutEdit.sel = id;
+      for (const [k, e] of Object.entries(this.layoutTargets)) e.classList.toggle('layout-sel', k === id);
+      const sc = Math.round((layout[id]?.scale ?? 1) * 100);
+      slider.value = String(sc);
+      sv.textContent = `${sc}%`;
+    };
+    const handlers: [HTMLElement, (e: PointerEvent) => void][] = [];
+    for (const [id, target] of Object.entries(this.layoutTargets)) {
+      const down = (e: PointerEvent) => {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        select(id);
+        const l = (layout[id] ??= { dx: 0, dy: 0, scale: 1 });
+        const sx = e.clientX - l.dx;
+        const sy = e.clientY - l.dy;
+        const move = (ev: PointerEvent) => {
+          l.dx = Math.round(ev.clientX - sx);
+          l.dy = Math.round(ev.clientY - sy);
+          this.applyLayout(layout);
+        };
+        const up = () => {
+          window.removeEventListener('pointermove', move);
+          window.removeEventListener('pointerup', up);
+        };
+        window.addEventListener('pointermove', move);
+        window.addEventListener('pointerup', up);
+      };
+      target.addEventListener('pointerdown', down, true);
+      handlers.push([target, down]);
+    }
+    slider.addEventListener('input', () => {
+      const id = this.layoutEdit?.sel;
+      if (!id) return;
+      const l = (layout[id] ??= { dx: 0, dy: 0, scale: 1 });
+      l.scale = Number(slider.value) / 100;
+      sv.textContent = `${slider.value}%`;
+      this.applyLayout(layout);
+    });
+    bar.addEventListener('pointerdown', (e) => e.stopPropagation());
+    bar.querySelector('[data-lreset]')!.addEventListener('click', () => {
+      for (const k of Object.keys(layout)) delete layout[k];
+      this.applyLayout(layout);
+      select(this.layoutEdit?.sel ?? 'attack');
+    });
+    const cleanup = () => {
+      for (const [t, h] of handlers) t.removeEventListener('pointerdown', h, true);
+      for (const e of Object.values(this.layoutTargets)) e.classList.remove('layout-sel');
+      this.interactBtn.classList.remove('edit-show');
+      this.root.classList.remove('layout-edit');
+      bar.remove();
+      this.layoutEdit = null;
+    };
+    bar.querySelector('[data-ldone]')!.addEventListener('click', () => {
+      cleanup();
+      onDone(layout);
+    });
+    this.layoutEdit = { layout, sel: 'attack', bar, cleanup };
+    select('attack');
   }
 
   private button(className: string, icon: string, action: Action): HTMLButtonElement {

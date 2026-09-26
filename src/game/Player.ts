@@ -40,6 +40,8 @@ export interface DashSpec {
   duration: number;
   pose: DashPose;
   invuln: boolean;
+  /** 회피 중 원형 장애물(몬스터·소품)을 통과한다 (넘어갈 수 있다고 판단했을 때) */
+  ghost?: boolean;
   onStep?: () => void;
   onEnd?: () => void;
 }
@@ -182,6 +184,11 @@ export class Player {
     this.action = { ...spec, t: 0, done: false };
     this.state = 'action';
     return true;
+  }
+
+  /** 지금 하는 돌진·회피 (없으면 null) */
+  get activeDash(): DashSpec | null {
+    return this.state === 'dash' ? this.dash : null;
   }
 
   startDash(spec: DashSpec): void {

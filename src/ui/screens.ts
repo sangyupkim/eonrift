@@ -1,4 +1,5 @@
 import { BUILD_ID, GAME_VERSION } from '../config';
+import { BIND_LIST, defaultControls, keyLabel, type Bindable, type Controls } from '../core/controls';
 import { fetchBoard, rankName, RANK_NAME_MAX, setRankName, submitTrial } from '../core/leaderboard';
 import { encyclopediaPages } from './encyclopedia';
 import { SCRIPTS, STORY_REPLAY, type Step } from '../data/story';
@@ -676,6 +677,71 @@ export class Screens {
     render();
   }
 
+  /** 조작 설정: PC 이동 방식·마우스·키 바꾸기, 모바일 버튼 배치 */
+  controlsSettings(c: Controls, apply: (c: Controls) => void, capture: (cb: ((key: string) => void) | null) => void, onBack: () => void, onMobileLayout: () => void, msg?: string): void {
+    const again = (m?: string) => this.controlsSettings(c, apply, capture, onBack, onMobileLayout, m);
+    const used = new Map<string, Bindable[]>();
+    for (const b of BIND_LIST) used.set(c.keys[b.id], [...(used.get(c.keys[b.id]) ?? []), b.id]);
+    const rows = BIND_LIST.map((b) => {
+      const dup = (used.get(c.keys[b.id]) ?? []).length > 1;
+      return `<div class="bind-row"><span>${b.name}</span><button class="bind-key ${dup ? 'dup' : ''}" data-bind="${b.id}">${esc(keyLabel(c.keys[b.id]))}</button></div>`;
+    }).join('');
+    const s = this.open(
+      'controls',
+      `<div class="panel wide tall">
+         <button class="close">${ICONS.close}</button>
+         <h2>🎮 조작 설정</h2>
+         ${msg ? `<div class="notice">${msg}</div>` : ''}
+         <div class="scroll">
+           <h3>PC 이동 방식</h3>
+           <div class="ctl-row">
+             <button data-mm="keys" class="ctl-opt ${c.moveMode === 'keys' ? 'on' : ''}">⌨ 키보드 이동</button>
+             <button data-mm="mouse" class="ctl-opt ${c.moveMode === 'mouse' ? 'on' : ''}">🖱 마우스 클릭 이동</button>
+           </div>
+           ${c.moveMode === 'mouse' ? `<div class="ctl-row"><span>이동 버튼</span>
+             <button data-mb="right" class="ctl-opt ${c.moveButton === 'right' ? 'on' : ''}">오른쪽 클릭 이동</button>
+             <button data-mb="left" class="ctl-opt ${c.moveButton === 'left' ? 'on' : ''}">왼쪽 클릭 이동</button></div>
+             <p class="hint">누르고 있으면 커서를 따라가고, 한 번 누르면 그곳까지 걸어갑니다. 방향키·이동 키를 누르면 멈춥니다.</p>` : ''}
+           <label class="toggle"><input type="checkbox" data-ma ${c.mouseAttack ? 'checked' : ''}/> 마우스 ${c.moveMode === 'mouse' ? (c.moveButton === 'left' ? '오른쪽' : '왼쪽') : '왼쪽'} 클릭으로 기본 공격 (키로도 공격: ${esc(keyLabel(c.keys.attack))})</label>
+           <h3>키 바꾸기 <small class="dim">버튼을 누른 뒤 새 키를 누르세요 · 빨간 키는 겹침</small></h3>
+           <div class="bind-grid">${rows}</div>
+           <div class="menu row"><button data-reset-keys>키 기본값으로</button></div>
+           <h3>모바일 버튼 배치</h3>
+           <p class="hint">공격·회피·스킬·물약 버튼을 끌어서 옮기고 크기를 바꿉니다.</p>
+           <div class="menu row"><button class="primary" data-layout>버튼 배치 편집</button></div>
+         </div>
+       </div>`,
+      () => {
+        capture(null);
+        if (!toLayout) onBack();
+      },
+    );
+    let toLayout = false;
+    const set = (fn: () => void, m?: string) => {
+      fn();
+      apply(c);
+      again(m);
+    };
+    this.on(s, '[data-mm]', (b) => set(() => (c.moveMode = b.dataset.mm as Controls['moveMode'])));
+    this.on(s, '[data-mb]', (b) => set(() => (c.moveButton = b.dataset.mb as Controls['moveButton'])));
+    s.querySelector<HTMLInputElement>('[data-ma]')?.addEventListener('change', (e) => set(() => (c.mouseAttack = (e.target as HTMLInputElement).checked)));
+    this.on(s, '[data-reset-keys]', () => set(() => (c.keys = { ...defaultControls().keys }), '키를 기본값으로 되돌렸습니다'));
+    this.on(s, '[data-layout]', () => {
+      toLayout = true;
+      this.close();
+      onMobileLayout();
+    });
+    this.on(s, '[data-bind]', (b) => {
+      const id = b.dataset.bind as Bindable;
+      b.textContent = '새 키 입력…';
+      b.classList.add('wait');
+      capture((key) => {
+        if (key === 'escape' && id !== 'pause') return again('취소했습니다');
+        set(() => (c.keys[id] = key), `${BIND_LIST.find((x) => x.id === id)!.name}: ${esc(keyLabel(key))}`);
+      });
+    });
+  }
+
   pause(opts: {
     inDungeon: boolean;
     seed?: number;
@@ -699,6 +765,8 @@ export class Screens {
     onFeedback?: () => void;
     /** 백과사전 */
     onEncyclopedia?: () => void;
+    /** 조작 설정 */
+    onControls?: () => void;
     /** 가진 음식 (먹으면 30분 버프) */
     foods?: { id: string; count: number }[];
     foodLeft?: string;
@@ -722,6 +790,7 @@ export class Screens {
            <label class="volume"><span class="vol-name">${SPK('music', '🎵')} 배경음</span><input type="range" min="0" max="100" step="5" value="${Math.round(opts.music * 100)}" data-v="music"/><b data-vl="music">${Math.round(opts.music * 100)}</b></label>
            <label class="volume"><span class="vol-name">${SPK('speaker', '🔊')} 효과음</span><input type="range" min="0" max="100" step="5" value="${Math.round(opts.sfx * 100)}" data-v="sfx"/><b data-vl="sfx">${Math.round(opts.sfx * 100)}</b></label>
            ${opts.foods?.length ? `<div class="food-row">${opts.foodLeft ? `<small class="dim">먹은 음식: ${opts.foodLeft}</small>` : ''}${opts.foods.map((f) => `<button data-eat="${f.id}">${inlineGem(f.id)}${ITEMS[f.id].name} 먹기 (${f.count})</button>`).join('')}</div>` : ''}
+           ${opts.onControls ? `<button data-a="controls">🎮 조작 설정</button>` : ''}
            ${opts.onEncyclopedia ? `<button data-a="ency">${SPK('book', '📖')} 백과사전</button>` : ''}
            ${opts.onBestiary ? `<button data-a="bestiary">${SPK('book', '📖')} 몬스터 도감</button>` : ''}
            <button data-a="savecode">${SPK('disk', '💾')} 저장 코드 만들기</button>
@@ -744,6 +813,7 @@ export class Screens {
     this.on(s, '[data-a="savecode"]', opts.onSaveCode);
     this.on(s, '[data-a="feedback"]', () => opts.onFeedback?.());
     this.on(s, '[data-a="ency"]', () => opts.onEncyclopedia?.());
+    this.on(s, '[data-a="controls"]', () => opts.onControls?.());
     s.querySelector<HTMLInputElement>('[data-t="shadow"]')!.addEventListener('change', (e) => opts.onToggleShadows((e.target as HTMLInputElement).checked));
     s.querySelector<HTMLInputElement>('[data-t="sound"]')!.addEventListener('change', (e) => opts.onToggleSound((e.target as HTMLInputElement).checked));
     s.querySelectorAll<HTMLButtonElement>('[data-aim]').forEach((b) =>
