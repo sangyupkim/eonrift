@@ -168,6 +168,11 @@ export function equipValue(e: Equip): number {
   return Math.round(20 * e.tier * GRADES[e.grade].mult * (1 + e.plus * 0.3));
 }
 
+/** 높은 단계일수록 사냥 골드가 더 빠르게 늘어나므로 강화·수리 골드도 단계마다 5%씩 더 든다 (7단계 ×1.3) */
+function tierGoldMult(tier: number): number {
+  return 1 + 0.05 * (Math.min(7, Math.max(1, tier)) - 1);
+}
+
 /** 강화: 장비 재질과 같은 판 (구리 장비 → 구리판 …). +6~+10은 마력판 */
 export function enhanceCost(e: Equip): { item: string; count: number; gold: number; rate: number } | null {
   if (e.plus >= 10) return null;
@@ -175,7 +180,7 @@ export function enhanceCost(e: Equip): { item: string; count: number; gold: numb
   const rates = [1, 0.95, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2];
   // 차원 등급은 강화 재료와 골드가 세 배
   const k = e.grade >= GRADE.dimension ? 3 : 1;
-  return { item: p >= 5 ? TIER_MANA_PLATE[e.tier - 1] : TIER_PLATE[e.tier - 1], count: (p >= 5 ? 1 + Math.floor((p - 5) / 2) : 1 + Math.floor(p / 3)) * k, gold: 50 * (p + 1) * e.tier * k, rate: rates[p] };
+  return { item: p >= 5 ? TIER_MANA_PLATE[e.tier - 1] : TIER_PLATE[e.tier - 1], count: (p >= 5 ? 1 + Math.floor((p - 5) / 2) : 1 + Math.floor(p / 3)) * k, gold: Math.round(50 * (p + 1) * e.tier * k * tierGoldMult(e.tier)), rate: rates[p] };
 }
 
 // ---- 내구도와 수리 ----
@@ -205,7 +210,7 @@ export function repairCost(e: Equip): { ore: string; count: number; gold: number
   const missing = EQUIP_MAX_DUR - durability(e);
   if (missing <= 0) return null;
   const m = repairMaterial(e.tier, e.plus);
-  return { ore: m.id, count: Math.ceil(missing / m.per), gold: Math.round(missing * e.tier * 1.5) };
+  return { ore: m.id, count: Math.ceil(missing / m.per), gold: Math.round(missing * e.tier * 1.5 * tierGoldMult(e.tier)) };
 }
 
 export function toolRepairCost(dur: number): { ore: string; count: number; gold: number } | null {

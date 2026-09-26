@@ -75,23 +75,42 @@ export const MIDBOSS_NAMES = [
   '틈새의 문지기',
 ];
 
-/** 단계·방에 따른 몬스터 능력치 배율. 같은 단계 안에서도 방이 깊을수록 강해진다 */
-export function tierScale(tier: number, stage: number): { hp: number; atk: number; def: number } {
-  // 방이 깊을수록 체력 18%·공격 10%씩, 단계가 오를 때마다 체력 ×2.1 · 공격 ×1.8 · 방어 ×1.3
-  const deep = 1 + (stage - 1) * 0.18;
-  return {
-    hp: Math.pow(2.1, tier - 1) * deep,
-    atk: Math.pow(1.8, tier - 1) * (1 + (stage - 1) * 0.1),
-    def: Math.pow(1.3, tier - 1) * (1 + (stage - 1) * 0.05),
-  };
+/** 1-1부터 이어지는 진행도 (1-1 = 1, 1-10 = 10, 2-1 = 11, … 7-10 = 70) */
+export function progressIndex(tier: number, stage: number): number {
+  return (tier - 1) * 10 + stage;
 }
 
 /**
- * 몬스터 공격력 배율 (단계별). 예전에는 높은 단계일수록 방어력에 막혀 한 대가 체력의 1%도 안 되었다.
+ * 단계·방에 따른 몬스터 능력치 배율. 진행도를 따라 끊김 없이 오른다 —
+ * 다음 단계의 첫 방이 이전 단계의 마지막 방보다 항상 강하다 (예전에는 1-9가 3-1보다 셌다).
+ * X-10(수호자 방)의 값은 예전과 같아서 보스 난이도 기준은 그대로다.
+ */
+export function tierScale(tier: number, stage: number): { hp: number; atk: number; def: number } {
+  const g = progressIndex(tier, stage);
+  if (g < 10) return { hp: 1 + (g - 1) * 0.18, atk: 1 + (g - 1) * 0.1, def: 1 + (g - 1) * 0.05 };
+  const k = (g - 10) / 10;
+  return { hp: 2.62 * Math.pow(2.1, k), atk: 1.9 * Math.pow(1.8, k), def: 1.45 * Math.pow(1.3, k) };
+}
+
+/** 경험치 배율 (진행도 기준). 한 단계 넘어갈 때마다 확실히 늘어난다 */
+export function expScale(tier: number, stage: number): number {
+  const g = progressIndex(tier, stage);
+  return g < 10 ? 1 + (g - 1) * 0.15 : 2.35 * Math.pow(g / 10, 1.6);
+}
+
+/** 골드 배율 (진행도 기준) */
+export function goldScale(tier: number, stage: number): number {
+  const g = progressIndex(tier, stage);
+  return g < 10 ? 1 + (g - 1) * 0.15 : 2.35 * (g / 10);
+}
+
+/**
+ * 몬스터 공격력 배율 (진행도 기준). 예전에는 높은 단계일수록 방어력에 막혀 한 대가 체력의 1%도 안 되었다.
  * 그 단계 장비 기준으로 일반 몬스터 한 대 ≈ 체력 3~5%(앞쪽 방) ~ 7~9%(깊은 방), 보스 기본 공격 ≈ 12~25%.
  */
-export function monsterAtkMult(tier: number): number {
-  return 1.6 + 0.25 * (Math.min(7, Math.max(1, tier)) - 1);
+export function monsterAtkMult(tier: number, stage = 10): number {
+  const g = progressIndex(Math.min(7, Math.max(1, tier)), stage);
+  return 1.6 + 0.025 * Math.max(0, g - 10);
 }
 
 /** 플레이어 방어 계산의 기준값 (단계별): 받는 피해 = 피해 × K / (K + 방어력). 단계가 오를수록 커져 방어력이 그 단계에 맞게 작동한다 */

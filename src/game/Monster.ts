@@ -16,7 +16,7 @@ import {
   Quaternion,
   Scene,
 } from 'three';
-import { ARCHETYPES, monsterAtkMult, tierScale, type Archetype, type ArchetypeDef, type MonsterMods } from '../data/monsters';
+import { ARCHETYPES, expScale, monsterAtkMult, tierScale, type Archetype, type ArchetypeDef, type MonsterMods } from '../data/monsters';
 import { BOSS_SPECIES, MIDBOSS_SPECIES, type DebuffSpec, type SpeciesDef } from '../data/species';
 import { moveWithCollision, type CircleObstacle } from '../dungeon/collision';
 import { TILE } from '../config';
@@ -275,14 +275,14 @@ export class Monster {
     // 중간보스 5줄 (3줄을 깎으면 보호막), 수호자 7줄 (3줄·5줄에서 보호막)
     this.bars = kind === 'boss' ? 7 : kind === 'midboss' ? 5 : 1;
     this.gimmickAt = kind === 'boss' ? [4, 2] : kind === 'midboss' ? [2] : [];
-    this.atk = this.def.atk * scale.atk * mult.atk * (mods.atk ?? 1) * monsterAtkMult(mods.statTier ?? tier);
+    this.atk = this.def.atk * scale.atk * mult.atk * (mods.atk ?? 1) * monsterAtkMult(mods.statTier ?? tier, mods.statStage ?? stage);
     this.defense = (boss ? 6 : this.def.def) * scale.def;
     this.speed = this.def.speed * (boss ? 0.95 : 1) * (mods.speed ?? 1);
     this.radius = this.def.radius * mult.size;
     this.x = x;
     this.z = z;
     this.name = (kind === 'elite' ? '정예 ' : '') + this.species.name;
-    this.exp = Math.round(this.def.exp * Math.pow(mods.statTier ?? tier, 1.6) * (1 + ((mods.statStage ?? stage) - 1) * 0.15) * Math.sqrt(mods.hp ?? 1) * (kind === 'boss' ? 30 : kind === 'midboss' ? 15 : kind === 'elite' ? 3 : 0.3));
+    this.exp = Math.round(this.def.exp * expScale(mods.statTier ?? tier, mods.statStage ?? stage) * Math.sqrt(mods.hp ?? 1) * (kind === 'boss' ? 30 : kind === 'midboss' ? 15 : kind === 'elite' ? 3 : 0.3));
 
     this.material = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
     const colors = this.species.colors ?? MONSTER_COLORS[tier - 1];

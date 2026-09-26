@@ -2,7 +2,7 @@ import { bustUrl, itemIconUrl, skillIconUrl } from '../ui/itemIcons';
 import { decodeSave, encodeSave } from './saveCode';
 import { makeTestSave } from './testSave';
 import { gearLook } from '../models/items';
-import { BOSS_RESPAWN_MS, BOSS_TIME_LIMIT, FARM_COOLDOWN_MS, FARM_NAMES, playerDefK } from '../data/monsters';
+import { BOSS_RESPAWN_MS, BOSS_TIME_LIMIT, FARM_COOLDOWN_MS, FARM_NAMES, goldScale, playerDefK } from '../data/monsters';
 import { DEBUFF_INFO, type DebuffId, type DebuffSpec } from '../data/species';
 import { newTool, TOOL_KIND_NAMES, TOOL_TIER_NAMES, toolBonusChance, toolName, toolSpeed, toolWear, type ToolKind } from '../data/tools';
 import { MeshLambertMaterial, OrthographicCamera, PCFShadowMap, Plane, Raycaster, Vector2, Vector3, WebGLRenderer } from 'three';
@@ -1785,7 +1785,7 @@ export class Game {
     this.gainExp(exp);
 
     const bossMult = m.kind === 'boss' ? 25 : m.kind === 'midboss' ? 10 : m.kind === 'elite' ? 4 : 1;
-    const gold = Math.max(1, Math.round((m.kind === 'normal' ? rng.range(0.6, 1.6) : rng.int(2, 5)) * tier * (1 + (run.stage - 1) * 0.15) * bossMult * (1 + this.progress.bonus('gold'))));
+    const gold = Math.max(1, Math.round((m.kind === 'normal' ? rng.range(0.6, 1.6) : rng.int(2, 5)) * (run.end ? tier * (1 + (run.stage - 1) * 0.15) : goldScale(tier, run.stage)) * bossMult * (1 + this.progress.bonus('gold'))));
     run.gold += gold;
     this.progress.data.gold += gold;
 
@@ -2109,7 +2109,7 @@ export class Game {
     if (!a || !run) return;
     const rng = new Rng(randomSeed());
     const t = a.tier;
-    const gold = Math.round(120 * t * (1 + run.stage * 0.1));
+    const gold = Math.round(run.end ? 120 * t * (1 + run.stage * 0.1) : 110 * goldScale(t, run.stage));
     run.gold += gold;
     this.progress.data.gold += gold;
     const got: string[] = [`${gold} G`];
