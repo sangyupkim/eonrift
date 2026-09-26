@@ -3210,3 +3210,8 @@ h3.sub { margin: 10px 0 6px; font-size: 14px; display: flex; align-items: center
 .hud[data-mode='dungeon'] .loot-log { font-size: 10.5px; }
 .list li.done-q { padding-left: 12px; }
 .list li.done-q button.small { flex: 0 0 auto; padding: 5px 10px; font-size: 12px; font-weight: 800; border-radius: 8px; }
+/* 도감 영구 능력치 목표 (보라색) */
+.bm.stat { background: rgba(170, 120, 255, 0.12); border: 1px solid rgba(170, 120, 255, 0.35); }
+.bm.stat small:not(.dim) { color: #d4b8ff; }
+.bm.stat.done { opacity: 1; background: rgba(170, 120, 255, 0.24); }
+.tier-tabs + .bm.stat { margin: 6px 0 8px; font-size: 12px; }

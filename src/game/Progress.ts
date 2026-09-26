@@ -6,7 +6,7 @@ import { ITEM_RENAMES, TIER_PLANK, TIER_PLATE } from '../data/items';
 import type { BuildingState, FactoryState } from '../factory/sim';
 import { newEndgame, type EndgameState } from '../data/endgame';
 import { addBonus, BONUS_CAP, FOODS, TITLES, TRANSCEND_STATS, transcendCost, transcendExp, type Bonus, type BonusKey } from '../data/bonus';
-import { BESTIARY, bestiaryId, COLLECTION_MILESTONES, killMilestones, RESEARCH_BONUS } from '../data/bestiary';
+import { BESTIARY, bestiaryId, bestiaryStats, COLLECTION_MILESTONES, killMilestones, RESEARCH_BONUS } from '../data/bestiary';
 import { Bag, type Slot } from './Bag';
 import { BAG_SLOTS } from '../config';
 import { newQuestState, type QuestState } from './Quests';
@@ -416,7 +416,9 @@ export class Progress {
     const c = this.trial ? this.trialState(clsId) : this.data.classes[clsId];
     const def = CLASSES[clsId];
     const b = zeroStats();
-    for (const k of STAT_KEYS) b[k] = def.baseStats[k] + c.alloc[k];
+    // 도감 영구 능력치 (시련에서는 없음)
+    const bst = this.trial ? null : this.bestiaryStats;
+    for (const k of STAT_KEYS) b[k] = def.baseStats[k] + c.alloc[k] + (bst?.[k] ?? 0);
     const lv = c.level - 1;
     const main = def.damage === 'physical' ? b.str : b.int;
     const s: Stats = {
@@ -517,6 +519,11 @@ export class Progress {
     const b = (this.data.bestiary ??= {});
     b[id] = (b[id] ?? 0) + 1;
     return b[id] === 1;
+  }
+
+  /** 도감으로 얻은 영구 능력치 (모든 직업 공통) */
+  get bestiaryStats(): Record<StatKey, number> {
+    return bestiaryStats((id) => this.kills(id));
   }
 
   kills(id: string): number {

@@ -22,7 +22,7 @@ import { ICONS, mico, richText } from './icons';
 import { buildingThumb } from './thumbs';
 import { gearLook } from '../models/items';
 import { equipIconUrl, heroPortraitUrl, itemIconUrl, monsterIconUrl, skillIconUrl, toolIconUrl } from './itemIcons';
-import { BESTIARY, BESTIARY_BY_ID, COLLECTION_MILESTONES, killMilestones, milestoneReward, RESEARCH_BONUS, type BestiaryReward } from '../data/bestiary';
+import { BESTIARY, BESTIARY_BY_ID, COLLECTION_MILESTONES, isStageMaster, killMilestones, MASTER_ALL_GAIN, milestoneReward, RESEARCH_BONUS, SPECIES_STAT_KILLS, statMilestone, type BestiaryReward } from '../data/bestiary';
 import { DEBUFF_INFO, TRAIT_TEXT, type Faction } from '../data/species';
 import { endLock, AFFIXES, ALLOY, ALLOY2, RIFT_ALLOY2_FROM, riftEntry, rushEntry, formatClock, riftAffixes, riftMult, riftReward, RIFT_ALLOY, RIFT_TIME, rushReward, RUSH_DAILY, RUSH_DIFFS, RUSH_EXTRA_ALLOY, SHARD, DUST, DUST_PER_SHARD, END_NAMES, type EndContent, readTrialCode, trialCode, trialGrade, TRIAL_GRADES, trialSpec, TRIAL_TIME, weekKey, towerBoss, towerDaily, towerFirstClear, towerMult, rushFights, type RushDiff } from '../data/endgame';
 import { BONUS_NAMES, bonusText, TRANSCEND_STATS, transcendCost, transcendExp, engraveCost, engraveRange, ENGRAVE_STAGES, ENGRAVE_STAGE_NAMES, rollEngrave, TITLES, type BonusKey } from '../data/bonus';
@@ -1042,7 +1042,7 @@ export class Screens {
     } else if (tab === 'stats') {
       const next = expToNext(c.level);
       const statRows = STAT_KEYS.map(
-        (k) => `<div class="stat-row"><b>${STAT_INFO[k].name}</b><span class="num">${st.base[k]}</span><small>${STAT_INFO[k].desc}</small>
+        (k) => `<div class="stat-row"><b>${STAT_INFO[k].name}</b><span class="num">${st.base[k]}${p.bestiaryStats[k] ? `<small class="gold"> (도감 +${p.bestiaryStats[k]})</small>` : ''}</span><small>${STAT_INFO[k].desc}</small>
           <button data-stat="${k}" ${c.points > 0 ? '' : 'disabled'}>+1</button><button data-stat5="${k}" ${c.points >= 5 ? '' : 'disabled'}>+5</button></div>`,
       ).join('');
       body = `<div class="scroll">
@@ -1666,6 +1666,9 @@ export class Screens {
             return `<div class="bm ${done ? 'done' : ready ? 'ready' : ''}"><span>${m}${e.rank === 'normal' ? '마리' : '번'}</span><small>${giveText(r)}</small>${ready ? `<button data-claim="${sp.id}" ${canClaim ? '' : 'disabled'}>${canClaim ? '받기' : '노아에게'}</button>` : done ? '<b class="ok">받음</b>' : ''}</div>`;
           })
           .join('');
+        const sm = statMilestone(e);
+        const statText = sm.stat === 'all' ? `모든 능력치 +${sm.gain}` : `${STAT_INFO[sm.stat].name} +${sm.gain}`;
+        const statChip = `<div class="bm stat ${n >= sm.kills ? 'done' : ''}"><span>${sm.kills}${e.rank === 'normal' ? '마리' : '번'}</span><small>영구 ${statText}</small>${n >= sm.kills ? '<b class="ok">달성</b>' : `<small class="dim">${Math.min(n, sm.kills)}/${sm.kills}</small>`}</div>`;
         const tags = [
           e.rank === 'boss' ? '<b class="bad">수호자</b>' : e.rank === 'midboss' ? '<b class="gold">파수꾼</b>' : '',
           known ? FACTION_NAME[sp.faction] : '',
@@ -1676,10 +1679,14 @@ export class Screens {
           : '<small class="dim">아직 쓰러뜨린 적 없음</small>';
         return `<li class="beast ${known ? '' : 'unknown'}">
             <img class="beast-img" src="${url}" alt="">
-            <div class="beast-info"><b>${known ? sp.name : '???'}</b> <small class="dim">처치 ${n}</small><small>${tags}</small>${notes}<div class="bms">${chips}</div></div>
+            <div class="beast-info"><b>${known ? sp.name : '???'}</b> <small class="dim">처치 ${n}</small><small>${tags}</small>${notes}<div class="bms">${chips}${statChip}</div></div>
           </li>`;
       })
       .join('');
+    const bst = p.bestiaryStats;
+    const masterList = BESTIARY.filter((e) => e.tier === tier && e.rank === 'normal');
+    const masterGot = masterList.filter((e) => p.kills(e.species.id) >= SPECIES_STAT_KILLS).length;
+    const master = isStageMaster(tier, (id) => p.kills(id));
     const cols = COLLECTION_MILESTONES.map((m, i) => {
       const done = i < research;
       const ready = !done && found >= m.count;
@@ -1690,12 +1697,14 @@ export class Screens {
       `<div class="panel wide tall">
          <button class="close">${ICONS.close}</button>
          <h2>몬스터 도감 <small>발견 ${found}/${BESTIARY.length} · 연구 보너스 공격력·체력 +${Math.round(research * RESEARCH_BONUS * 100)}%</small></h2>
+         <div class="notice">도감 영구 능력치: ${STAT_KEYS.map((k) => `${STAT_INFO[k].name} +${bst[k]}`).join(' · ')}</div>
          ${message ? `<div class="notice">${message}</div>` : ''}
          
          <div class="scroll">
            <h3>수집 보상</h3>
            <div class="bms wide">${cols}</div>
            <div class="tier-tabs">${tabs}</div>
+           <div class="bm stat ${master ? 'done' : ''}"><span>${tier}단계 마스터</span><small>이 단계 일반 몬스터를 모두 ${SPECIES_STAT_KILLS}마리씩 (${masterGot}/${masterList.length}종) → 영구 모든 능력치 +${MASTER_ALL_GAIN}</small>${master ? '<b class="ok">달성</b>' : ''}</div>
            <ul class="list beasts">${cards}</ul>
          </div>
        </div>`,

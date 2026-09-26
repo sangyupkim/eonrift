@@ -1,5 +1,6 @@
 import { essenceForTier, TIER_MANA_PLATE, TIER_PLATE } from './items';
 import { BOSS_SPECIES, MIDBOSS_SPECIES, SPECIES, TIER_POOLS, type SpeciesDef } from './species';
+import type { StatKey } from './classes';
 
 /**
  * 몬스터 도감: 종족마다 쓰러뜨린 수를 세고, 정해진 수를 넘기면 연구자에게 보상을 받는다.
@@ -70,3 +71,47 @@ export const COLLECTION_MILESTONES: { count: number; reward: BestiaryReward }[] 
 
 /** 연구 보너스 한 단계당 공격력·최대 체력 비율 */
 export const RESEARCH_BONUS = 0.02;
+
+// ---- 도감 영구 능력치 (단계와 관계없이 같은 양) ----
+/** 일반 몬스터는 1000마리, 파수꾼·수호자는 30번 잡으면 영구 능력치 */
+export const SPECIES_STAT_KILLS = 1000;
+export const BOSS_STAT_KILLS = 30;
+/** 일반 종족 1000마리: 그 종족에 어울리는 능력치 +2 */
+export const SPECIES_STAT_GAIN = 2;
+/** 파수꾼 30번: 모든 능력치 +1 · 수호자 30번: 모든 능력치 +2 · 단계 마스터(그 단계 일반 종족 모두 1000마리): 모든 능력치 +3 */
+export const MIDBOSS_ALL_GAIN = 1;
+export const BOSS_ALL_GAIN = 2;
+export const MASTER_ALL_GAIN = 3;
+
+const ARCH_STAT: Record<string, StatKey> = {
+  melee: 'str', brute: 'str', charger: 'str',
+  tank: 'vit', knight: 'vit',
+  ranged: 'dex', archer: 'dex', assassin: 'dex',
+  necro: 'int', shaman: 'int', caster: 'int',
+  bomber: 'mag', swarm: 'mag', spitter: 'mag',
+};
+
+/** 도감 항목의 영구 능력치 목표와 보상 */
+export function statMilestone(e: BestiaryEntry): { kills: number; stat: StatKey | 'all'; gain: number } {
+  if (e.rank === 'normal') return { kills: SPECIES_STAT_KILLS, stat: ARCH_STAT[e.species.arch] ?? 'vit', gain: SPECIES_STAT_GAIN };
+  return { kills: BOSS_STAT_KILLS, stat: 'all', gain: e.rank === 'boss' ? BOSS_ALL_GAIN : MIDBOSS_ALL_GAIN };
+}
+
+/** 단계 마스터: 그 단계에서 처음 나오는 일반 종족을 모두 1000마리씩 */
+export function isStageMaster(tier: number, kills: (id: string) => number): boolean {
+  return BESTIARY.filter((e) => e.tier === tier && e.rank === 'normal').every((e) => kills(e.species.id) >= SPECIES_STAT_KILLS);
+}
+
+/** 도감으로 얻은 영구 능력치 합계 */
+export function bestiaryStats(kills: (id: string) => number): Record<StatKey, number> {
+  const s: Record<StatKey, number> = { str: 0, int: 0, dex: 0, vit: 0, mag: 0 };
+  const all = (n: number) => { for (const k of Object.keys(s) as StatKey[]) s[k] += n; };
+  for (const e of BESTIARY) {
+    const m = statMilestone(e);
+    if (kills(e.species.id) < m.kills) continue;
+    if (m.stat === 'all') all(m.gain);
+    else s[m.stat] += m.gain;
+  }
+  for (let t = 1; t <= 7; t++) if (isStageMaster(t, kills)) all(MASTER_ALL_GAIN);
+  return s;
+}
