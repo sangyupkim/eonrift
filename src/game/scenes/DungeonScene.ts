@@ -343,8 +343,8 @@ export class DungeonScene extends Level {
       );
       const obstacle = { x: p.x, z: p.z, radius: def.radius };
       this.obstacles.push(obstacle);
-      // 광맥은 2~5번 캐면 다한다 (광맥마다 다르다)
-      const hp = def.style === 'ore' ? this.rng.int(2, 5) : def.hp;
+      // 광맥·나무는 2~5번 캐면 다한다 (하나하나 다르다)
+      const hp = def.style === 'ore' || def.style === 'tree' ? this.rng.int(2, 5) : def.hp;
       this.nodes.push({ def, mesh, material, x: p.x, z: p.z, hp, shake: 0, flash: 0, dying: 0, alive: true, obstacle });
       // 나무·결정처럼 키 큰 채집물은 캐릭터를 가리면 반투명해진다
       this.addOccluder(mesh, p.x, p.z, def.radius + 0.3, def.style === 'tree' ? 3 : def.style === 'crystal' ? 1.8 : 1.2, true);
