@@ -1651,7 +1651,7 @@ export class Monster {
         break;
       case 'archer': {
         const c = this.species.glow ?? 0xffe08a;
-        for (const off of [-0.18, 0, 0.18]) world.fireEnemyProjectile({ x: this.x, z: this.z, angle: this.facing + off, speed: 8.5, damage: this.atk * 0.8, color: c, kind: 'arrow', radius: 0.3, debuff: this.species.debuff });
+        world.fireEnemyProjectile({ x: this.x, z: this.z, angle: this.facing, speed: 8.5, damage: this.atk * 0.8, color: c, kind: 'arrow', radius: 0.3, debuff: this.species.debuff });
         break;
       }
       case 'assassin':
